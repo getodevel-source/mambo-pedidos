@@ -1,6 +1,6 @@
 // ============================================
 //  Mambo Pedidos - Sistema de Validaciones
-//  Validación estricta de TODOS los inputs
+//  Validación estricta de TODOS los inputs + Categorías Dinámicas
 // ============================================
 
 const Validations = {
@@ -50,8 +50,17 @@ const Validations = {
     }
   },
 
-  // Categorías válidas
-  validCategories: ['TECLADO', 'MOUSE', 'MOUSEPAD', 'HEADSET', 'CONTROLLER', 'SWITCH', 'AUDIO', 'OTRO'],
+  // Categorías válidas por defecto
+  validCategories: ['TECLADO', 'MOUSE', 'MOUSEPAD', 'HEADSET', 'CONTROLLER', 'SWITCH', 'AUDIO', 'MONITOR', 'SILLA', 'WEBCAM', 'ACCESORIO', 'OTRO'],
+
+  // Agregar categoría dinámica
+  addCategory(categoryName) {
+    if (!categoryName) return;
+    const cat = categoryName.toString().trim().toUpperCase();
+    if (cat && !this.validCategories.includes(cat)) {
+      this.validCategories.push(cat);
+    }
+  },
 
   // Validar un campo individual
   validateField(field, value) {
@@ -88,7 +97,7 @@ const Validations = {
 
     // Number
     if (rule.type === 'number') {
-      const num = parseFloat(trimmed);
+      const num = parseFloat(trimmed.replace(',', '.'));
       if (isNaN(num)) {
         return { valid: false, error: 'Debe ser un número válido', severity: 'error' };
       }
@@ -133,8 +142,12 @@ const Validations = {
     const catCheck = this.validateField('categoria', product.cat);
     if (!catCheck.valid) {
       errors.push({ field: 'cat', message: catCheck.error });
-    } else if (!this.validCategories.includes(product.cat)) {
-      warnings.push({ field: 'cat', message: 'Categoría no estándar: ' + product.cat });
+    } else {
+      const upperCat = (product.cat || '').toString().trim().toUpperCase();
+      if (!this.validCategories.includes(upperCat)) {
+        // Registrar automáticamente la nueva categoría si es válida
+        this.addCategory(upperCat);
+      }
     }
 
     // FOB
