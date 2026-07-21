@@ -56,8 +56,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'Mambo Pedidos v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Mambo Pedidos ${{ github.ref_name }}'
           releaseBody: 'Instaladores nativos de Mambo Pedidos para Windows (.exe / .msi), Linux (.AppImage / .deb) y macOS.'
           releaseDraft: false
           prerelease: false
