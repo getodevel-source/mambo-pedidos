@@ -10,187 +10,55 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+  release:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact_name: mambo-pedidos-linux
-            asset_name: mambo-pedidos-linux.tar.gz
-            binary_name: mambo-pedidos
-            extension: tar.gz
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact_name: mambo-pedidos-windows
-            asset_name: mambo-pedidos-windows.zip
-            binary_name: mambo-pedidos.exe
-            extension: zip
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact_name: mambo-pedidos-macos
-            asset_name: mambo-pedidos-macos.tar.gz
-            binary_name: mambo-pedidos.app
-            extension: tar.gz
+          - platform: 'windows-latest'
+            args: ''
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
 
-    defaults:
-      run:
-        shell: bash
+    runs-on: ${{ matrix.platform }}
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
-      - name: Cache cargo
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install Linux deps
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Install npm deps
+      - name: Install npm dependencies
         run: npm install
 
-      - name: Build Tauri
-        run: npx tauri build --target ${{ matrix.target }}
+      - name: Build Tauri App & Create Release
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: List build output
-        run: ls -la src-tauri/target/${{ matrix.target }}/release/bundle/ || true
-
-      - name: Find and package artifacts
-        id: package
-        run: |
-          mkdir -p out
-          cd src-tauri/target/${{ matrix.target }}/release/bundle
-
-          # Find all installer/binary files
-          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.app" \) -exec cp {} out/ \; || true
-
-          cd out
-          ls -la
-          if compgen -G "*.msi" "*.exe" "*.dmg" "*.AppImage" "*.deb" "*.app" > /dev/null; then
-            if [[ "${{ matrix.target }}" == *"windows"* ]]; then
-              7z a ../../${{ matrix.asset_name }} * || zip -r ../../${{ matrix.asset_name }} *
-            else
-              tar -czf ../../${{ matrix.asset_name }} *
-            fi
-            echo "asset_path=out/../../${{ matrix.asset_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "::error::No installer files found"
-            exit 1
-          fi
-
-      - name: Generate latest.json for auto-updater
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        run: |
-          # Generate latest.json for the Tauri auto-updater
-          # This file tells the app what version is available
-          TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#v}
-          echo "Generating latest.json for version $VERSION"
-
-          cat > src-tauri/target/latest.json << EOF
-          {
-            "version": "$VERSION",
-            "notes": "Release $TAG",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "windows-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/${{ matrix.asset_name }}"
-              },
-              "linux-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/mambo-pedidos-linux.tar.gz"
-              },
-              "darwin-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/mambo-pedidos-macos.tar.gz"
-              }
-            }
-          }
-          EOF
-          cat src-tauri/target/latest.json
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.asset_name }}
-          if-no-files-found: error
-
-      - name: Upload latest.json (Windows only)
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        uses: actions/upload-artifact@v4
-        with:
-          name: latest-json
-          path: src-tauri/target/latest.json
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List downloaded artifacts
-        run: ls -la artifacts/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/**/*.msi
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.zip
-            artifacts/**/*.tar.gz
-            artifacts/latest-json/latest.json
-          generate_release_notes: true
-          draft: false
+          tagName: v__VERSION__
+          releaseName: 'Mambo Pedidos v__VERSION__'
+          releaseBody: 'Instaladores nativos de Mambo Pedidos para Windows (.exe / .msi), Linux (.AppImage / .deb) y macOS.'
+          releaseDraft: false
           prerelease: false
-          body: |
-            ## Mambo Pedidos ${{ github.ref_name }}
-
-            App de escritorio liviana (~5 MB) para gestionar catálogos de periféricos gamer y armar pedidos con cálculo automático de rentabilidad.
-
-            ### Instalación
-
-            - **Windows:** Descargá el `.msi` y ejecutalo
-            - **Linux:** Descargá el `.AppImage`, hacé `chmod +x` y ejecutalo
-            - **macOS:** Descargá el `.dmg` y arrastrá a Aplicaciones
-
-            ### Novedades
-
-            Ver los commits desde el último release para los cambios.
-
-            ### Auto-update
-
-            La app se actualiza automáticamente desde GitHub Releases.
+          args: ${{ matrix.args }}
