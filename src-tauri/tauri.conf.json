@@ -22,7 +22,8 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
-        "center": true
+        "center": true,
+        "visible": true
       }
     ],
     "security": {
@@ -48,13 +49,6 @@
       "scope": ["$APPDATA/*", "$APPLOCALDATA/*", "$DOCUMENT/*", "$DOWNLOAD/*", "$HOME/*"]
     },
     "dialog": {},
-    "store": {},
-    "updater": {
-      "active": true,
-      "dialog": true,
-      "endpoints": [
-        "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json"
-      ]
-    }
+    "store": {}
   }
 }
