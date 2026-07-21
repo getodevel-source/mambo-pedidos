@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mambo Pedidos",
+  "version": "0.1.0",
+  "identifier": "com.mambo.pedidos",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Mambo Pedidos",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; connect-src 'self' ipc: http://ipc.localhost https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; frame-src 'self' https://hooks.slack.com; object-src 'self' data:; child-src 'self';"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Mambo Pedidos",
+    "longDescription": "Gestor de catalogos y pedidos para perifericos gamer. Carga PDFs, Excels o CSVs, arma pedidos con calculo de rentabilidad automatico."
+  },
+  "plugins": {
+    "fs": {
+      "scope": ["$APPDATA/*", "$APPLOCALDATA/*", "$DOCUMENT/*", "$DOWNLOAD/*", "$HOME/*"]
+    },
+    "dialog": {},
+    "store": {},
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "endpoints": [
+        "https://github.com/mambo-pedidos/mambo-pedidos/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY"
+    }
+  }
+}

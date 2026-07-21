@@ -1,0 +1,43 @@
+# Build outputs
+src-tauri/target/
+node_modules/
+dist/
+build/
+*.exe
+*.msi
+*.dmg
+*.deb
+*.AppImage
+*.tar.gz
+*.zip
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data (datos sensibles del usuario)
+*.local
+.env
+.env.local
+
+# Tauri
+src-tauri/gen/
+src-tauri/Cargo.lock
+src-tauri/.cargo/
+
+# Node
+npm-debug.log
+.pnpm-store/
