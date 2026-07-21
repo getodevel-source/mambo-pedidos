@@ -2,6 +2,8 @@
 
 App de escritorio liviana para gestionar catálogos de periféricos gamer y armar pedidos con cálculo automático de rentabilidad.
 
+🔗 **Repo:** https://github.com/getodevel-source/mambo-pedidos
+
 ## ✨ Características
 
 - 🚀 **Liviana y portable** (~5 MB) — escrita en Tauri + HTML/JS
@@ -15,7 +17,7 @@ App de escritorio liviana para gestionar catálogos de periféricos gamer y arma
 ## 📥 Instalación
 
 ### Windows
-1. Andá a [Releases](https://github.com/mambo-pedidos/mambo-pedidos/releases)
+1. Andá a [Releases](https://github.com/getodevel-source/mambo-pedidos/releases)
 2. Descargá el `.msi` o `.exe` de la última versión
 3. Ejecutá el instalador
 4. Listo, ya tenés Mambo Pedidos instalado
@@ -52,7 +54,7 @@ App de escritorio liviana para gestionar catálogos de periféricos gamer y arma
 
 ### Setup
 ```bash
-git clone https://github.com/mambo-pedidos/mambo-pedidos.git
+git clone https://github.com/getodevel-source/mambo-pedidos.git
 cd mambo-pedidos
 npm install
 npm run dev   # modo desarrollo
@@ -127,7 +129,7 @@ El sistema valida **todo** lo que entra:
 ## 📞 Soporte
 
 Si encontrás un bug o querés sugerir algo:
-- [Abrí un issue](https://github.com/mambo-pedidos/mambo-pedidos/issues)
+- [Abrí un issue](https://github.com/getodevel-source/mambo-pedidos/issues)
 - O contactame directo
 
 ## 📄 Licencia

@@ -52,9 +52,8 @@
       "active": true,
       "dialog": true,
       "endpoints": [
-        "https://github.com/mambo-pedidos/mambo-pedidos/releases/latest/download/latest.json"
-      ],
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY"
+        "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json"
+      ]
     }
   }
 }
