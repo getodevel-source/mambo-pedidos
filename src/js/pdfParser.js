@@ -168,22 +168,72 @@ const PdfParser = {
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
 
-      const bgR = (data[0] + data[(width - 1) * 4]) / 2;
-      const bgG = (data[1] + data[(width - 1) * 4 + 1]) / 2;
-      const bgB = (data[2] + data[(width - 1) * 4 + 2]) / 2;
+      const cornerIdxs = [
+        0,
+        (width - 1) * 4,
+        (height - 1) * width * 4,
+        ((height - 1) * width + width - 1) * 4
+      ];
 
-      if (bgR > 190 && bgG > 190 && bgB > 190) {
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const dist = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
-          if (dist < 45 || (r > 235 && g > 235 && b > 235)) {
-            data[i + 3] = 0; // Hacer transparente el fondo sucio
-          }
+      let sumR = 0, sumG = 0, sumB = 0, count = 0;
+      for (const idx of cornerIdxs) {
+        if (data[idx + 3] > 0) {
+          sumR += data[idx];
+          sumG += data[idx + 1];
+          sumB += data[idx + 2];
+          count++;
         }
-        ctx.putImageData(imgData, 0, 0);
       }
+
+      if (count === 0) return;
+      const bgR = sumR / count;
+      const bgG = sumG / count;
+      const bgB = sumB / count;
+
+      if (bgR < 180 || bgG < 180 || bgB < 180) return;
+
+      const visited = new Uint8Array(width * height);
+      const queue = [];
+
+      for (let x = 0; x < width; x++) {
+        queue.push(x, 0);
+        queue.push(x, height - 1);
+      }
+      for (let y = 1; y < height - 1; y++) {
+        queue.push(0, y);
+        queue.push(width - 1, y);
+      }
+
+      const isBgColor = (pxR, pxG, pxB) => {
+        const dist = Math.abs(pxR - bgR) + Math.abs(pxG - bgG) + Math.abs(pxB - bgB);
+        return dist < 32 || (pxR > 240 && pxG > 240 && pxB > 240);
+      };
+
+      let head = 0;
+      while (head < queue.length) {
+        const cx = queue[head++];
+        const cy = queue[head++];
+        const idx = cy * width + cx;
+
+        if (visited[idx]) continue;
+        visited[idx] = 1;
+
+        const pIdx = idx * 4;
+        const r = data[pIdx];
+        const g = data[pIdx + 1];
+        const b = data[pIdx + 2];
+
+        if (isBgColor(r, g, b)) {
+          data[pIdx + 3] = 0;
+
+          if (cx > 0) queue.push(cx - 1, cy);
+          if (cx < width - 1) queue.push(cx + 1, cy);
+          if (cy > 0) queue.push(cx, cy - 1);
+          if (cy < height - 1) queue.push(cx, cy + 1);
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
     } catch (e) {
       console.warn('No se pudo limpiar fondo de imagen:', e);
     }
@@ -213,6 +263,7 @@ const PdfParser = {
         rows.push({
           pageNum,
           y: currentY,
+          x: currentRow[0]?.x || 0,
           text: currentRow.sort((a, b) => a.x - b.x).map(i => i.text).join(' ')
         });
         currentRow = [item];
@@ -223,6 +274,7 @@ const PdfParser = {
       rows.push({
         pageNum,
         y: currentY,
+        x: currentRow[0]?.x || 0,
         text: currentRow.sort((a, b) => a.x - b.x).map(i => i.text).join(' ')
       });
     }
@@ -233,6 +285,7 @@ const PdfParser = {
   parseRows(rows, brandFallback, baseLength = 0, customBrands = [], allImages = []) {
     const products = [];
     const seen = new Set();
+    const claimedImages = new Set();
 
     for (let i = 0; i < rows.length; i++) {
       const rowText = rows[i].text;
@@ -254,14 +307,26 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      // Asociación espacial de imagen más cercana en la misma página
+      // Asociación espacial de imagen 2D con candado de asignación 1-a-1
       let matchedImg = '';
       if (allImages && allImages.length) {
-        const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum);
+        const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum && !claimedImages.has(img));
         if (pageImgs.length) {
-          pageImgs.sort((a, b) => Math.abs(a.y - rows[i].y) - Math.abs(b.y - rows[i].y));
-          if (Math.abs(pageImgs[0].y - rows[i].y) <= 140) {
-            matchedImg = pageImgs[0].dataUrl;
+          const rowX = rows[i].x || 0;
+          const rowY = rows[i].y || 0;
+          pageImgs.sort((a, b) => {
+            const distA = Math.hypot((a.x - rowX) * 1.0, (a.y - rowY) * 1.3);
+            const distB = Math.hypot((b.x - rowX) * 1.0, (b.y - rowY) * 1.3);
+            return distA - distB;
+          });
+
+          const best = pageImgs[0];
+          const distY = Math.abs(best.y - rowY);
+          const distX = Math.abs(best.x - rowX);
+
+          if (distY <= 160 && distX <= 220) {
+            matchedImg = best.dataUrl;
+            claimedImages.add(best);
           }
         }
       }
@@ -496,26 +561,18 @@ const PdfParser = {
     if (brand === 'Polaroid') return 'CAMARA';
     if (brand === 'KZ') return 'AURICULAR';
     if (brand === 'Haimu') return 'SWITCH';
-    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
     if (brand === 'Philips') return 'CUIDADO_PERSONAL';
 
-    if (/controller|gamepad|joystick|8bitdo|sn30|ultimate 2c|ultimate c |ultimate 3/.test(t)) return 'CONTROLLER';
-    if (/earphone|earbuds|in-ear|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda |zar |zna |dqs/.test(t)) return 'AURICULAR';
-    if (/headset|gaming headset|v9 turbo|a7v3|k7v2|a5v3/.test(t)) return 'HEADSET';
-    if (/mousepad|mouse pad|\bmat\b/.test(t)) return 'MOUSEPAD';
-    if (/\bmouse\b|mice|paw\d{4}|wired mouse|wireless mouse|gaming mouse|office mouse/.test(t)) return 'MOUSE';
-    if (/\bmonitor\b|\bdisplay\b|144hz|240hz/.test(t)) return 'MONITOR';
-    if (/key switch|mechanical switch|linear|tactile|clicky|haimu|seasalt switch|flamingo switch/.test(t)) return 'SWITCH';
-    if (/keyboard|wired keyboard|wireless keyboard|f75|f99|f108|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65 |r75 |mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75/.test(t)) return 'TECLADO';
+    if (/\b(controller|gamepad|joystick|mando|sn30|ultimate 2c|ultimate c|ultimate 3|vader|g7 se|t4 kaleid|g8 galileo)\b/i.test(t)) return 'CONTROLLER';
+    if (/\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i.test(t)) return 'AURICULAR';
+    if (/\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|g435|g733)\b/i.test(t)) return 'HEADSET';
+    if (/\b(mousepad|mouse pad|deskmat|desk mat)\b|\bmat\b/i.test(t)) return 'MOUSEPAD';
+    if (/\b(mouse|mice|raton|paw\d{4}|ax5|a5|l7|g3|sc200|sc580|x3|r1|x11|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|g305|g203|pebble)\b/i.test(t)) return 'MOUSE';
+    if (/\b(monitor|display|144hz|240hz|360hz|oled monitor)\b/i.test(t)) return 'MONITOR';
+    if (/\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch)\b/i.test(t)) return 'SWITCH';
+    if (/\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75|fizz|kumara)\b/i.test(t)) return 'TECLADO';
 
-    if (['AULA', 'ATK', 'MCHOSE', 'AJAZZ', 'Madlions', 'Royal Kludge'].includes(brand)) return 'TECLADO';
-    if (brand === 'VGN') return 'MOUSE';
-    if (brand === 'Attack Shark') return 'MOUSE';
-    if (brand === 'Logitech') return 'MOUSE';
-    if (brand === 'Razer') {
-      if (/keyboard|blackwidow|huntsman|blackwidow/.test(t)) return 'TECLADO';
-      return 'MOUSE';
-    }
+    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
 
     return 'OTRO';
   },

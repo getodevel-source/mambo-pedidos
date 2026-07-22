@@ -44,6 +44,34 @@ const AiDisambiguator = {
     { cat: 'CUIDADO_PERSONAL', patterns: [/shaver/i, /trimmer/i, /clipper/i, /toothbrush/i, /afeitadora/i] }
   ],
 
+  // Consulta a LLM Local (Ollama) si está activo en localhost:11434
+  async queryLocalLlm(rawText) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 900);
+      const res = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'llama3',
+          prompt: `Classify this gaming peripheral product line into valid category (TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, MONITOR, OTRO) and brand. Respond JSON only {"cat":"...", "marca":"..."}. Text: "${rawText}"`,
+          stream: false
+        })
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const match = data.response?.match(/\{[\s\S]*?\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+    } catch (e) {
+      // LLM local no disponible o timeout; se utiliza el motor de inferencia semántica nativo
+    }
+    return null;
+  },
+
   // Desambiguar un ítem dudoso
   disambiguateItem(item, customBrands = []) {
     const text = ((item.marca || '') + ' ' + (item.modelo || '') + ' ' + (item.variante || '') + ' ' + (item.rawText || '')).trim();
@@ -53,7 +81,6 @@ const AiDisambiguator = {
 
     // 1. Intentar resolver Marca si es 'OTRO'
     if (detectedBrand === 'OTRO' || !detectedBrand) {
-      // Probar diccionario personalizado
       for (const b of customBrands) {
         if (b.name && b.pattern) {
           try {
@@ -66,7 +93,6 @@ const AiDisambiguator = {
         }
       }
 
-      // Probar patrones nativos de IA
       if (detectedBrand === 'OTRO' || !detectedBrand) {
         for (const entry of this.brandPatterns) {
           if (entry.patterns.some(p => p.test(text))) {
@@ -92,12 +118,10 @@ const AiDisambiguator = {
     // 3. Limpieza inteligente del nombre de modelo
     let cleanedModel = item.modelo || '';
     if (detectedBrand !== 'OTRO') {
-      // Eliminar redundancias de la marca en el nombre del modelo
       const reBrand = new RegExp('^' + detectedBrand + '\\s+', 'i');
       cleanedModel = cleanedModel.replace(reBrand, '').trim();
     }
 
-    // Construir ítem corregido
     const updated = {
       ...item,
       marca: detectedBrand,
@@ -105,7 +129,6 @@ const AiDisambiguator = {
       modelo: cleanedModel || item.modelo
     };
 
-    // Reevaluar puntuación de confianza
     const evalRes = PdfParser.evaluateItemConfidence(updated);
     updated.confidence = evalRes.confidence;
     updated.status = evalRes.status;
@@ -118,16 +141,33 @@ const AiDisambiguator = {
   // Auto-corregir lote completo de productos dudosas en la vista previa
   async autoCorrectItems(items, customBrands = []) {
     let correctedCount = 0;
-    const result = items.map(item => {
+    const result = [];
+    for (const item of items) {
       if (item.status === 'WARNING' || item.status === 'ERROR' || item.marca === 'OTRO' || item.cat === 'OTRO') {
-        const corrected = this.disambiguateItem(item, customBrands);
+        let corrected = this.disambiguateItem(item, customBrands);
+
+        // Si sigue en 'OTRO', intentar consulta al LLM Local de apoyo
+        if (corrected.cat === 'OTRO' || corrected.marca === 'OTRO') {
+          const llmRes = await this.queryLocalLlm(item.rawText || item.modelo);
+          if (llmRes && (llmRes.cat || llmRes.marca)) {
+            if (llmRes.cat && llmRes.cat !== 'OTRO') corrected.cat = llmRes.cat;
+            if (llmRes.marca && llmRes.marca !== 'OTRO') corrected.marca = llmRes.marca;
+            const reEval = PdfParser.evaluateItemConfidence(corrected);
+            corrected.confidence = reEval.confidence;
+            corrected.status = reEval.status;
+            corrected.warnings = reEval.warnings;
+            corrected.aiCorrected = true;
+          }
+        }
+
         if (corrected.marca !== item.marca || corrected.cat !== item.cat || corrected.status !== item.status) {
           correctedCount++;
         }
-        return corrected;
+        result.push(corrected);
+      } else {
+        result.push(item);
       }
-      return item;
-    });
+    }
 
     return { items: result, correctedCount };
   }

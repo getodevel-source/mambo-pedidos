@@ -36,6 +36,7 @@ const Tests = {
     this.testGridImageEscaping();
     this.testDolarApiParsing();
     this.testExecutiveReportExport();
+    this.testMultiCategoryBrandParsing();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -71,7 +72,7 @@ const Tests = {
     // Item 1: costoU = 100 * 1.1 = 110. PVP = 110 * 2 = 220.
     const item1 = res.items[0];
     this.assert(item1.costoU === 110, 'Item 1 costo unitario ponderado correcto ($110 USD)');
-    this.assert(item1.pvp === 220, 'Item 1 PVP calculado correcto ($220 USD)');
+    this.assert(item1.pvp === 220, 'Item 1 PVP calculated correcto ($220 USD)');
   },
 
   testValidations() {
@@ -170,14 +171,14 @@ const Tests = {
 
   testImageSpatialMatching() {
     const rows = [
-      { pageNum: 1, y: 100, text: '8BitDo Ultimate Wireless Controller $45.00' }
+      { pageNum: 1, y: 100, x: 20, text: '8BitDo Ultimate Wireless Controller $45.00' }
     ];
     const images = [
-      { pageNum: 1, y: 105, x: 20, width: 100, height: 100, dataUrl: 'data:image/webp;base64,UklGRi...' }
+      { pageNum: 1, y: 105, x: 20, width: 100, height: 100, dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }
     ];
     const products = PdfParser.parseRows(rows, '8BitDo', 0, [], images);
     this.assert(products.length === 1, 'PdfParser parseó 1 producto con imagen espacial');
-    this.assert(products[0].img && products[0].img.startsWith('data:image/webp'), 'Imagen espacial asignada correctamente por coordenadas X/Y');
+    this.assert(products[0].img && products[0].img.startsWith('data:image/png'), 'Imagen espacial asignada correctamente por coordenadas 2D X/Y');
   },
 
   testCustomsPackingListExport() {
@@ -257,6 +258,13 @@ const Tests = {
     const defaultSvg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569" font-size="36">🖼️</text></svg>');
     const escVal = typeof esc === 'function' ? esc(defaultSvg) : defaultSvg;
     this.assert(!escVal.includes('"'), 'El URL de fallback de imagen SVG en el grid no contiene comillas dobles sin escapar');
+  },
+
+  testMultiCategoryBrandParsing() {
+    const catMouse = PdfParser.detectCategory('MCHOSE AX5 Gaming Mouse $25.00', 'MCHOSE');
+    const catKeyboard = PdfParser.detectCategory('MCHOSE K87 Mechanical Keyboard $45.00', 'MCHOSE');
+    this.assert(catMouse === 'MOUSE', 'MCHOSE AX5 clasificado como MOUSE');
+    this.assert(catKeyboard === 'TECLADO', 'MCHOSE K87 clasificado como TECLADO');
   }
 };
 
