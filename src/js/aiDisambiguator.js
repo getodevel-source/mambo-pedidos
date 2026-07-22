@@ -44,8 +44,26 @@ const AiDisambiguator = {
     { cat: 'CUIDADO_PERSONAL', patterns: [/shaver/i, /trimmer/i, /clipper/i, /toothbrush/i, /afeitadora/i] }
   ],
 
-  // Consulta a LLM Local (Ollama) si está activo en localhost:11434
-  async queryLocalLlm(rawText) {
+  // Consulta a la IA nativa del WebView (window.ai / Gemini Nano) con fallback a Ollama local
+  async queryWebViewAi(rawText) {
+    // 1. Probar window.ai (Chrome/Chromium Built-in WebAI en WebView)
+    try {
+      if (window.ai && window.ai.languageModel) {
+        const capabilities = await window.ai.languageModel.capabilities();
+        if (capabilities.available !== 'no') {
+          const session = await window.ai.languageModel.create();
+          const prompt = `Classify this gaming peripheral product into valid category (TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, MONITOR, OTRO) and brand. Respond JSON only {"cat":"...", "marca":"..."}. Text: "${rawText}"`;
+          const response = await session.prompt(prompt);
+          session.destroy?.();
+          const match = response?.match(/\{[\s\S]*?\}/);
+          if (match) return JSON.parse(match[0]);
+        }
+      }
+    } catch (e) {
+      console.warn('window.ai WebAI no activo en WebView:', e);
+    }
+
+    // 2. Fallback: Ollama local en puerto 11434
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 900);
@@ -55,20 +73,18 @@ const AiDisambiguator = {
         signal: controller.signal,
         body: JSON.stringify({
           model: 'llama3',
-          prompt: `Classify this gaming peripheral product line into valid category (TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, MONITOR, OTRO) and brand. Respond JSON only {"cat":"...", "marca":"..."}. Text: "${rawText}"`,
+          prompt: `Classify product into JSON {"cat":"...", "marca":"..."}: "${rawText}"`,
           stream: false
         })
       });
       clearTimeout(timeoutId);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const match = data.response?.match(/\{[\s\S]*?\}/);
-      if (match) {
-        return JSON.parse(match[0]);
+      if (res.ok) {
+        const data = await res.json();
+        const match = data.response?.match(/\{[\s\S]*?\}/);
+        if (match) return JSON.parse(match[0]);
       }
-    } catch (e) {
-      // LLM local no disponible o timeout; se utiliza el motor de inferencia semántica nativo
-    }
+    } catch (e) {}
+
     return null;
   },
 
@@ -148,7 +164,7 @@ const AiDisambiguator = {
 
         // Si sigue en 'OTRO', intentar consulta al LLM Local de apoyo
         if (corrected.cat === 'OTRO' || corrected.marca === 'OTRO') {
-          const llmRes = await this.queryLocalLlm(item.rawText || item.modelo);
+          const llmRes = await this.queryWebViewAi(item.rawText || item.modelo);
           if (llmRes && (llmRes.cat || llmRes.marca)) {
             if (llmRes.cat && llmRes.cat !== 'OTRO') corrected.cat = llmRes.cat;
             if (llmRes.marca && llmRes.marca !== 'OTRO') corrected.marca = llmRes.marca;
