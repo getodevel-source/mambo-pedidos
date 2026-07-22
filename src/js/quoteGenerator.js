@@ -33,7 +33,7 @@ const QuoteGenerator = {
       itemsHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">
           <td style="padding: 8px; font-family: monospace; font-size: 11px; color: #64748b;">${i + 1}</td>
-          <td style="padding: 8px; text-align: center;">${imgCell}</td>
+          <td class="quote-img-col" style="padding: 8px; text-align: center;">${imgCell}</td>
           <td style="padding: 8px; font-weight: 600; color: #1e293b;">${this.esc(item.sku)}</td>
           <td style="padding: 8px; color: #334155;">${this.esc(item.marca)}</td>
           <td style="padding: 8px; color: #0f172a; font-weight: 600;">${this.esc(item.modelo)}</td>
@@ -74,13 +74,17 @@ const QuoteGenerator = {
         .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #334155; }
         .total-row.grand { font-size: 18px; font-weight: 800; color: #059669; border-top: 2px dashed #cbd5e1; margin-top: 8px; padding-top: 10px; }
         .footer { font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 40px; }
+        .hide-images .quote-img-col { display: none !important; }
       </style>
     </head>
     <body>
 
-      <div class="no-print" style="max-width: 900px; margin: 0 auto 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div class="no-print" style="max-width: 900px; margin: 0 auto 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button onclick="window.close()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">← Volver a la App</button>
-        <button onclick="window.print()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 14px;">🖨️ Imprimir / Guardar como PDF</button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="document.body.classList.toggle('hide-images'); this.textContent = document.body.classList.contains('hide-images') ? '📄 Modo Texto Compacto' : '🎨 Modo Catálogo Visual';" style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700;">🎨 Modo Catálogo Visual</button>
+          <button onclick="window.print()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 14px;">🖨️ Imprimir / Guardar PDF</button>
+        </div>
       </div>
 
       <div class="quote-card">

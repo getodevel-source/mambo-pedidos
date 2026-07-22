@@ -259,9 +259,39 @@ function renderCatalog() {
     html += '<td class="action"><button class="btn btn-sm" onclick="removeItem(\'' + skuJs + '\')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);">🗑</button></td>';
     html += '</tr>';
   });
-  if (!filtered.length) {
-    html = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-3);">Sin productos con esos filtros</td></tr>';
+  const gridEl = document.getElementById('catalogGrid');
+  if (catalogViewMode === 'grid') {
+    let gridHtml = '';
+    pageItems.forEach(r => {
+      const qty = selection[r.sku] || 0;
+      const isSel = qty > 0;
+      const skuJs = escJs(r.sku);
+      const pvp = (r.fob * 2.5).toFixed(2);
+      const imgSrc = r.img || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569" font-size="36">🖼️</text></svg>';
+
+      gridHtml += `<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; border: ${isSel ? '2px solid var(--primary)' : '1px solid var(--border)'}; background: ${isSel ? 'rgba(255,87,34,0.05)' : 'var(--surface)'}; border-radius: 12px; position: relative;">`;
+      gridHtml += `<div style="width: 100%; height: 140px; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in;" onclick="zoomImage('${skuJs}')">`;
+      gridHtml += `<img src="${imgSrc}" style="max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: -webkit-optimize-contrast;">`;
+      gridHtml += `</div>`;
+      gridHtml += `<div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">`;
+      gridHtml += `<span style="font-weight: 700; color: var(--primary); background: rgba(255,87,34,0.15); padding: 2px 6px; border-radius: 4px;">${esc(r.marca)}</span>`;
+      gridHtml += `<code style="font-size: 10px; color: var(--text-3);">${esc(r.sku)}</code>`;
+      gridHtml += `</div>`;
+      gridHtml += `<div style="font-weight: 700; font-size: 13px; color: #fff; line-height: 1.3; height: 34px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${esc(r.modelo)}</div>`;
+      gridHtml += `<div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 6px 10px; border-radius: 6px;">`;
+      gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">FOB</span><strong style="color: #38bdf8;">$${r.fob.toFixed(2)}</strong></div>`;
+      gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">PVP Est.</span><strong style="color: #34d399;">$${pvp}</strong></div>`;
+      gridHtml += `</div>`;
+      gridHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-pt: 4px;">`;
+      gridHtml += `<button class="btn btn-sm" onclick="adjustQty('${skuJs}', -1)" style="padding: 4px 10px; font-weight: 800;">-</button>`;
+      gridHtml += `<span style="font-weight: 800; font-size: 14px; color: ${isSel ? 'var(--primary)' : 'var(--text-muted)'};">${qty} u</span>`;
+      gridHtml += `<button class="btn btn-sm btn-primary" onclick="adjustQty('${skuJs}', 1)" style="padding: 4px 10px; font-weight: 800;">+</button>`;
+      gridHtml += `</div>`;
+      gridHtml += `</div>`;
+    });
+    if (gridEl) gridEl.innerHTML = gridHtml || '<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-3);">Sin productos con esos filtros</div>';
   }
+
   document.getElementById('catalogBody').innerHTML = html;
   AppStorage.saveCatalog(catalog, selection);
   updateBadges();
@@ -842,10 +872,35 @@ window.addEventListener('drop', (e) => {
   }
 });
 
+let catalogViewMode = 'table';
+let activeZoomSku = null;
+
+function setCatalogViewMode(mode) {
+  catalogViewMode = mode;
+  const btnTable = document.getElementById('btnViewTable');
+  const btnGrid = document.getElementById('btnViewGrid');
+  const tableWrap = document.getElementById('catalogTableWrap');
+  const gridWrap = document.getElementById('catalogGrid');
+
+  if (mode === 'grid') {
+    if (btnTable) { btnTable.style.background = 'transparent'; btnTable.style.color = 'var(--text-muted)'; }
+    if (btnGrid) { btnGrid.style.background = 'var(--primary)'; btnGrid.style.color = '#fff'; }
+    if (tableWrap) tableWrap.style.display = 'none';
+    if (gridWrap) gridWrap.style.display = 'grid';
+  } else {
+    if (btnTable) { btnTable.style.background = 'var(--primary)'; btnTable.style.color = '#fff'; }
+    if (btnGrid) { btnGrid.style.background = 'transparent'; btnGrid.style.color = 'var(--text-muted)'; }
+    if (tableWrap) tableWrap.style.display = 'block';
+    if (gridWrap) gridWrap.style.display = 'none';
+  }
+  renderCatalog();
+}
+
 function zoomImage(sku) {
+  activeZoomSku = sku;
   const item = catalog.find(r => r.sku === sku);
-  if (item && item.img) {
-    zoomImageByUrl(item.img, `${item.marca} ${item.modelo}`);
+  if (item) {
+    zoomImageByUrl(item.img || '', `${item.marca} ${item.modelo} (${item.sku})`);
   }
 }
 
@@ -854,7 +909,7 @@ function zoomImageByUrl(url, caption) {
   const srcEl = document.getElementById('imageZoomSrc');
   const capEl = document.getElementById('imageZoomCaption');
 
-  if (srcEl) srcEl.src = url;
+  if (srcEl) srcEl.src = url || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%231e1e2d"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%2364748b" font-size="40">🖼️</text></svg>';
   if (capEl) capEl.textContent = caption || '';
   if (modal) modal.style.display = 'flex';
 }
@@ -862,7 +917,77 @@ function zoomImageByUrl(url, caption) {
 function closeImageZoomModal() {
   const modal = document.getElementById('imageZoomModal');
   if (modal) modal.style.display = 'none';
+  activeZoomSku = null;
 }
+
+function triggerImageUpload() {
+  const input = document.getElementById('productImageFileInput');
+  if (input) input.click();
+}
+
+function handleProductImageFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file || !activeZoomSku) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    updateProductImage(activeZoomSku, evt.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateProductImage(sku, dataUrl) {
+  const item = catalog.find(r => r.sku === sku);
+  if (item) {
+    item.img = dataUrl;
+    zoomImageByUrl(dataUrl, `${item.marca} ${item.modelo} (${item.sku})`);
+    renderCatalog();
+    if (typeof renderPedidoTable === 'function') renderPedidoTable();
+    AppStorage.saveCatalog(catalog, selection);
+    toast('📷 Foto del producto actualizada', 'success');
+  }
+}
+
+function triggerCleanBackground() {
+  if (!activeZoomSku) return;
+  const item = catalog.find(r => r.sku === activeZoomSku);
+  if (!item || !item.img) { toast('No hay imagen para procesar', 'error'); return; }
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    if (PdfParser && typeof PdfParser.cleanImageBackground === 'function') {
+      PdfParser.cleanImageBackground(ctx, img.width, img.height);
+      const cleanUrl = canvas.toDataURL('image/webp', 0.85);
+      updateProductImage(activeZoomSku, cleanUrl);
+      toast('🪄 Fondo limpiado exitosamente', 'success');
+    }
+  };
+  img.src = item.img;
+}
+
+// Escuchar evento Paste (Ctrl+V) para pegar fotos directamente
+window.addEventListener('paste', (e) => {
+  if (!activeZoomSku) return;
+  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (const item of items) {
+    if (item.type.indexOf('image') !== -1) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        updateProductImage(activeZoomSku, evt.target.result);
+      };
+      reader.readAsDataURL(blob);
+      break;
+    }
+  }
+});
 
 function renderPedidoTable() {
   if (!currentPedido) return;

@@ -105,6 +105,7 @@ const PdfParser = {
                 }
               }
               ctx.putImageData(imgData, 0, 0);
+              this.cleanImageBackground(ctx, imgObj.width, imgObj.height);
 
               const dataUrl = canvas.toDataURL('image/webp', 0.85);
               pageImages.push({ pageNum, y, x, width: imgObj.width, height: imgObj.height, dataUrl });
@@ -116,6 +117,33 @@ const PdfParser = {
       console.warn('Extracción de imágenes no soportada:', err);
     }
     return pageImages;
+  },
+
+  cleanImageBackground(ctx, width, height) {
+    try {
+      if (!ctx || !width || !height) return;
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      const bgR = (data[0] + data[(width - 1) * 4]) / 2;
+      const bgG = (data[1] + data[(width - 1) * 4 + 1]) / 2;
+      const bgB = (data[2] + data[(width - 1) * 4 + 2]) / 2;
+
+      if (bgR > 190 && bgG > 190 && bgB > 190) {
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const dist = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
+          if (dist < 45 || (r > 235 && g > 235 && b > 235)) {
+            data[i + 3] = 0; // Hacer transparente el fondo sucio
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+    } catch (e) {
+      console.warn('No se pudo limpiar fondo de imagen:', e);
+    }
   },
 
   groupItemsByRow(items, pageHeight, pageNum = 1) {

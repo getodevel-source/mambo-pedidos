@@ -79,7 +79,7 @@
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span style="color: var(--primary); font-weight: 600;">v0.6.0</span>
+      <span style="color: var(--primary); font-weight: 600;">v0.7.0</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -190,11 +190,15 @@
               <span id="pageIndicator">Página 1 de 1</span>
               <button class="btn btn-sm" onclick="nextPage()">Siguiente ▶</button>
             </div>
+            <div style="display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg);">
+              <button id="btnViewTable" class="btn btn-sm" style="border-radius: 0; border: none; font-size: 11px; background: var(--primary); color: #fff;" onclick="setCatalogViewMode('table')">☰ Tabla</button>
+              <button id="btnViewGrid" class="btn btn-sm" style="border-radius: 0; border: none; font-size: 11px; color: var(--text-muted); background: transparent;" onclick="setCatalogViewMode('grid')">🪟 Galería</button>
+            </div>
             <button class="btn btn-sm" onclick="addCatalogItem()">➕ Agregar producto</button>
             <button class="btn btn-primary btn-sm" onclick="validarYOarmarPedido()">📦 Armar pedido →</button>
           </div>
         </div>
-        <div class="table-scroll">
+        <div class="table-scroll" id="catalogTableWrap">
           <table>
             <thead>
               <tr>
@@ -212,6 +216,7 @@
             <tbody id="catalogBody"></tbody>
           </table>
         </div>
+        <div id="catalogGrid" style="display: none; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px;"></div>
       </div>
     </div>
   </div>
@@ -568,9 +573,14 @@
 <!-- Modal Zoom de Foto en Alta Resolución -->
 <div class="modal-backdrop" id="imageZoomModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeImageZoomModal()">
   <div style="position: relative; max-width: 90vw; max-height: 90vh; text-align: center;" onclick="event.stopPropagation()">
-    <img id="imageZoomSrc" src="" style="max-width: 85vw; max-height: 75vh; object-fit: contain; border-radius: 8px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); border: 2px solid var(--border); image-rendering: -webkit-optimize-contrast;">
+    <img id="imageZoomSrc" src="" style="max-width: 85vw; max-height: 65vh; object-fit: contain; border-radius: 8px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); border: 2px solid var(--border); image-rendering: -webkit-optimize-contrast;">
     <div id="imageZoomCaption" style="font-size: 13px; color: #fff; margin-top: 10px; font-weight: 600;"></div>
-    <button class="btn btn-secondary btn-sm" onclick="closeImageZoomModal()" style="margin-top: 12px;">❌ Cerrar Zoom</button>
+    <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap;">
+      <button class="btn btn-sm" onclick="triggerImageUpload()" style="background: var(--surface); color: #fff; border: 1px solid var(--border);">🖼️ Cambiar / Subir Foto</button>
+      <button class="btn btn-sm" onclick="triggerCleanBackground()" style="background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4);">🪄 Limpiar Fondo</button>
+      <button class="btn btn-secondary btn-sm" onclick="closeImageZoomModal()">❌ Cerrar</button>
+    </div>
+    <input type="file" id="productImageFileInput" accept="image/*" style="display: none;" onchange="handleProductImageFile(event)">
   </div>
 </div>
 
@@ -587,6 +597,7 @@
 <script src="js/tests.js"></script>
 </body>
 </html>
+
 
 
 
