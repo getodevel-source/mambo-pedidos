@@ -240,7 +240,7 @@ function renderCatalog() {
     const qty = selection[r.sku] || 0;
     const isSel = qty > 0;
     const skuJs = escJs(r.sku);
-    const imgHtml = r.img ? `<img src="${r.img}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
+    const imgHtml = r.img ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
     html += '<tr' + (isSel ? ' style="background: rgba(255,90,31,0.05);"' : '') + '>';
     html += '<td class="checkbox"><input type="checkbox" ' + (isSel ? 'checked' : '') + ' onchange="toggleItem(\'' + skuJs + '\', this.checked)"></td>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
@@ -262,16 +262,17 @@ function renderCatalog() {
   const gridEl = document.getElementById('catalogGrid');
   if (catalogViewMode === 'grid') {
     let gridHtml = '';
+    const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569" font-size="36">🖼️</text></svg>');
     pageItems.forEach(r => {
       const qty = selection[r.sku] || 0;
       const isSel = qty > 0;
       const skuJs = escJs(r.sku);
       const pvp = (r.fob * 2.5).toFixed(2);
-      const imgSrc = r.img || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569" font-size="36">🖼️</text></svg>';
+      const imgSrc = r.img || DEFAULT_SVG_IMG;
 
       gridHtml += `<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; border: ${isSel ? '2px solid var(--primary)' : '1px solid var(--border)'}; background: ${isSel ? 'rgba(255,87,34,0.05)' : 'var(--surface)'}; border-radius: 12px; position: relative;">`;
       gridHtml += `<div style="width: 100%; height: 140px; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in;" onclick="zoomImage('${skuJs}')">`;
-      gridHtml += `<img src="${imgSrc}" style="max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: -webkit-optimize-contrast;">`;
+      gridHtml += `<img src="${esc(imgSrc)}" style="max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: -webkit-optimize-contrast;">`;
       gridHtml += `</div>`;
       gridHtml += `<div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">`;
       gridHtml += `<span style="font-weight: 700; color: var(--primary); background: rgba(255,87,34,0.15); padding: 2px 6px; border-radius: 4px;">${esc(r.marca)}</span>`;
@@ -909,7 +910,8 @@ function zoomImageByUrl(url, caption) {
   const srcEl = document.getElementById('imageZoomSrc');
   const capEl = document.getElementById('imageZoomCaption');
 
-  if (srcEl) srcEl.src = url || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%231e1e2d"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%2364748b" font-size="40">🖼️</text></svg>';
+  const fallbackSvg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#1e1e2d"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="40">🖼️</text></svg>');
+  if (srcEl) srcEl.src = url || fallbackSvg;
   if (capEl) capEl.textContent = caption || '';
   if (modal) modal.style.display = 'flex';
 }
@@ -1315,7 +1317,7 @@ function renderPedidoTable() {
   if (!currentPedido) return;
   let html = '';
   currentPedido.items.forEach((r, i) => {
-    const imgHtml = r.img ? `<img src="${r.img}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
+    const imgHtml = r.img ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
     html += '<tr>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';

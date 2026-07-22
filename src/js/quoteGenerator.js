@@ -28,7 +28,7 @@ const QuoteGenerator = {
       const sub = item.subPvp || (pvpU * item.qty);
       const pvpArs = item.pvpArs || Math.round(pvpU * (t.tipoCambio || 1400));
       const subArs = Math.round(sub * (t.tipoCambio || 1400));
-      const imgCell = item.img ? `<img src="${item.img}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">🖼️</span>`;
+      const imgCell = item.img ? `<img src="${this.esc(item.img)}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">🖼️</span>`;
 
       itemsHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">

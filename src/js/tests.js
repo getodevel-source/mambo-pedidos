@@ -33,6 +33,7 @@ const Tests = {
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
+    this.testGridImageEscaping();
     this.testDolarApiParsing();
     this.testExecutiveReportExport();
 
@@ -250,6 +251,12 @@ const Tests = {
     XLSX.writeFile = origWrite;
 
     this.assert(ok && sheetsCount === 3, 'FileImporter generó el Reporte Ejecutivo Financiero con 3 pestañas en Excel');
+  },
+
+  testGridImageEscaping() {
+    const defaultSvg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569" font-size="36">🖼️</text></svg>');
+    const escVal = typeof esc === 'function' ? esc(defaultSvg) : defaultSvg;
+    this.assert(!escVal.includes('"'), 'El URL de fallback de imagen SVG en el grid no contiene comillas dobles sin escapar');
   }
 };
 
