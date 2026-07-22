@@ -135,17 +135,17 @@
           <div class="stat-sub" id="catKpiMarcas">0 marcas</div>
         </div>
         <div class="stat">
-          <div class="stat-label">FOB Mínimo</div>
+          <div class="stat-label">FOB Mínimo <span class="info-tooltip" data-tooltip="FOB (Free On Board): Precio de compra unitario en origen (China/proveedor) sin flete ni impuestos.">?</span></div>
           <div class="stat-value" id="catKpiMin">$0</div>
           <div class="stat-sub">Por producto</div>
         </div>
         <div class="stat">
-          <div class="stat-label">FOB Promedio</div>
+          <div class="stat-label">FOB Promedio <span class="info-tooltip" data-tooltip="Promedio del costo de compra FOB de todos los productos del catálogo.">?</span></div>
           <div class="stat-value blue" id="catKpiAvg">$0</div>
           <div class="stat-sub">Por producto</div>
         </div>
         <div class="stat">
-          <div class="stat-label">FOB Máximo</div>
+          <div class="stat-label">FOB Máximo <span class="info-tooltip" data-tooltip="Precio FOB del producto más caro del catálogo actual.">?</span></div>
           <div class="stat-value" id="catKpiMax">$0</div>
           <div class="stat-sub">Por producto</div>
         </div>
@@ -241,32 +241,32 @@
 
       <div class="stats">
         <div class="stat">
-          <div class="stat-label">FOB Total</div>
+          <div class="stat-label">FOB Total <span class="info-tooltip" data-tooltip="FOB (Free On Board): Importe total pagado al proveedor en origen antes de flete e impuestos.">?</span></div>
           <div class="stat-value" id="pedFob">$0</div>
           <div class="stat-sub" id="pedFobSub">— unidades</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Costo Final</div>
+          <div class="stat-label">Costo Final <span class="info-tooltip" data-tooltip="Costo Puesto en País (Landed Cost): Costo real total acumulado con el 100% de los gastos pagados (FOB + Flete + Impuestos + Aduana + Despachante).">?</span></div>
           <div class="stat-value blue" id="pedCosto">$0</div>
           <div class="stat-sub">Puesto en país</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Facturación (PVP)</div>
+          <div class="stat-label">Facturación (PVP) <span class="info-tooltip" data-tooltip="Facturación Total Proyectada: El dinero bruto ingresado al vender la totalidad de las unidades al Precio de Venta al Público (PVP).">?</span></div>
           <div class="stat-value accent" id="pedFact">$0</div>
           <div class="stat-sub">Venta total proyectada</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Margen Bruto</div>
+          <div class="stat-label">Margen Bruto <span class="info-tooltip" data-tooltip="Ganancia Neta Limpia: Dinero limpio en el bolsillo descontando el 100% de los costos de importación (Facturación - Costo Final).">?</span></div>
           <div class="stat-value green" id="pedMargen">$0</div>
           <div class="stat-sub" id="pedMargenSub">—%</div>
         </div>
         <div class="stat">
-          <div class="stat-label">ROI Est.</div>
+          <div class="stat-label">ROI Est. <span class="info-tooltip" data-tooltip="ROI (Return on Investment): Porcentaje de retorno neto sobre tu inversión inicial (cuántos centavos de ganancia hacés por cada dólar invertido).">?</span></div>
           <div class="stat-value" style="color: #38bdf8;" id="pedRoi">0%</div>
           <div class="stat-sub">Retorno sobre inversión</div>
         </div>
         <div class="stat">
-          <div class="stat-label">IVA Est.</div>
+          <div class="stat-label">IVA Est. <span class="info-tooltip" data-tooltip="Impuesto al Valor Agregado estimado (21% o 10.5%) aplicado sobre el valor CIF e impuestos aduaneros.">?</span></div>
           <div class="stat-value" style="color: #f472b6;" id="pedIva">$0</div>
           <div class="stat-sub" id="pedIvaSub">ARS $0</div>
         </div>
@@ -315,18 +315,18 @@
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
-          <div class="cost"><label>Flete (% FOB)</label><input type="number" id="cFlete" value="15" onchange="recalc()"></div>
-          <div class="cost"><label>Peso Total (Kg)</label><input type="number" id="cPesoKg" value="0" placeholder="Ej: 12.5" onchange="recalc()"></div>
-          <div class="cost"><label>Costo/Kg (USD)</label><input type="number" id="cCostoPorKg" value="12" placeholder="Ej: 12" onchange="recalc()"></div>
-          <div class="cost"><label>Seguro (% FOB)</label><input type="number" id="cSeguro" value="2" onchange="recalc()"></div>
-          <div class="cost"><label>Derechos (% CIF)</label><input type="number" id="cDerechos" value="16" onchange="recalc()"></div>
-          <div class="cost"><label>Tasa (% CIF)</label><input type="number" id="cTasa" value="3" onchange="recalc()"></div>
-          <div class="cost"><label>Perc. Gan (% CIF)</label><input type="number" id="cPerc" value="6" onchange="recalc()"></div>
-          <div class="cost"><label>IVA Aprox (%)</label><input type="number" id="cIvaPct" value="21" onchange="recalc()"></div>
-          <div class="cost"><label>Despachante ($)</label><input type="number" id="cDesp" value="500" onchange="recalc()"></div>
-          <div class="cost"><label>Courier (USD/u)</label><input type="number" id="cCourier" value="8" onchange="recalc()"></div>
-          <div class="cost"><label>Markup (x)</label><input type="number" id="cMarkup" value="2.5" step="0.1" onchange="recalc()"></div>
-          <div class="cost"><label>Tipo Cambio ($/USD)</label><input type="number" id="cTasaCambio" value="1400" onchange="recalc()"></div>
+          <div class="cost"><label>Flete (% FOB) <span class="info-tooltip" data-tooltip="Costo del transporte internacional como porcentaje del valor FOB.">?</span></label><input type="number" id="cFlete" value="15" onchange="recalc()"></div>
+          <div class="cost"><label>Peso Total (Kg) <span class="info-tooltip" data-tooltip="Peso bruto total en kilogramos para calcular flete por peso.">?</span></label><input type="number" id="cPesoKg" value="0" placeholder="Ej: 12.5" onchange="recalc()"></div>
+          <div class="cost"><label>Costo/Kg (USD) <span class="info-tooltip" data-tooltip="Tarifa del transporte/courier cobrada por cada kilogramo de peso.">?</span></label><input type="number" id="cCostoPorKg" value="12" placeholder="Ej: 12" onchange="recalc()"></div>
+          <div class="cost"><label>Seguro (% FOB) <span class="info-tooltip" data-tooltip="Seguro internacional de carga para cubrir pérdidas o daños en tránsito.">?</span></label><input type="number" id="cSeguro" value="2" onchange="recalc()"></div>
+          <div class="cost"><label>Derechos (% CIF) <span class="info-tooltip" data-tooltip="Derechos aduaneros de importación sobre valor CIF (FOB + Flete + Seguro).">?</span></label><input type="number" id="cDerechos" value="16" onchange="recalc()"></div>
+          <div class="cost"><label>Tasa (% CIF) <span class="info-tooltip" data-tooltip="Tasa Estadística de la aduana calculada sobre el valor CIF.">?</span></label><input type="number" id="cTasa" value="3" onchange="recalc()"></div>
+          <div class="cost"><label>Perc. Gan (% CIF) <span class="info-tooltip" data-tooltip="Percepción del Impuesto a las Ganancias cobrada en la aduana.">?</span></label><input type="number" id="cPerc" value="6" onchange="recalc()"></div>
+          <div class="cost"><label>IVA Aprox (%) <span class="info-tooltip" data-tooltip="Alícuota del Impuesto al Valor Agregado (21% o 10.5%).">?</span></label><input type="number" id="cIvaPct" value="21" onchange="recalc()"></div>
+          <div class="cost"><label>Despachante ($) <span class="info-tooltip" data-tooltip="Honorarios y despacho fijo del Despachante de Aduana.">?</span></label><input type="number" id="cDesp" value="500" onchange="recalc()"></div>
+          <div class="cost"><label>Courier (USD/u) <span class="info-tooltip" data-tooltip="Gastos fijos de procesamiento por unidad en envíos Courier.">?</span></label><input type="number" id="cCourier" value="8" onchange="recalc()"></div>
+          <div class="cost"><label>Markup (x) <span class="info-tooltip" data-tooltip="Multiplicador de ganancia sobre el costo unitario para calcular el PVP (ej: 2.5 = multiplicar costo x 2.5).">?</span></label><input type="number" id="cMarkup" value="2.5" step="0.1" onchange="recalc()"></div>
+          <div class="cost"><label>Tipo Cambio ($/USD) <span class="info-tooltip" data-tooltip="Cotización del dólar para calcular importes equivalentes en Pesos ARS.">?</span></label><input type="number" id="cTasaCambio" value="1400" onchange="recalc()"></div>
         </div>
       </div>
 
