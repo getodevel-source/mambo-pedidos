@@ -83,7 +83,7 @@
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span style="color: var(--primary); font-weight: 600;">v1.1.0</span>
+      <span id="appVersionBadge" style="color: var(--primary); font-weight: 600;">v1.2.2</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -91,8 +91,23 @@
   </div>
 </aside>
 
-<!-- ============== MAIN ============== -->
 <main class="main">
+
+  <!-- Banner Cotizaciones Dólar en Vivo (DolarApi) -->
+  <div id="topDolarBanner" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; padding: 10px 16px; background: rgba(18, 18, 30, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255, 87, 34, 0.2); border-radius: 12px; font-size: 12px; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text);">
+      <span style="font-size: 14px;">💵</span>
+      <span>Dólar en Vivo (ARG):</span>
+    </div>
+    <div id="dolarRatesBadgeList" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #fff;" title="Click para aplicar a Tasa de Cambio">🏛️ Mayorista: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #fff;" title="Click para aplicar a Tasa de Cambio">🏢 Oficial: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #38bdf8;" title="Click para aplicar a Tasa de Cambio">💙 Blue: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #a5b4fc;" title="Click para aplicar a Tasa de Cambio">📈 MEP: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #34d399;" title="Click para aplicar a Tasa de Cambio">⚡ Cripto: ...</span>
+    </div>
+    <button class="btn btn-sm" onclick="fetchLiveDolarRates(true)" style="padding: 3px 10px; font-size: 11px; background: rgba(255,87,34,0.12); color: var(--primary); border: 1px solid rgba(255,87,34,0.3); border-radius: 6px; cursor: pointer;" title="Actualizar cotización ahora">🔄 Refrescar</button>
+  </div>
 
   <!-- Progress bar -->
   <div class="progress" id="progress" style="display: none;">

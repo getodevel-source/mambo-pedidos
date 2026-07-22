@@ -1501,6 +1501,7 @@ function loadDemoCatalog() {
 
 // Setup Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
+  fetchLiveDolarRates(false);
   await AppStorage.init();
   const saved = await AppStorage.loadCatalog();
   if (saved && saved.items && saved.items.length) {

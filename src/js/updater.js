@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '1.1.0',
+  CURRENT_VERSION: '1.2.2',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -79,7 +79,13 @@ const AppUpdater = {
       // Intentar via plugin nativo de Tauri primero
       const updateInfo = await this._tauriCheck();
 
-      if (updateInfo?.available) {
+      if (updateInfo?.currentVersion) {
+        this.CURRENT_VERSION = updateInfo.currentVersion;
+        const badge = document.getElementById('appVersionBadge');
+        if (badge) badge.textContent = `v${updateInfo.currentVersion}`;
+      }
+
+      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, this.CURRENT_VERSION)) {
         this.latestVersion = updateInfo.version;
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;
