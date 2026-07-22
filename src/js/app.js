@@ -129,6 +129,50 @@ function adjustQty(sku, delta) {
   renderCatalog();
 }
 
+let activeCategoryChip = '';
+
+function setCatChip(cat, el) {
+  activeCategoryChip = cat;
+  const chips = document.querySelectorAll('#catFilterChips .chip');
+  chips.forEach(c => {
+    c.style.background = 'var(--surface)';
+    c.style.borderColor = 'var(--border)';
+    c.style.color = 'var(--text-muted)';
+    c.classList.remove('active');
+  });
+
+  if (el) {
+    el.classList.add('active');
+    if (cat === 'SELECTED_ONLY') {
+      el.style.background = 'rgba(16,185,129,0.25)';
+      el.style.borderColor = 'rgba(16,185,129,0.6)';
+      el.style.color = '#34d399';
+    } else {
+      el.style.background = 'rgba(255,87,34,0.2)';
+      el.style.borderColor = 'var(--primary)';
+      el.style.color = '#fff';
+    }
+  }
+
+  // Si seleccionó una categoría normal, sincronizar select
+  const catSelect = document.getElementById('catFilterCat');
+  if (catSelect && cat !== 'SELECTED_ONLY') {
+    catSelect.value = cat;
+  }
+  renderCatalog();
+}
+
+function syncMarkup(val, origin) {
+  const numInput = document.getElementById('cMarkup');
+  const rangeInput = document.getElementById('cMarkupRange');
+  const numVal = parseFloat(val) || 2.5;
+
+  if (origin === 'range' && numInput) numInput.value = numVal.toFixed(2);
+  if (origin === 'num' && rangeInput) rangeInput.value = numVal;
+
+  recalc();
+}
+
 function renderCatalog() {
   if (!catalog.length) return;
   const txt = (document.getElementById('catSearch')?.value || '').toLowerCase();
@@ -140,7 +184,12 @@ function renderCatalog() {
   const filtered = catalog.filter(r => {
     const matchTxt = !txt || (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt);
     const matchMarca = !marca || r.marca === marca;
-    const matchCat = !cat || r.cat === cat;
+    let matchCat = !cat || r.cat === cat;
+    if (activeCategoryChip === 'SELECTED_ONLY') {
+      matchCat = (selection[r.sku] || 0) > 0;
+    } else if (activeCategoryChip) {
+      matchCat = r.cat === activeCategoryChip;
+    }
     const matchPrice = (r.fob >= minPrice) && (r.fob <= maxPrice);
     return matchTxt && matchMarca && matchCat && matchPrice;
   });
@@ -171,6 +220,20 @@ function renderCatalog() {
   document.getElementById('catKpiSel').textContent = selQty + ' u';
   document.getElementById('catKpiSelFob').textContent = '$' + selFob.toFixed(2) + ' FOB';
   document.getElementById('catalogSubtitle').textContent = filtered.length + ' de ' + catalog.length + ' productos · ' + [...new Set(catalog.map(r => r.marca))].length + ' marcas';
+
+  // Actualizar Sticky Order Bar
+  const stickyBar = document.getElementById('stickyOrderBar');
+  const stickyCount = document.getElementById('stickySelCount');
+  const stickyFob = document.getElementById('stickySelFob');
+  if (stickyBar) {
+    if (selQty > 0) {
+      stickyBar.style.display = 'flex';
+      if (stickyCount) stickyCount.textContent = `${selQty} producto${selQty > 1 ? 's' : ''}`;
+      if (stickyFob) stickyFob.textContent = `$${selFob.toFixed(2)} FOB`;
+    } else {
+      stickyBar.style.display = 'none';
+    }
+  }
 
   let html = '';
   pageItems.forEach(r => {
@@ -661,6 +724,28 @@ function recalc() {
   if (document.getElementById('pedIva')) document.getElementById('pedIva').textContent = '$' + Math.round(t.ivaUsd || 0).toLocaleString() + ' USD';
   if (document.getElementById('pedIvaSub')) document.getElementById('pedIvaSub').textContent = 'ARS $' + (t.ivaArs || 0).toLocaleString();
 
+  // Actualizar semáforo de margen
+  const healthBadge = document.getElementById('marginHealthBadge');
+  if (healthBadge) {
+    const mPct = t.margenPct || 0;
+    if (mPct >= 40) {
+      healthBadge.textContent = '🟢 Excelente Rentabilidad (>40%)';
+      healthBadge.style.background = 'rgba(16,185,129,0.15)';
+      healthBadge.style.borderColor = 'rgba(16,185,129,0.4)';
+      healthBadge.style.color = '#34d399';
+    } else if (mPct >= 20) {
+      healthBadge.textContent = '🟡 Margen Saludable (20-40%)';
+      healthBadge.style.background = 'rgba(234,179,8,0.15)';
+      healthBadge.style.borderColor = 'rgba(234,179,8,0.4)';
+      healthBadge.style.color = '#fde047';
+    } else {
+      healthBadge.textContent = '🔴 Margen Ajustado (<20%)';
+      healthBadge.style.background = 'rgba(239,68,68,0.15)';
+      healthBadge.style.borderColor = 'rgba(239,68,68,0.4)';
+      healthBadge.style.color = '#f87171';
+    }
+  }
+
   if (document.getElementById('pedidoSubtitle')) document.getElementById('pedidoSubtitle').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades · TC: $' + t.tipoCambio + '/USD';
   if (document.getElementById('pedidoMeta')) document.getElementById('pedidoMeta').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR') + ' · Facturación ARS: $' + (t.facturacionArs || 0).toLocaleString();
   if (document.getElementById('pedTableMeta')) document.getElementById('pedTableMeta').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades';
@@ -687,6 +772,72 @@ function recalc() {
 
   renderPedidoTable();
 }
+
+function clonarPedido(index) {
+  if (!historial[index]) return;
+  const p = historial[index];
+  selection = {};
+  p.items.forEach(it => {
+    selection[it.sku] = it.qty;
+  });
+
+  currentPedido = JSON.parse(JSON.stringify(p));
+  currentPedido.name = p.name + ' (Copia)';
+  currentPedido.date = new Date().toISOString();
+
+  switchView('pedido');
+  renderPedido();
+  toast('👯 Pedido clonado exitosamente', 'success');
+}
+
+function copiarResumenPedido(index) {
+  if (!historial[index]) return;
+  const p = historial[index];
+  const t = p.totals || {};
+  let txt = `📦 ${p.name}\n`;
+  txt += `📅 Fecha: ${new Date(p.date).toLocaleDateString('es-AR')}\n`;
+  txt += `------------------------------\n`;
+  p.items.forEach(it => {
+    txt += `• ${it.qty}x ${it.marca} ${it.modelo} (${it.sku}) - PVP: $${(it.pvp || 0).toLocaleString()}\n`;
+  });
+  txt += `------------------------------\n`;
+  txt += `💵 FOB Total: $${(t.fob || 0).toLocaleString()} USD\n`;
+  txt += `🚢 Costo Puesto en País: $${(t.costo || 0).toLocaleString()} USD\n`;
+  txt += `💰 Facturación Proyectada: $${(t.facturacion || 0).toLocaleString()} USD\n`;
+  txt += `🟢 Ganancia Neta: $${(t.margen || 0).toLocaleString()} USD (${t.margenPct || 0}%)\n`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => {
+      toast('📋 Resumen copiado al portapapeles', 'success');
+    });
+  } else {
+    toast('📋 Resumen generado en la consola', 'info');
+    console.log(txt);
+  }
+}
+
+// Listener de Drag & Drop para toda la ventana
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const overlay = document.getElementById('dropOverlay');
+  if (overlay) overlay.style.display = 'flex';
+});
+
+window.addEventListener('dragleave', (e) => {
+  if (e.clientX === 0 && e.clientY === 0) {
+    const overlay = document.getElementById('dropOverlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+});
+
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const overlay = document.getElementById('dropOverlay');
+  if (overlay) overlay.style.display = 'none';
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    FileImporter.processFiles(e.dataTransfer.files);
+  }
+});
 
 function renderPedidoTable() {
   if (!currentPedido) return;
@@ -769,6 +920,8 @@ async function renderHistorial() {
     html += '</div>';
     html += '<div class="row" style="gap: 6px;">';
     html += '<button class="btn btn-sm" onclick="loadFromHistorial(' + i + ')">Abrir</button>';
+    html += '<button class="btn btn-sm" onclick="clonarPedido(' + i + ')" title="Clonar este pedido como nuevo">👯 Clonar</button>';
+    html += '<button class="btn btn-sm" onclick="copiarResumenPedido(' + i + ')" title="Copiar resumen al portapapeles">📋 Copiar</button>';
     html += '<button class="btn btn-sm" style="color: var(--red);" onclick="deleteFromHistorial(' + i + ')">🗑</button>';
     html += '</div></div>';
   });
