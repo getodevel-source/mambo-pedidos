@@ -1049,3 +1049,447 @@ select option, .select option {
   .main { padding: 24px 16px; }
   .page-title { font-size: 22px; }
 }
+
+/* ===============================================================
+   AI ENGINE STATUS CHIP — Premium Indicator
+   =============================================================== */
+
+#aiStatusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--green);
+  transition: var(--transition);
+  cursor: default;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aiStatusChip.downloading {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.08);
+  color: var(--yellow);
+  animation: pulseSoft 1.5s ease-in-out infinite;
+}
+#aiStatusChip.nlp {
+  border-color: rgba(96, 165, 250, 0.25);
+  background: rgba(96, 165, 250, 0.08);
+  color: var(--blue);
+}
+#aiStatusChipDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+#aiStatusChip.downloading #aiStatusChipDot {
+  animation: pulseSoft 0.8s ease-in-out infinite;
+}
+
+/* ===============================================================
+   LOADING OVERLAY — Premium Glassmorphism Progress
+   =============================================================== */
+
+#loadingOverlay {
+  transition: opacity 0.3s var(--ease-out);
+}
+
+#progressBarInner {
+  position: relative;
+  overflow: hidden;
+}
+#progressBarInner::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+  animation: shimmer 1.2s infinite linear;
+  background-size: 200% 100%;
+}
+
+/* ===============================================================
+   CATALOG GRID CARDS — Ultra Premium v2
+   =============================================================== */
+
+.grid-card {
+  position: relative;
+  background: linear-gradient(145deg, rgba(22, 22, 28, 0.95) 0%, rgba(14, 14, 18, 0.98) 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.28s var(--ease-out);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.grid-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255,87,34,0.06) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 0;
+}
+.grid-card:hover {
+  border-color: rgba(255, 87, 34, 0.3);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,87,34,0.15);
+}
+.grid-card:hover::before {
+  opacity: 1;
+}
+.grid-card-img {
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.03) 0%, transparent 70%);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: transform 0.35s var(--ease-out);
+  padding: 16px;
+}
+.grid-card:hover .grid-card-img {
+  transform: scale(1.04);
+}
+.grid-card-body {
+  padding: 14px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+}
+.grid-card-brand {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--primary);
+  opacity: 0.8;
+}
+.grid-card-model {
+  font-family: var(--font-headline);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grid-card-variant {
+  display: inline-block;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--green);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.grid-card-price {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.grid-card-price .currency {
+  color: var(--primary);
+  font-size: 11px;
+  margin-right: 2px;
+}
+.grid-card-selected-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  box-shadow: inset 0 0 16px rgba(255,87,34,0.1);
+}
+.grid-card.selected .grid-card-selected-ring {
+  opacity: 1;
+}
+
+/* ===============================================================
+   SIDEBAR AI ENGINE WIDGET
+   =============================================================== */
+
+#sidebarAiWidget {
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: var(--transition);
+}
+#sidebarAiWidget:hover {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.04);
+}
+#sidebarAiWidgetBar {
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.06);
+  margin-top: 8px;
+  overflow: hidden;
+}
+#sidebarAiWidgetBarInner {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), #34d399);
+  border-radius: var(--radius-full);
+  transition: width 0.5s var(--ease-out);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+/* ===============================================================
+   IMPORT PREVIEW MODAL — Better Spacing & Polish
+   =============================================================== */
+
+.preview-item-row {
+  animation: fadeInUp 0.2s var(--ease-out) both;
+}
+.preview-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.preview-status-badge.valid {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.preview-status-badge.warning {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--yellow);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+.preview-status-badge.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ===============================================================
+   SMOOTH PAGE TRANSITIONS
+   =============================================================== */
+
+.view.active {
+  animation: viewEnter 0.3s var(--ease-out) both;
+}
+@keyframes viewEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===============================================================
+   CATEGORY FILTER CHIPS — Premium v2
+   =============================================================== */
+
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-muted);
+  transition: all 0.18s var(--ease-out);
+  user-select: none;
+  white-space: nowrap;
+}
+.cat-chip:hover {
+  border-color: rgba(255,87,34,0.35);
+  color: var(--text);
+  background: rgba(255,87,34,0.06);
+  transform: translateY(-1px);
+}
+.cat-chip.active {
+  background: rgba(255,87,34,0.14);
+  border-color: rgba(255,87,34,0.45);
+  color: var(--primary);
+  box-shadow: 0 0 12px rgba(255,87,34,0.15);
+}
+
+/* ===============================================================
+   TOOLTIP UPGRADE — Smooth Fade
+   =============================================================== */
+
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 15, 20, 0.97);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+  animation: scaleIn 0.15s var(--ease-out);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* ===============================================================
+   EXTENDED PREMIUM UX — v1.2.8 Deep Polish
+   =============================================================== */
+
+/* Better focus rings for keyboard accessibility */
+*:focus-visible {
+  outline: 2px solid rgba(255, 87, 34, 0.6);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Enhanced button press feedback */
+.btn:active {
+  transform: scale(0.97) translateY(0) !important;
+  transition: all 0.08s !important;
+}
+
+/* Stat card accent bar color variants */
+.stat[data-color="green"]::before { background: var(--green); box-shadow: var(--green-glow); }
+.stat[data-color="blue"]::before  { background: var(--blue);  box-shadow: var(--blue-glow); }
+.stat[data-color="red"]::before   { background: var(--red);   box-shadow: var(--red-glow); }
+.stat[data-color="orange"]::before { background: var(--primary); box-shadow: var(--primary-glow); }
+
+/* Glowing table row on hover — gradient sweep */
+tbody tr:hover td {
+  background: linear-gradient(90deg, rgba(255, 87, 34, 0.06) 0%, rgba(255, 87, 34, 0.02) 100%);
+}
+
+/* Modal inner — always crisp glass */
+.modal-sheet {
+  background: linear-gradient(145deg, rgba(20, 20, 26, 0.98) 0%, rgba(12, 12, 16, 0.99) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 32px 80px rgba(0, 0, 0, 0.8),
+    0 0 40px rgba(255, 87, 34, 0.06);
+  backdrop-filter: blur(32px) saturate(1.4);
+  animation: modalIn 0.28s var(--ease-out) both;
+}
+
+/* Status text classes */
+.status-ok   { color: var(--green); font-weight: 700; }
+.status-warn { color: var(--yellow); font-weight: 700; }
+.status-err  { color: var(--red); font-weight: 700; }
+
+/* AI corrected badge */
+.ai-corrected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  background: rgba(96, 165, 250, 0.1);
+  color: var(--blue);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+/* Page-in animation */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.page-header { animation: pageIn 0.4s var(--ease-out) both; }
+
+/* Sidebar thinner scroll */
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,87,34,0.3); }
+
+/* Progress bar shimmer layer */
+.progress-bar { position: relative; overflow: hidden; }
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* Glass badge utility */
+.glass-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(8px);
+  color: var(--text-muted);
+}
+
+/* Hide number spinners on dark theme */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { opacity: 0; }
+input[type="number"]:hover::-webkit-inner-spin-button { opacity: 0.5; }
+
+/* Selection color */
+::selection {
+  background: rgba(255, 87, 34, 0.35);
+  color: #fff;
+}
+
+/* Extended breakpoints */
+@media (max-width: 1200px) { .main { padding: 32px 40px; } }
+@media (max-width: 900px) {
+  .main { padding: 24px 24px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}

@@ -54,12 +54,24 @@ const AiDisambiguator = {
     const hasWindowAiLang = !!(window.ai && window.ai.languageModel);
     const hasWindowAiVision = !!(window.ai && window.ai.visionModel);
     const hasOnnx = !!(window.ort && this._neuralVisionSession);
+    const hasTransformers = !!(window.TransformersAI && window.TransformersAI.isReady && window.TransformersAI.isReady());
+    const transformersStatus = (window.TransformersAI && window.TransformersAI.getStatus) ? window.TransformersAI.getStatus() : null;
+
+    const isNeuralActive = hasWindowAiLang || hasWindowAiVision || hasOnnx || hasTransformers;
+
+    let textEngineLabel = 'Motor Semántico Local (NLP Engine)';
+    if (hasWindowAiLang) textEngineLabel = 'Gemini Nano (window.ai)';
+    else if (hasTransformers) textEngineLabel = 'Xenova/distilbert (Transformers.js)';
+    else if (transformersStatus && transformersStatus.downloading) textEngineLabel = transformersStatus.label;
 
     return {
-      textEngine: hasWindowAiLang ? 'Gemini Nano (window.ai.languageModel)' : 'Motor Semántico Local (NLP Engine)',
-      visionEngine: hasWindowAiVision ? 'Chromium Vision AI (window.ai.visionModel)' : (hasOnnx ? 'Florence-2 ONNX WebGPU' : 'Visión por Contraste & Bounding Box Solver'),
-      isNeuralActive: hasWindowAiLang || hasWindowAiVision || hasOnnx,
-      statusLabel: (hasWindowAiLang || hasWindowAiVision || hasOnnx) ? '🟢 IA Neuronal Nativa Activa' : '🔵 IA Semántica Local (NLP & Bounding Box)'
+      textEngine: textEngineLabel,
+      visionEngine: hasWindowAiVision ? 'Chromium Vision AI' : (hasOnnx ? 'Florence-2 ONNX WebGPU' : 'Bounding Box Solver'),
+      isNeuralActive,
+      transformersReady: hasTransformers,
+      transformersDownloading: transformersStatus ? transformersStatus.downloading : false,
+      transformersProgress: transformersStatus ? transformersStatus.progress : 0,
+      statusLabel: hasTransformers ? '🟢 Transformers.js IA Activa' : (isNeuralActive ? '🟢 IA Neuronal Activa' : '🔵 IA Semántica Local (NLP)')
     };
   },
 
@@ -418,9 +430,20 @@ const AiDisambiguator = {
       if (item.status === 'WARNING' || item.status === 'ERROR' || item.marca === 'OTRO' || item.cat === 'OTRO') {
         let corrected = this.disambiguateItem(item, customBrands);
 
-        // Si sigue en 'OTRO', intentar consulta al LLM Local de apoyo
+        // Si sigue en 'OTRO', intentar clasificación con Transformers.js (IA neural real)
         if (corrected.cat === 'OTRO' || corrected.marca === 'OTRO') {
-          const llmRes = await this.queryWebViewAi(item.rawText || item.modelo);
+          let llmRes = null;
+          // Try Transformers.js first (real neural inference, offline after first download)
+          if (window.TransformersAI && window.TransformersAI.isReady && window.TransformersAI.isReady()) {
+            const tfRes = await window.TransformersAI.classify(item.rawText || item.modelo || '');
+            if (tfRes && tfRes.cat && tfRes.cat !== 'OTRO' && tfRes.score > 0.35) {
+              llmRes = { cat: tfRes.cat };
+            }
+          }
+          // Fallback to window.ai / Ollama if Transformers.js not available
+          if (!llmRes) {
+            llmRes = await this.queryWebViewAi(item.rawText || item.modelo);
+          }
           if (llmRes && (llmRes.cat || llmRes.marca)) {
             if (llmRes.cat && llmRes.cat !== 'OTRO') corrected.cat = llmRes.cat;
             if (llmRes.marca && llmRes.marca !== 'OTRO') corrected.marca = llmRes.marca;
