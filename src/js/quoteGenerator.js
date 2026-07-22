@@ -28,17 +28,19 @@ const QuoteGenerator = {
       const sub = item.subPvp || (pvpU * item.qty);
       const pvpArs = item.pvpArs || Math.round(pvpU * (t.tipoCambio || 1400));
       const subArs = Math.round(sub * (t.tipoCambio || 1400));
+      const imgCell = item.img ? `<img src="${item.img}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">🖼️</span>`;
 
       itemsHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px; font-family: monospace; font-size: 11px; color: #64748b;">${i + 1}</td>
-          <td style="padding: 10px; font-weight: 600; color: #1e293b;">${this.esc(item.sku)}</td>
-          <td style="padding: 10px; color: #334155;">${this.esc(item.marca)}</td>
-          <td style="padding: 10px; color: #0f172a; font-weight: 600;">${this.esc(item.modelo)}</td>
-          <td style="padding: 10px; color: #64748b;">${this.esc(item.color || item.variante || '-')}</td>
-          <td style="padding: 10px; text-align: center; font-weight: 700; color: #6366f1;">${item.qty}</td>
-          <td style="padding: 10px; text-align: right; font-family: monospace;">$${pvpU.toFixed(2)} USD</td>
-          <td style="padding: 10px; text-align: right; font-family: monospace; font-weight: 700; color: #059669;">$${sub.toLocaleString(undefined, {minimumFractionDigits: 2})} USD</td>
+          <td style="padding: 8px; font-family: monospace; font-size: 11px; color: #64748b;">${i + 1}</td>
+          <td style="padding: 8px; text-align: center;">${imgCell}</td>
+          <td style="padding: 8px; font-weight: 600; color: #1e293b;">${this.esc(item.sku)}</td>
+          <td style="padding: 8px; color: #334155;">${this.esc(item.marca)}</td>
+          <td style="padding: 8px; color: #0f172a; font-weight: 600;">${this.esc(item.modelo)}</td>
+          <td style="padding: 8px; color: #64748b;">${this.esc(item.color || item.variante || '-')}</td>
+          <td style="padding: 8px; text-align: center; font-weight: 700; color: #6366f1;">${item.qty}</td>
+          <td style="padding: 8px; text-align: right; font-family: monospace;">$${pvpU.toFixed(2)} USD</td>
+          <td style="padding: 8px; text-align: right; font-family: monospace; font-weight: 700; color: #059669;">$${sub.toLocaleString(undefined, {minimumFractionDigits: 2})} USD</td>
         </tr>
       `;
     });
@@ -124,6 +126,7 @@ const QuoteGenerator = {
           <thead>
             <tr>
               <th style="width: 30px;">#</th>
+              <th style="width: 40px; text-align: center;">Foto</th>
               <th>SKU</th>
               <th>Marca</th>
               <th>Modelo</th>

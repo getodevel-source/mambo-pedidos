@@ -240,8 +240,10 @@ function renderCatalog() {
     const qty = selection[r.sku] || 0;
     const isSel = qty > 0;
     const skuJs = escJs(r.sku);
+    const imgHtml = r.img ? `<img src="${r.img}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
     html += '<tr' + (isSel ? ' style="background: rgba(255,90,31,0.05);"' : '') + '>';
     html += '<td class="checkbox"><input type="checkbox" ' + (isSel ? 'checked' : '') + ' onchange="toggleItem(\'' + skuJs + '\', this.checked)"></td>';
+    html += '<td style="text-align: center;">' + imgHtml + '</td>';
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';
     html += '<td><input class="inline" value="' + esc(r.marca) + '" onchange="updateField(\'' + skuJs + '\', \'marca\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.modelo) + '" onchange="updateField(\'' + skuJs + '\', \'modelo\', this.value)"></td>';
@@ -584,7 +586,8 @@ async function confirmImportPreview() {
         marca: item.marca || 'OTRO',
         modelo: item.modelo,
         variante: item.variante || '',
-        fob: item.fob
+        fob: item.fob,
+        img: item.img || ''
       });
       addedCount++;
     }
@@ -611,7 +614,7 @@ function validarYOarmarPedido() {
   }
   const items = Object.entries(selection).map(([sku, qty]) => {
     const r = catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, img: r ? r.img || '' : '', qty };
   });
 
   const validation = Validations.validateOrder({ items });
@@ -633,7 +636,7 @@ function armarPedido() {
   if (!sel.length) { toast('Seleccioná al menos un producto', 'error'); return; }
   const items = sel.map(([sku, qty]) => {
     const r = catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, img: r ? r.img || '' : '', qty };
   });
   currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');
@@ -839,11 +842,35 @@ window.addEventListener('drop', (e) => {
   }
 });
 
+function zoomImage(sku) {
+  const item = catalog.find(r => r.sku === sku);
+  if (item && item.img) {
+    zoomImageByUrl(item.img, `${item.marca} ${item.modelo}`);
+  }
+}
+
+function zoomImageByUrl(url, caption) {
+  const modal = document.getElementById('imageZoomModal');
+  const srcEl = document.getElementById('imageZoomSrc');
+  const capEl = document.getElementById('imageZoomCaption');
+
+  if (srcEl) srcEl.src = url;
+  if (capEl) capEl.textContent = caption || '';
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeImageZoomModal() {
+  const modal = document.getElementById('imageZoomModal');
+  if (modal) modal.style.display = 'none';
+}
+
 function renderPedidoTable() {
   if (!currentPedido) return;
   let html = '';
   currentPedido.items.forEach((r, i) => {
+    const imgHtml = r.img ? `<img src="${r.img}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
     html += '<tr>';
+    html += '<td style="text-align: center;">' + imgHtml + '</td>';
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';
     html += '<td>' + esc(r.marca) + '</td>';
     html += '<td>' + esc(r.modelo) + '</td>';

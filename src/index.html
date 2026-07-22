@@ -199,6 +199,7 @@
             <thead>
               <tr>
                 <th class="checkbox"><input type="checkbox" onchange="toggleSelectAll(this.checked)"></th>
+                <th style="width: 45px; text-align: center;">Foto</th>
                 <th>SKU</th>
                 <th>Marca</th>
                 <th>Modelo</th>
@@ -359,6 +360,7 @@
           <table>
             <thead>
               <tr>
+                <th style="width: 45px; text-align: center;">Foto</th>
                 <th>SKU</th>
                 <th>Marca</th>
                 <th>Modelo</th>
@@ -562,6 +564,13 @@
     <div style="font-size: 64px; margin-bottom: 16px;">📥</div>
     <div style="font-size: 24px; font-weight: 800; color: var(--primary); margin-bottom: 8px;">Soltá tus listas de precios acá</div>
     <div style="font-size: 14px; color: var(--text-muted);">Procesaremos automáticamente todos tus archivos PDF, CSV o Excel</div>
+  </div>
+<!-- Modal Zoom de Foto en Alta Resolución -->
+<div class="modal-backdrop" id="imageZoomModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeImageZoomModal()">
+  <div style="position: relative; max-width: 90vw; max-height: 90vh; text-align: center;" onclick="event.stopPropagation()">
+    <img id="imageZoomSrc" src="" style="max-width: 85vw; max-height: 75vh; object-fit: contain; border-radius: 8px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); border: 2px solid var(--border); image-rendering: -webkit-optimize-contrast;">
+    <div id="imageZoomCaption" style="font-size: 13px; color: #fff; margin-top: 10px; font-weight: 600;"></div>
+    <button class="btn btn-secondary btn-sm" onclick="closeImageZoomModal()" style="margin-top: 12px;">❌ Cerrar Zoom</button>
   </div>
 </div>
 

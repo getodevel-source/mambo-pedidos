@@ -14,6 +14,7 @@ const PdfParser = {
       pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
       const allRows = [];   // filas espaciales de todas las páginas
+      const allImages = []; // imágenes extraídas con coordenadas X/Y
       let fullTextForBrand = '';
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -25,8 +26,12 @@ const PdfParser = {
           fullTextForBrand += content.items.map(item => item.str).join(' ') + ' ';
         }
 
-        const rows = this.groupItemsByRow(content.items, viewport.height);
+        const rows = this.groupItemsByRow(content.items, viewport.height, pageNum);
         allRows.push(...rows);
+
+        // Extraer imágenes y aplicar filtro de nitidez por Canvas
+        const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
+        allImages.push(...pageImages);
       }
 
       const cleanText = fullTextForBrand.replace(/\s+/g, '');
@@ -35,7 +40,7 @@ const PdfParser = {
       }
 
       const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
-      const products = this.parseRows(allRows, brand, catalogLength, customBrands);
+      const products = this.parseRows(allRows, brand, catalogLength, customBrands, allImages);
       return { brand, products };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
@@ -44,7 +49,76 @@ const PdfParser = {
     }
   },
 
-  groupItemsByRow(items, pageHeight) {
+  async extractImagesFromPage(page, viewport, pageNum) {
+    const pageImages = [];
+    try {
+      const ops = await page.getOperatorList();
+      const fnArray = ops.fnArray;
+      const argsArray = ops.argsArray;
+
+      for (let i = 0; i < fnArray.length; i++) {
+        if (fnArray[i] === pdfjsLib.OPS.paintImageXObject || fnArray[i] === pdfjsLib.OPS.paintInlineImageXObject) {
+          const imageName = argsArray[i][0];
+          let imgObj = null;
+          try {
+            imgObj = page.objs.get(imageName);
+          } catch (e) {
+            continue;
+          }
+          if (!imgObj || !imgObj.width || !imgObj.height) continue;
+          if (imgObj.width < 25 || imgObj.height < 25) continue;
+
+          let ctm = null;
+          for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+            if (fnArray[j] === pdfjsLib.OPS.transform) {
+              ctm = argsArray[j];
+              break;
+            }
+          }
+
+          let x = ctm ? ctm[4] : 0;
+          let y = ctm ? viewport.height - ctm[5] : 0;
+
+          if (typeof document !== 'undefined') {
+            const canvas = document.createElement('canvas');
+            canvas.width = imgObj.width;
+            canvas.height = imgObj.height;
+            const ctx = canvas.getContext('2d');
+
+            if (ctx && imgObj.data) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+
+              const imgData = ctx.createImageData(imgObj.width, imgObj.height);
+              if (imgObj.data.length === imgObj.width * imgObj.height * 4) {
+                imgData.data.set(imgObj.data);
+              } else if (imgObj.data.length === imgObj.width * imgObj.height * 3) {
+                let srcIdx = 0;
+                let dstIdx = 0;
+                for (let p = 0; p < imgObj.width * imgObj.height; p++) {
+                  imgData.data[dstIdx] = imgObj.data[srcIdx];
+                  imgData.data[dstIdx + 1] = imgObj.data[srcIdx + 1];
+                  imgData.data[dstIdx + 2] = imgObj.data[srcIdx + 2];
+                  imgData.data[dstIdx + 3] = 255;
+                  srcIdx += 3;
+                  dstIdx += 4;
+                }
+              }
+              ctx.putImageData(imgData, 0, 0);
+
+              const dataUrl = canvas.toDataURL('image/webp', 0.85);
+              pageImages.push({ pageNum, y, x, width: imgObj.width, height: imgObj.height, dataUrl });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Extracción de imágenes no soportada:', err);
+    }
+    return pageImages;
+  },
+
+  groupItemsByRow(items, pageHeight, pageNum = 1) {
     if (!items.length) return [];
 
     const normalized = items
@@ -52,7 +126,7 @@ const PdfParser = {
       .map(item => {
         const x = item.transform[4];
         const y = pageHeight - item.transform[5];
-        return { x, y, text: item.str.trim() };
+        return { x, y, text: item.str.trim(), pageNum };
       })
       .sort((a, b) => a.y - b.y || a.x - b.x);
 
@@ -66,6 +140,7 @@ const PdfParser = {
         currentRow.push(item);
       } else {
         rows.push({
+          pageNum,
           y: currentY,
           text: currentRow.sort((a, b) => a.x - b.x).map(i => i.text).join(' ')
         });
@@ -75,6 +150,7 @@ const PdfParser = {
     }
     if (currentRow.length) {
       rows.push({
+        pageNum,
         y: currentY,
         text: currentRow.sort((a, b) => a.x - b.x).map(i => i.text).join(' ')
       });
@@ -83,7 +159,7 @@ const PdfParser = {
     return rows;
   },
 
-  parseRows(rows, brandFallback, baseLength = 0, customBrands = []) {
+  parseRows(rows, brandFallback, baseLength = 0, customBrands = [], allImages = []) {
     const products = [];
     const seen = new Set();
 
@@ -107,6 +183,18 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
+      // Asociación espacial de imagen más cercana en la misma página
+      let matchedImg = '';
+      if (allImages && allImages.length) {
+        const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum);
+        if (pageImgs.length) {
+          pageImgs.sort((a, b) => Math.abs(a.y - rows[i].y) - Math.abs(b.y - rows[i].y));
+          if (Math.abs(pageImgs[0].y - rows[i].y) <= 140) {
+            matchedImg = pageImgs[0].dataUrl;
+          }
+        }
+      }
+
       const rawItem = {
         sku,
         cat,
@@ -114,6 +202,7 @@ const PdfParser = {
         modelo: ctx.modelo,
         variante: ctx.variante,
         fob: usdPrice,
+        img: matchedImg,
         rawText: ctx.rawText
       };
 

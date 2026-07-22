@@ -29,6 +29,7 @@ const Tests = {
     this.testCourierWarnings();
     this.testAiDisambiguator();
     this.testQuoteGeneratorHtml();
+    this.testImageSpatialMatching();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -159,6 +160,18 @@ const Tests = {
     window.open = origOpen;
 
     this.assert(opened, 'QuoteGenerator generó y abrió exitosamente la ventana imprimible de cotización');
+  },
+
+  testImageSpatialMatching() {
+    const rows = [
+      { pageNum: 1, y: 100, text: '8BitDo Ultimate Wireless Controller $45.00' }
+    ];
+    const images = [
+      { pageNum: 1, y: 105, x: 20, width: 100, height: 100, dataUrl: 'data:image/webp;base64,UklGRi...' }
+    ];
+    const products = PdfParser.parseRows(rows, '8BitDo', 0, [], images);
+    this.assert(products.length === 1, 'PdfParser parseó 1 producto con imagen espacial');
+    this.assert(products[0].img && products[0].img.startsWith('data:image/webp'), 'Imagen espacial asignada correctamente por coordenadas X/Y');
   }
 };
 
