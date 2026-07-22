@@ -1,13 +1,13 @@
 // ============================================
-//  Mambo Pedidos - Parser de PDFs v3
-//  Extracción espacial por coordenadas X/Y de pdfjs
-//  Cada texto tiene posición real en la página → reconstruimos filas de tabla
+//  Mambo Pedidos - Parser de PDFs v4 (Smart Intelligence Engine)
+//  Extracción espacial X/Y, puntuación de confianza, soporte para diccionario
+//  dinámico de marcas y detector de anomalías de FOB
 //  Desarrollado por @geto_dev
 // ============================================
 
 const PdfParser = {
 
-  async processPdfFile(file, catalogLength = 0) {
+  async processPdfFile(file, catalogLength = 0, customBrands = []) {
     let pdf = null;
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -21,12 +21,10 @@ const PdfParser = {
         const content = await page.getTextContent();
         const viewport = page.getViewport({ scale: 1.0 });
 
-        // Acumular texto plano para detección de marca (solo primeras 3 páginas)
         if (pageNum <= 3) {
           fullTextForBrand += content.items.map(item => item.str).join(' ') + ' ';
         }
 
-        // Agrupar ítems de texto por fila (Y coordinate, tolerancia ±4pt)
         const rows = this.groupItemsByRow(content.items, viewport.height);
         allRows.push(...rows);
       }
@@ -36,8 +34,8 @@ const PdfParser = {
         throw new Error('El PDF no contiene capa de texto seleccionable (imagen escaneada). Requiere OCR.');
       }
 
-      const brand = this.detectBrandFromContent(fullTextForBrand) || this.detectBrandFromFilename(file.name);
-      const products = this.parseRows(allRows, brand, catalogLength);
+      const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
+      const products = this.parseRows(allRows, brand, catalogLength, customBrands);
       return { brand, products };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
@@ -46,22 +44,18 @@ const PdfParser = {
     }
   },
 
-  // ─── Agrupa ítems de texto en filas por proximidad vertical (Y) ─────────────
   groupItemsByRow(items, pageHeight) {
     if (!items.length) return [];
 
-    // Normalizar: Y en pdfjs va de abajo hacia arriba → invertir para leer de arriba a abajo
     const normalized = items
       .filter(item => item.str && item.str.trim())
       .map(item => {
-        // item.transform = [scaleX, skewX, skewY, scaleY, tx, ty]
         const x = item.transform[4];
-        const y = pageHeight - item.transform[5]; // invertir Y
+        const y = pageHeight - item.transform[5];
         return { x, y, text: item.str.trim() };
       })
-      .sort((a, b) => a.y - b.y || a.x - b.x); // ordenar: arriba→abajo, izq→der
+      .sort((a, b) => a.y - b.y || a.x - b.x);
 
-    // Agrupar por Y con tolerancia de 6 puntos tipográficos (~2mm)
     const rows = [];
     let currentRow = [normalized[0]];
     let currentY = normalized[0].y;
@@ -89,29 +83,22 @@ const PdfParser = {
     return rows;
   },
 
-  // ─── Procesa las filas reconstruidas espacialmente ──────────────────────────
-  parseRows(rows, brandFallback, baseLength = 0) {
+  parseRows(rows, brandFallback, baseLength = 0, customBrands = []) {
     const products = [];
     const seen = new Set();
 
     for (let i = 0; i < rows.length; i++) {
       const rowText = rows[i].text;
 
-      // Extraer precio USD de esta fila
       const usdPrice = this.extractUsdPrice(rowText);
       if (usdPrice === null) continue;
 
-      // Construir contexto: hasta 6 filas previas no ignoradas
       const ctx = this.buildRowContext(rows, i);
       if (!ctx.modelo) continue;
 
-      // Determinar marca: primero busca en la fila actual + contexto
-      const detectedBrand = this.detectBrandFromTextLine(ctx.rawText) || brandFallback || 'OTRO';
-
-      // Determinar categoría
+      const detectedBrand = this.detectBrandFromTextLine(ctx.rawText, customBrands) || brandFallback || 'OTRO';
       const cat = this.detectCategory(ctx.rawText, detectedBrand);
 
-      // Deduplicación
       const key = (detectedBrand + '|' + ctx.modelo.substring(0, 50) + '|' + ctx.variante.substring(0, 30) + '|' + usdPrice).toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -120,24 +107,70 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      products.push({ sku, cat, marca: detectedBrand, modelo: ctx.modelo, variante: ctx.variante, fob: usdPrice });
+      const rawItem = {
+        sku,
+        cat,
+        marca: detectedBrand,
+        modelo: ctx.modelo,
+        variante: ctx.variante,
+        fob: usdPrice,
+        rawText: ctx.rawText
+      };
+
+      const evalScore = this.evaluateItemConfidence(rawItem);
+      rawItem.confidence = evalScore.confidence;
+      rawItem.status = evalScore.status;
+      rawItem.warnings = evalScore.warnings;
+
+      products.push(rawItem);
     }
 
     return products;
   },
 
-  // ─── Construye contexto de modelo/variante desde filas previas ──────────────
+  evaluateItemConfidence(item) {
+    let confidence = 100;
+    const warnings = [];
+
+    // Evaluaciones
+    if (item.marca === 'OTRO') {
+      confidence -= 30;
+      warnings.push('Marca no identificada automáticamente (marcada como OTRO)');
+    }
+
+    if (item.cat === 'OTRO') {
+      confidence -= 20;
+      warnings.push('Categoría no identificada');
+    }
+
+    if (!item.modelo || item.modelo.length < 3) {
+      confidence -= 25;
+      warnings.push('Nombre de modelo inusualmente corto');
+    }
+
+    if (item.fob < 0.50 || item.fob > 350.00) {
+      confidence -= 15;
+      warnings.push(`Precio FOB USD ($${item.fob.toFixed(2)}) inusual o fuera de rango habitual`);
+    }
+
+    let status = 'VALID'; // 🟢
+    if (confidence < 60) {
+      status = 'ERROR';   // 🔴
+    } else if (confidence < 85) {
+      status = 'WARNING'; // 🟡
+    }
+
+    return { confidence: Math.max(0, confidence), status, warnings };
+  },
+
   buildRowContext(rows, priceIdx) {
     const rowText = rows[priceIdx].text;
 
-    // Primero intentar extraer modelo de la misma fila que tiene el precio
-    // Muchos PDFs (Razer, VGN, Logitech) ponen todo en una línea
     const inlineParts = rowText
-      .replace(/[¥￥]\s*[\d,]+\.?\d*/g, '')   // quitar precio RMB
-      .replace(/(?<![¥￥])\$\s*[\d,]+\.?\d*/g, '') // quitar precio USD
+      .replace(/[¥￥]\s*[\d,]+\.?\d*/g, '')
+      .replace(/(?<![¥￥])\$\s*[\d,]+\.?\d*/g, '')
       .trim();
 
-    // Líneas a ignorar como modelo
     const isNoise = (t) => {
       if (!t || t.length < 2) return true;
       if (/^[\u4e00-\u9fff\s]+$/.test(t)) return true;
@@ -145,22 +178,19 @@ const PdfParser = {
       if (/^[\d\s\.,\-]+$/.test(t)) return true;
       if (/^(model|product|picture|image|switch|color|colour|axis|wired|wireless|cny|rmb|usd|price|remark|note|cnyhot)$/i.test(t)) return true;
       if (/^[¥￥]\s*[\d,]/.test(t)) return true;
-      if (/^\d{13}$/.test(t)) return true;   // EAN barcode
-      if (/^RZ\d{2}-[\dA-Z-]+$/i.test(t)) return true; // Razer code
+      if (/^\d{13}$/.test(t)) return true;
+      if (/^RZ\d{2}-[\dA-Z-]+$/i.test(t)) return true;
       if (t.length > 120) return true;
       return false;
     };
 
-    // Recopilar filas previas significativas
     const prevLines = [];
     for (let j = priceIdx - 1; j >= Math.max(0, priceIdx - 8) && prevLines.length < 5; j--) {
       const t = rows[j].text;
-      if (this.extractUsdPrice(t) !== null) break; // si hay otro precio, parar
+      if (this.extractUsdPrice(t) !== null) break;
       if (!isNoise(t)) prevLines.unshift(t);
     }
 
-    // Si la fila del precio contiene texto de modelo (ej: "Logitech M100R Wired Mouse Black $4.74")
-    // usamos ese texto inline como el modelo principal
     let modelo = '';
     let variante = '';
     const rawParts = [];
@@ -179,10 +209,7 @@ const PdfParser = {
     return { modelo, variante, rawText };
   },
 
-  // ─── Extracción de precio USD ────────────────────────────────────────────────
   extractUsdPrice(line) {
-    // Solo toma el símbolo $ precedido de espacio, inicio de línea, o después de letras
-    // Nunca si viene precedido de ¥ o ￥
     const match = line.match(/(?<![¥￥\d])\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/);
     if (!match) return null;
     const price = parseFloat(match[1].replace(/,/g, ''));
@@ -190,9 +217,20 @@ const PdfParser = {
     return price;
   },
 
-  // ─── Detección de marca por texto de producto ────────────────────────────────
-  detectBrandFromTextLine(text) {
+  detectBrandFromTextLine(text, customBrands = []) {
     const t = (text || '').toLowerCase();
+
+    // 1. Revisar diccionario personalizado guardado por el usuario
+    for (const b of customBrands) {
+      if (b.name && b.pattern) {
+        try {
+          const re = new RegExp(b.pattern, 'i');
+          if (re.test(t)) return b.name;
+        } catch (e) {}
+      }
+    }
+
+    // 2. Diccionario nativo
     if (/8bitdo|8-bitdo|8 bitdo/.test(t)) return '8BitDo';
     if (/flydigi/.test(t)) return 'Flydigi';
     if (/gamesir/.test(t)) return 'GameSir';
@@ -219,9 +257,18 @@ const PdfParser = {
     return null;
   },
 
-  // ─── Detección de marca desde texto completo del PDF ────────────────────────
-  detectBrandFromContent(text) {
+  detectBrandFromContent(text, customBrands = []) {
     const t = (text || '').toLowerCase().substring(0, 3000);
+
+    for (const b of customBrands) {
+      if (b.name && b.pattern) {
+        try {
+          const re = new RegExp(b.pattern, 'i');
+          if (re.test(t)) return b.name;
+        } catch (e) {}
+      }
+    }
+
     const checks = [
       ['8BitDo', ['8bitdo']],
       ['Flydigi', ['flydigi']],
@@ -250,9 +297,18 @@ const PdfParser = {
     return null;
   },
 
-  // ─── Detección de marca desde nombre de archivo ──────────────────────────────
-  detectBrandFromFilename(filename) {
+  detectBrandFromFilename(filename, customBrands = []) {
     const f = filename.toLowerCase();
+
+    for (const b of customBrands) {
+      if (b.name && b.pattern) {
+        try {
+          const re = new RegExp(b.pattern, 'i');
+          if (re.test(f)) return b.name;
+        } catch (e) {}
+      }
+    }
+
     if (f.includes('8bitdo')) return '8BitDo';
     if (f.includes('ajazz')) return 'AJAZZ';
     if (f.includes('aula')) return 'AULA';
@@ -274,21 +330,15 @@ const PdfParser = {
     return 'OTRO';
   },
 
-  // ─── Categorización ──────────────────────────────────────────────────────────
   detectCategory(text, brand) {
     const t = (text || '').toLowerCase();
 
-    // Categorías unívocas por marca
     if (brand === 'Polaroid') return 'CAMARA';
     if (brand === 'KZ') return 'AURICULAR';
     if (brand === 'Haimu') return 'SWITCH';
     if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
-    if (brand === 'Philips') {
-      if (/toothbrush|boothbrush|sonic/i.test(t)) return 'CUIDADO_PERSONAL';
-      return 'CUIDADO_PERSONAL';
-    }
+    if (brand === 'Philips') return 'CUIDADO_PERSONAL';
 
-    // Categoría por palabras clave en el texto del producto
     if (/controller|gamepad|joystick|8bitdo|sn30|ultimate 2c|ultimate c |ultimate 3/.test(t)) return 'CONTROLLER';
     if (/earphone|earbuds|in-ear|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda |zar |zna |dqs/.test(t)) return 'AURICULAR';
     if (/headset|gaming headset|v9 turbo|a7v3|k7v2|a5v3/.test(t)) return 'HEADSET';
@@ -298,7 +348,6 @@ const PdfParser = {
     if (/key switch|mechanical switch|linear|tactile|clicky|haimu|seasalt switch|flamingo switch/.test(t)) return 'SWITCH';
     if (/keyboard|wired keyboard|wireless keyboard|f75|f99|f108|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65 |r75 |mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75/.test(t)) return 'TECLADO';
 
-    // Fallback por marca cuando no hay palabras clave
     if (['AULA', 'ATK', 'MCHOSE', 'AJAZZ', 'Madlions', 'Royal Kludge'].includes(brand)) return 'TECLADO';
     if (brand === 'VGN') return 'MOUSE';
     if (brand === 'Attack Shark') return 'MOUSE';
@@ -311,7 +360,6 @@ const PdfParser = {
     return 'OTRO';
   },
 
-  // Compatibilidad con llamadas externas
   guessCategory(modelo, variante) {
     return this.detectCategory((modelo || '') + ' ' + (variante || ''), '');
   }

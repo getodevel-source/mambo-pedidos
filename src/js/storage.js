@@ -6,7 +6,8 @@
 const AppStorage = {
   KEYS: {
     CATALOG: 'mambo_catalog_v2',
-    HISTORIAL: 'mambo_historial_v2'
+    HISTORIAL: 'mambo_historial_v2',
+    BRANDS: 'mambo_brands_v1'
   },
   storeInstance: null,
 
@@ -83,6 +84,14 @@ const AppStorage = {
 
   async loadHistorial() {
     return await this.getItem(this.KEYS.HISTORIAL, []);
+  },
+
+  async saveBrands(brandsArray) {
+    await this.setItem(this.KEYS.BRANDS, brandsArray);
+  },
+
+  async loadBrands() {
+    return await this.getItem(this.KEYS.BRANDS, []);
   }
 };
 

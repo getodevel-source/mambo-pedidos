@@ -238,12 +238,74 @@ function updateField(oldSku, field, value) {
   renderCatalog();
 }
 
-// Procesar archivos
+// Preview Modal and Brand Manager State
+let pendingPreviewItems = [];
+let customBrandsList = [];
+
+// Diccionario de Marcas Manager
+async function openBrandManagerModal() {
+  customBrandsList = await AppStorage.loadBrands();
+  renderBrandList();
+  const m = document.getElementById('brandManagerModal');
+  if (m) m.style.display = 'flex';
+}
+
+function closeBrandManagerModal() {
+  const m = document.getElementById('brandManagerModal');
+  if (m) m.style.display = 'none';
+}
+
+async function addCustomBrand() {
+  const nameInput = document.getElementById('newBrandName');
+  const patInput = document.getElementById('newBrandPattern');
+  const name = (nameInput?.value || '').trim();
+  const pattern = (patInput?.value || '').trim() || name.toLowerCase();
+
+  if (!name) {
+    toast('Ingresá el nombre de la marca', 'error');
+    return;
+  }
+
+  customBrandsList = customBrandsList.filter(b => b.name.toLowerCase() !== name.toLowerCase());
+  customBrandsList.push({ name, pattern });
+  await AppStorage.saveBrands(customBrandsList);
+
+  if (nameInput) nameInput.value = '';
+  if (patInput) patInput.value = '';
+  renderBrandList();
+  toast(`🏷️ Marca "${name}" guardada en el diccionario`, 'success');
+}
+
+async function deleteCustomBrand(idx) {
+  customBrandsList.splice(idx, 1);
+  await AppStorage.saveBrands(customBrandsList);
+  renderBrandList();
+  toast('Marca eliminada del diccionario', 'info');
+}
+
+function renderBrandList() {
+  const cont = document.getElementById('brandListContainer');
+  if (!cont) return;
+  if (!customBrandsList.length) {
+    cont.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 12px; text-align: center;">No hay marcas personalizadas aún. Agregá una arriba.</div>';
+    return;
+  }
+  let html = '';
+  customBrandsList.forEach((b, i) => {
+    html += `<div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 6px 10px; border-radius: 6px; font-size: 12px;">`;
+    html += `<div><strong style="color: var(--primary);">${esc(b.name)}</strong> <span style="color: var(--text-muted); font-size: 11px;">(Patrón: "${esc(b.pattern)}")</span></div>`;
+    html += `<button class="btn btn-sm" onclick="deleteCustomBrand(${i})" style="color: var(--red); padding: 2px 6px;">🗑</button>`;
+    html += `</div>`;
+  });
+  cont.innerHTML = html;
+}
+
+// Interceptor de Importación con Vista Previa por Semáforo
 async function processFiles(files) {
   if (!files.length) return;
   showProgress(0);
-  let totalProducts = 0;
-  let skippedTotal = 0;
+  customBrandsList = await AppStorage.loadBrands();
+  pendingPreviewItems = [];
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -251,7 +313,7 @@ async function processFiles(files) {
     try {
       let incoming = [];
       if (f.name.toLowerCase().endsWith('.pdf')) {
-        const res = await PdfParser.processPdfFile(f, catalog.length);
+        const res = await PdfParser.processPdfFile(f, catalog.length, customBrandsList);
         incoming = res.products;
       } else if (f.name.toLowerCase().endsWith('.csv')) {
         incoming = await FileImporter.processCsvFile(f, catalog);
@@ -259,46 +321,174 @@ async function processFiles(files) {
         incoming = await FileImporter.processExcelFile(f, catalog);
       }
 
-      // Desduplicación Inteligente
-      const unique = [];
       for (const item of incoming) {
-        const isDuplicate = catalog.some(c => 
-          (c.sku && item.sku && c.sku === item.sku) ||
-          (c.marca.toLowerCase().trim() === item.marca.toLowerCase().trim() &&
-           c.modelo.toLowerCase().trim() === item.modelo.toLowerCase().trim() &&
-           (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim() &&
-           Math.abs(c.fob - item.fob) < 0.01)
-        );
-
-        if (!isDuplicate) {
-          unique.push(item);
-        } else {
-          skippedTotal++;
+        if (!item.status) {
+          const evalRes = PdfParser.evaluateItemConfidence(item);
+          item.confidence = evalRes.confidence;
+          item.status = evalRes.status;
+          item.warnings = evalRes.warnings;
         }
-      }
-
-      catalog.push(...unique);
-      totalProducts += unique.length;
-
-      if (unique.length > 0) {
-        toast('➕ ' + unique.length + ' productos nuevos de ' + f.name.substring(0, 30), 'success');
-      } else {
-        toast('ℹ️ ' + f.name.substring(0, 25) + ': Ítems ya existentes en el catálogo', 'info');
+        item.sourceFile = f.name;
+        item._selected = true;
+        pendingPreviewItems.push(item);
       }
     } catch (err) {
       console.error('Error procesando ' + f.name, err);
       toast('❌ ' + f.name + ': ' + err.message, 'error');
     }
   }
+
   showProgress(100);
-  setTimeout(hideProgress, 500);
-  if (totalProducts > 0) {
-    showCatalogContent();
-    renderCatalog();
-    toast('✅ ' + totalProducts + ' productos nuevos cargados' + (skippedTotal > 0 ? ' (' + skippedTotal + ' duplicados ignorados)' : ''), 'success');
-  } else if (skippedTotal > 0) {
-    toast('ℹ️ Todos los productos ya existían en el catálogo (' + skippedTotal + ' duplicados ignorados)', 'info');
+  setTimeout(hideProgress, 400);
+
+  if (pendingPreviewItems.length > 0) {
+    renderImportPreviewModal();
+  } else {
+    toast('⚠️ No se detectaron productos válidos en los archivos', 'warning');
   }
+}
+
+function renderImportPreviewModal() {
+  const modal = document.getElementById('importPreviewModal');
+  const body = document.getElementById('importPreviewBody');
+  if (!modal || !body) return;
+
+  const validCount = pendingPreviewItems.filter(i => i.status === 'VALID').length;
+  const warnCount = pendingPreviewItems.filter(i => i.status === 'WARNING').length;
+  const errCount = pendingPreviewItems.filter(i => i.status === 'ERROR').length;
+
+  document.getElementById('badgeValidCount').textContent = `🟢 ${validCount} Confiables`;
+  document.getElementById('badgeWarnCount').textContent = `🟡 ${warnCount} Revisar`;
+  document.getElementById('badgeErrCount').textContent = `🔴 ${errCount} Incertidumbre`;
+  document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos. Podés editar marca o categoría en lote antes de confirmar.`;
+
+  let html = '';
+  pendingPreviewItems.forEach((item, i) => {
+    let statusBadge = '🟢';
+    if (item.status === 'WARNING') statusBadge = '🟡';
+    if (item.status === 'ERROR') statusBadge = '🔴';
+
+    const warnTooltip = (item.warnings && item.warnings.length) ? item.warnings.join(' · ') : 'Confiable';
+
+    html += `<tr style="${item.status === 'ERROR' ? 'background: rgba(239,68,68,0.08);' : (item.status === 'WARNING' ? 'background: rgba(234,179,8,0.06);' : '')}">`;
+    html += `<td style="text-align: center;"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${i}]._selected = this.checked"></td>`;
+    html += `<td style="text-align: center; font-size: 14px;" title="${esc(warnTooltip)}">${statusBadge}</td>`;
+    html += `<td><input type="text" value="${esc(item.sku)}" style="width: 100%; border: none; background: transparent; font-family: monospace; font-size: 11px; color: #aaa;" onchange="pendingPreviewItems[${i}].sku = this.value"></td>`;
+    html += `<td><input type="text" value="${esc(item.marca)}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].marca = this.value"></td>`;
+    html += `<td><input type="text" value="${esc(item.modelo)}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].modelo = this.value"></td>`;
+    html += `<td><input type="text" value="${esc(item.variante || '')}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #ccc; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].variante = this.value"></td>`;
+    html += `<td>
+      <select style="border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 4px; font-size: 11px;" onchange="pendingPreviewItems[${i}].cat = this.value">
+        ${['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','CUIDADO_PERSONAL','OTRO'].map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('')}
+      </select>
+    </td>`;
+    html += `<td class="num"><input type="number" step="0.01" value="${item.fob}" style="width: 70px; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px; text-align: right;" onchange="pendingPreviewItems[${i}].fob = parseFloat(this.value)||0"></td>`;
+    html += `<td style="text-align: center;"><button class="btn btn-sm" onclick="removePreviewItem(${i})" style="color: var(--red); padding: 2px 4px;">🗑</button></td>`;
+    html += `</tr>`;
+  });
+
+  body.innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function toggleSelectAllPreview(checked) {
+  pendingPreviewItems.forEach(i => i._selected = checked);
+  renderImportPreviewModal();
+}
+
+function applyBatchBrand() {
+  const brand = (document.getElementById('batchBrandInput')?.value || '').trim();
+  if (!brand) return;
+  let count = 0;
+  pendingPreviewItems.forEach(i => {
+    if (i._selected) {
+      i.marca = brand;
+      count++;
+    }
+  });
+  renderImportPreviewModal();
+  toast(`🛠️ Marca "${brand}" aplicada a ${count} ítems`, 'success');
+}
+
+function applyBatchCat() {
+  const cat = document.getElementById('batchCatSelect')?.value;
+  if (!cat) return;
+  let count = 0;
+  pendingPreviewItems.forEach(i => {
+    if (i._selected) {
+      i.cat = cat;
+      count++;
+    }
+  });
+  renderImportPreviewModal();
+  toast(`🛠️ Categoría "${cat}" aplicada a ${count} ítems`, 'success');
+}
+
+function removePreviewItem(idx) {
+  pendingPreviewItems.splice(idx, 1);
+  if (!pendingPreviewItems.length) {
+    closeImportPreviewModal();
+  } else {
+    renderImportPreviewModal();
+  }
+}
+
+function closeImportPreviewModal() {
+  const modal = document.getElementById('importPreviewModal');
+  if (modal) modal.style.display = 'none';
+  pendingPreviewItems = [];
+}
+
+async function confirmImportPreview() {
+  const selectedItems = pendingPreviewItems.filter(i => i._selected);
+  if (!selectedItems.length) {
+    toast('No hay productos seleccionados para importar', 'warning');
+    return;
+  }
+
+  let addedCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+
+  for (const item of selectedItems) {
+    const existing = catalog.find(c =>
+      (c.sku && item.sku && c.sku === item.sku) ||
+      (c.marca.toLowerCase().trim() === item.marca.toLowerCase().trim() &&
+       c.modelo.toLowerCase().trim() === item.modelo.toLowerCase().trim() &&
+       (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim())
+    );
+
+    if (existing) {
+      if (Math.abs(existing.fob - item.fob) >= 0.01) {
+        existing.fob = item.fob;
+        existing.cat = item.cat || existing.cat;
+        updatedCount++;
+      } else {
+        skippedCount++;
+      }
+    } else {
+      catalog.push({
+        sku: item.sku,
+        cat: item.cat || 'OTRO',
+        marca: item.marca || 'OTRO',
+        modelo: item.modelo,
+        variante: item.variante || '',
+        fob: item.fob
+      });
+      addedCount++;
+    }
+  }
+
+  await AppStorage.saveCatalog(catalog, selection);
+  showCatalogContent();
+  renderCatalog();
+  closeImportPreviewModal();
+
+  let msg = `✅ Importación completada: ${addedCount} nuevos`;
+  if (updatedCount > 0) msg += `, ${updatedCount} precios actualizados`;
+  if (skippedCount > 0) msg += ` (${skippedCount} sin cambios)`;
+
+  toast(msg, 'success');
 }
 
 // Pedido UI
