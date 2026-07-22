@@ -188,6 +188,101 @@ const FileImporter = {
     return true;
   },
 
+  exportExecutiveReport(pedido) {
+    if (!pedido || !pedido.items || !pedido.items.length) {
+      if (typeof toast === 'function') toast('No hay pedido para generar el reporte ejecutivo', 'error');
+      return false;
+    }
+
+    const t = pedido.totals || {};
+    const c = pedido.costs || {};
+    const tc = t.tipoCambio || c.tipoCambio || 1400;
+    const wb = XLSX.utils.book_new();
+
+    // PESTAÑA 1: Dashboard Ejecutivo
+    const dashData = [
+      ['REPORTE EJECUTIVO DE IMPORTACIÓN Y RENTABILIDAD'],
+      [`Mambo Pedidos v1.0.0 — Generado el ${new Date().toLocaleDateString('es-AR')}`],
+      [],
+      ['INDICADOR FINANCIERO', 'VALOR USD', 'VALOR EQUIVALENTE ARS'],
+      ['Nombre del Pedido', pedido.name || 'Sin nombre', ''],
+      ['Total Unidades', t.qty || 0, ''],
+      ['Inversión Total FOB (China/Origen)', (t.fob || 0).toFixed(2), ((t.fob || 0) * tc).toFixed(2)],
+      ['Costo Total Puesto (CIF + Gastos)', (t.costo || 0).toFixed(2), ((t.costo || 0) * tc).toFixed(2)],
+      ['Facturación Total Proyectada (PVP)', (t.facturacion || 0).toFixed(2), ((t.facturacion || 0) * tc).toFixed(2)],
+      ['Ganancia Neta Limpia', (t.margen || 0).toFixed(2), ((t.margen || 0) * tc).toFixed(2)],
+      ['Margen Neto Sobre Venta (%)', `${(t.margenPct || 0).toFixed(1)}%`, ''],
+      ['Retorno de Inversión (ROI %)', `${(t.roi || 0).toFixed(1)}%`, ''],
+      ['IVA Estimado Total', (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
+      ['Tipo de Cambio Aplicado ($/USD)', `$${tc} ARS`, '']
+    ];
+
+    const wsDash = XLSX.utils.aoa_to_sheet(dashData);
+    wsDash['!cols'] = [{ wch: 38 }, { wch: 22 }, { wch: 28 }];
+    XLSX.utils.book_append_sheet(wb, wsDash, 'Dashboard Ejecutivo');
+
+    // PESTAÑA 2: Detalle por Producto
+    const prodHeaders = [
+      'Item #', 'SKU', 'Categoría', 'Marca', 'Modelo', 'Variante',
+      'Unidades', 'FOB Unit (USD)', 'FOB Subtotal (USD)',
+      'Costo Unit Puesto (USD)', 'Costo Subtotal (USD)',
+      'PVP Unit (USD)', 'PVP Unit (ARS)', 'Facturación Subtotal (USD)',
+      'Ganancia Limpia Subtotal (USD)', 'Margen %'
+    ];
+
+    const prodRows = pedido.items.map((r, idx) => {
+      const q = r.qty || 1;
+      const subFob = (r.fob || 0) * q;
+      const unitCost = r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
+      const subCost = unitCost * q;
+      const pvpUsd = r.pvp || (unitCost * 2.5);
+      const pvpArs = r.pvpArs || (pvpUsd * tc);
+      const subFact = pvpUsd * q;
+      const subProfit = subFact - subCost;
+      const marginPct = subFact > 0 ? ((subProfit / subFact) * 100).toFixed(1) : 0;
+
+      return [
+        idx + 1, r.sku, r.cat || 'OTRO', r.marca, r.modelo, r.color || r.variante || '-',
+        q, r.fob.toFixed(2), subFob.toFixed(2),
+        unitCost.toFixed(2), subCost.toFixed(2),
+        pvpUsd.toFixed(2), Math.round(pvpArs), subFact.toFixed(2),
+        subProfit.toFixed(2), `${marginPct}%`
+      ];
+    });
+
+    const wsProd = XLSX.utils.aoa_to_sheet([prodHeaders, ...prodRows]);
+    wsProd['!cols'] = [
+      { wch: 8 }, { wch: 16 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 12 },
+      { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 20 },
+      { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 25 }, { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsProd, 'Detalle de Productos');
+
+    // PESTAÑA 3: Desglose de Logística e Impuestos
+    const logHeaders = ['CONCEPTO LOGÍSTICO / FISCAL', 'TIPO / VALOR CONFIGURADO', 'IMPORTE EST. (USD)', 'IMPORTE EST. (ARS)'];
+    const logRows = [
+      ['Régimen de Importación', c.regimen || 'Courier', '-', '-'],
+      ['Modo de Transporte', c.transporte || 'Aéreo', '-', '-'],
+      ['Flete Internacional', `${c.flete || 15}% FOB / $${c.costoPorKg || 12} Kg`, (t.fob ? t.fob * ((c.flete || 15)/100) : 0).toFixed(2), (t.fob ? t.fob * ((c.flete || 15)/100) * tc : 0).toFixed(2)],
+      ['Seguro Internacional', `${c.seguro || 2}% FOB`, (t.fob ? t.fob * ((c.seguro || 2)/100) : 0).toFixed(2), (t.fob ? t.fob * ((c.seguro || 2)/100) * tc : 0).toFixed(2)],
+      ['Derechos de Importación', `${c.derechos || 16}% CIF`, (t.cif ? t.cif * ((c.derechos || 16)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.derechos || 16)/100) * tc : 0).toFixed(2)],
+      ['Tasa Estadística Aduanera', `${c.tasa || 3}% CIF`, (t.cif ? t.cif * ((c.tasa || 3)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.tasa || 3)/100) * tc : 0).toFixed(2)],
+      ['Percepción Ganancias', `${c.perc || 6}% CIF`, (t.cif ? t.cif * ((c.perc || 6)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.perc || 6)/100) * tc : 0).toFixed(2)],
+      ['IVA Estimado Aprox', `${c.ivaPct || 21}%`, (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
+      ['Honorarios Despachante', `$${c.despachante || 500} ARS`, ((c.despachante || 500) / tc).toFixed(2), (c.despachante || 500).toFixed(2)],
+      ['Procesamiento Courier Fijo', `$${c.courier || 8} USD / unidad`, ((c.courier || 8) * (t.qty || 0)).toFixed(2), ((c.courier || 8) * (t.qty || 0) * tc).toFixed(2)]
+    ];
+
+    const wsLog = XLSX.utils.aoa_to_sheet([logHeaders, ...logRows]);
+    wsLog['!cols'] = [{ wch: 32 }, { wch: 25 }, { wch: 20 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, wsLog, 'Desglose Logística e Impuestos');
+
+    const fileName = `REPORTE_EJECUTIVO_${(pedido.name || 'PEDIDO').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    if (typeof toast === 'function') toast('📊 Reporte Ejecutivo Financiero generado en Excel', 'success');
+    return true;
+  },
+
   download(content, filename, type) {
     const blob = new Blob([content], { type });
     const a = document.createElement('a');

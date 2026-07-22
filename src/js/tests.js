@@ -34,6 +34,7 @@ const Tests = {
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
     this.testDolarApiParsing();
+    this.testExecutiveReportExport();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -231,6 +232,24 @@ const Tests = {
 
     this.assert(dict.mayorista.venta === 1480, 'DolarApi parseó correctamente Dólar Mayorista ($1480 ARS)');
     this.assert(dict.blue.venta === 1550, 'DolarApi parseó correctamente Dólar Blue ($1550 ARS)');
+  },
+
+  testExecutiveReportExport() {
+    const testPedido = {
+      name: 'Pedido Ejecutivo Test',
+      date: new Date().toISOString(),
+      items: [{ sku: 'P-01', marca: 'AULA', modelo: 'F75', cat: 'TECLADO', qty: 10, fob: 35.0, pvp: 85.0 }],
+      costs: { pesoKg: 15, tipoCambio: 1400 },
+      totals: { fob: 350.0, costo: 420.0, facturacion: 850.0, margen: 430.0, margenPct: 50.5, roi: 102.3, qty: 10 }
+    };
+    let sheetsCount = 0;
+    const origWrite = XLSX.writeFile;
+    XLSX.writeFile = (wb, filename) => { sheetsCount = wb.SheetNames.length; };
+
+    const ok = FileImporter.exportExecutiveReport(testPedido);
+    XLSX.writeFile = origWrite;
+
+    this.assert(ok && sheetsCount === 3, 'FileImporter generó el Reporte Ejecutivo Financiero con 3 pestañas en Excel');
   }
 };
 
