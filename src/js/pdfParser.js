@@ -85,30 +85,73 @@ const PdfParser = {
             canvas.height = imgObj.height;
             const ctx = canvas.getContext('2d');
 
-            if (ctx && imgObj.data) {
+            if (ctx) {
               ctx.imageSmoothingEnabled = true;
               ctx.imageSmoothingQuality = 'high';
 
-              const imgData = ctx.createImageData(imgObj.width, imgObj.height);
-              if (imgObj.data.length === imgObj.width * imgObj.height * 4) {
-                imgData.data.set(imgObj.data);
-              } else if (imgObj.data.length === imgObj.width * imgObj.height * 3) {
-                let srcIdx = 0;
-                let dstIdx = 0;
-                for (let p = 0; p < imgObj.width * imgObj.height; p++) {
-                  imgData.data[dstIdx] = imgObj.data[srcIdx];
-                  imgData.data[dstIdx + 1] = imgObj.data[srcIdx + 1];
-                  imgData.data[dstIdx + 2] = imgObj.data[srcIdx + 2];
-                  imgData.data[dstIdx + 3] = 255;
-                  srcIdx += 3;
-                  dstIdx += 4;
+              let drewSuccessfully = false;
+              if (imgObj.bitmap) {
+                try {
+                  ctx.drawImage(imgObj.bitmap, 0, 0);
+                  drewSuccessfully = true;
+                } catch (e) {}
+              }
+
+              if (!drewSuccessfully && imgObj.data) {
+                const imgData = ctx.createImageData(imgObj.width, imgObj.height);
+                const totalPixels = imgObj.width * imgObj.height;
+                if (imgObj.data.length === totalPixels * 4) {
+                  imgData.data.set(imgObj.data);
+                  ctx.putImageData(imgData, 0, 0);
+                  drewSuccessfully = true;
+                } else if (imgObj.data.length === totalPixels * 3) {
+                  let srcIdx = 0;
+                  let dstIdx = 0;
+                  for (let p = 0; p < totalPixels; p++) {
+                    imgData.data[dstIdx] = imgObj.data[srcIdx];
+                    imgData.data[dstIdx + 1] = imgObj.data[srcIdx + 1];
+                    imgData.data[dstIdx + 2] = imgObj.data[srcIdx + 2];
+                    imgData.data[dstIdx + 3] = 255;
+                    srcIdx += 3;
+                    dstIdx += 4;
+                  }
+                  ctx.putImageData(imgData, 0, 0);
+                  drewSuccessfully = true;
+                } else if (imgObj.data.length === totalPixels) {
+                  let srcIdx = 0;
+                  let dstIdx = 0;
+                  for (let p = 0; p < totalPixels; p++) {
+                    const val = imgObj.data[srcIdx++];
+                    imgData.data[dstIdx] = val;
+                    imgData.data[dstIdx + 1] = val;
+                    imgData.data[dstIdx + 2] = val;
+                    imgData.data[dstIdx + 3] = 255;
+                    dstIdx += 4;
+                  }
+                  ctx.putImageData(imgData, 0, 0);
+                  drewSuccessfully = true;
                 }
               }
-              ctx.putImageData(imgData, 0, 0);
-              this.cleanImageBackground(ctx, imgObj.width, imgObj.height);
 
-              const dataUrl = canvas.toDataURL('image/webp', 0.85);
-              pageImages.push({ pageNum, y, x, width: imgObj.width, height: imgObj.height, dataUrl });
+              if (drewSuccessfully) {
+                this.cleanImageBackground(ctx, imgObj.width, imgObj.height);
+
+                let visiblePixels = 0;
+                const checkBytes = ctx.getImageData(0, 0, imgObj.width, imgObj.height).data;
+                for (let p = 0; p < checkBytes.length; p += 16) {
+                  if (checkBytes[p + 3] > 20) {
+                    const r = checkBytes[p], g = checkBytes[p + 1], b = checkBytes[p + 2];
+                    if (r < 240 || g < 240 || b < 240) {
+                      visiblePixels++;
+                    }
+                  }
+                }
+
+                if (visiblePixels >= 10) {
+                  const dataUrl = canvas.toDataURL('image/png');
+                  pageImages.push({ pageNum, y, x, width: imgObj.width, height: imgObj.height, dataUrl });
+                }
+              }
             }
           }
         }
