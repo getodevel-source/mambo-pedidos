@@ -48,6 +48,22 @@ const AiDisambiguator = {
   },
 
   /**
+   * Devuelve el estado de diagnóstico en tiempo real de los motores de IA activos en la app.
+   */
+  getAiEngineStatus() {
+    const hasWindowAiLang = !!(window.ai && window.ai.languageModel);
+    const hasWindowAiVision = !!(window.ai && window.ai.visionModel);
+    const hasOnnx = !!(window.ort && this._neuralVisionSession);
+
+    return {
+      textEngine: hasWindowAiLang ? 'Gemini Nano (window.ai.languageModel)' : 'Motor Semántico Local (NLP Engine)',
+      visionEngine: hasWindowAiVision ? 'Chromium Vision AI (window.ai.visionModel)' : (hasOnnx ? 'Florence-2 ONNX WebGPU' : 'Visión por Contraste & Bounding Box Solver'),
+      isNeuralActive: hasWindowAiLang || hasWindowAiVision || hasOnnx,
+      statusLabel: (hasWindowAiLang || hasWindowAiVision || hasOnnx) ? '🟢 IA Neuronal Nativa Activa' : '🔵 IA Semántica Local (NLP & Bounding Box)'
+    };
+  },
+
+  /**
    * Detección por Red Neuronal de Bounding Box y Máscara de Objeto
    */
   async detectObjectBoundingBoxNeural(canvas, ctx) {

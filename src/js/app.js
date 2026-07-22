@@ -529,7 +529,9 @@ function renderImportPreviewModal() {
   document.getElementById('badgeValidCount').textContent = `🟢 ${validCount} Confiables`;
   document.getElementById('badgeWarnCount').textContent = `🟡 ${warnCount} Revisar`;
   document.getElementById('badgeErrCount').textContent = `🔴 ${errCount} Incertidumbre`;
-  document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos. Podés editar marca o categoría en lote antes de confirmar.`;
+  const aiStatus = (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.getAiEngineStatus) ? AiDisambiguator.getAiEngineStatus() : null;
+  const statusText = aiStatus ? ` | Motor IA: ${aiStatus.statusLabel}` : '';
+  document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos.${statusText}`;
 
   let html = '';
   pendingPreviewItems.forEach((item, i) => {
