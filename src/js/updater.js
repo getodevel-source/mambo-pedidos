@@ -1,5 +1,5 @@
 const AppUpdater = {
-  CURRENT_VERSION: '0.9.0',
+  CURRENT_VERSION: '0.9.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestReleaseUrl: null,
   latestVersion: null,
@@ -209,7 +209,26 @@ const AppUpdater = {
       console.warn('Tauri native updater error, falling back to direct stream:', nativeErr);
     }
 
-    // Intento 2: Direct Stream Downloader Fallback
+    // Intento 2: Native Rust Auto-Installer IPC (Descarga silenciosa nativa sin problemas de CORS ni navegador)
+    if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
+      try {
+        if (progressText) progressText.textContent = '⏳ Descargando e instalando actualización nativa en segundo plano...';
+        await window.__TAURI_INTERNALS__.invoke('download_and_install_update', { url });
+        return;
+      } catch (ipcErr) {
+        console.warn('Native Rust updater error:', ipcErr);
+      }
+    } else if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+      try {
+        if (progressText) progressText.textContent = '⏳ Descargando e instalando actualización nativa en segundo plano...';
+        await window.__TAURI__.core.invoke('download_and_install_update', { url });
+        return;
+      } catch (ipcErr) {
+        console.warn('Native Rust updater error:', ipcErr);
+      }
+    }
+
+    // Intento 3: Direct Stream Downloader Fallback
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
@@ -264,6 +283,7 @@ const AppUpdater = {
 };
 
 window.AppUpdater = AppUpdater;
+
 
 
 

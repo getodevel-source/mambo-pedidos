@@ -1,6 +1,6 @@
 [package]
 name = "mambo-pedidos"
-version = "0.9.0"
+version = "0.9.1"
 description = "Mambo Pedidos - Gestor de catalogos y pedidos"
 authors = ["Mambo"]
 edition = "2021"
@@ -21,6 +21,7 @@ tauri-plugin-dialog = "2.0"
 tauri-plugin-updater = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
 
 [profile.release]
 panic = "abort"
@@ -28,6 +29,7 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
 
 
 

@@ -109,6 +109,41 @@ fn open_external_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn download_and_install_update(url: String) -> Result<(), String> {
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP Error {}", response.status()));
+    }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+
+    let temp_dir = std::env::temp_dir();
+    let is_msi = url.to_lowercase().ends_with(".msi");
+    let file_name = if is_msi { "mambo_update.msi" } else { "mambo_update.exe" };
+    let temp_path = temp_dir.join(file_name);
+
+    std::fs::write(&temp_path, &bytes).map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        if is_msi {
+            std::process::Command::new("msiexec")
+                .args(["/i", temp_path.to_str().unwrap(), "/passive", "/norestart"])
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            std::process::Command::new(&temp_path)
+                .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"])
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        std::process::exit(0);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -120,7 +155,8 @@ pub fn run() {
             validate_catalog_entry,
             validate_order,
             get_app_data_dir,
-            open_external_url
+            open_external_url,
+            download_and_install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
