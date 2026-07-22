@@ -63,15 +63,33 @@ function showCatalogContent() {
 }
 
 function populateCatalogFilters() {
-  const marcas = [...new Set(catalog.map(r => r.marca))].sort();
-  const cats = [...new Set(catalog.map(r => r.cat))].sort();
+  const marcas = [...new Set(catalog.map(r => r.marca).filter(Boolean))].sort();
+  const cats = [...new Set(catalog.map(r => r.cat).filter(Boolean))].sort();
   const selM = document.getElementById('catFilterMarca');
   const selC = document.getElementById('catFilterCat');
-  if (selM && selM.options.length <= 1) {
-    marcas.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; selM.appendChild(o); });
+
+  if (selM) {
+    const curVal = selM.value;
+    selM.innerHTML = '<option value="">Todas las marcas</option>';
+    marcas.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = m;
+      if (m === curVal) o.selected = true;
+      selM.appendChild(o);
+    });
   }
-  if (selC && selC.options.length <= 1) {
-    cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; selC.appendChild(o); });
+
+  if (selC) {
+    const curVal = selC.value;
+    selC.innerHTML = '<option value="">Todas las categorías</option>';
+    cats.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c;
+      o.textContent = c;
+      if (c === curVal) o.selected = true;
+      selC.appendChild(o);
+    });
   }
 }
 
@@ -424,6 +442,19 @@ function applyBatchCat() {
   toast(`🛠️ Categoría "${cat}" aplicada a ${count} ítems`, 'success');
 }
 
+async function autoCorrectPreviewWithAI() {
+  if (!pendingPreviewItems || !pendingPreviewItems.length) return;
+  toast('🧠 Analizando con IA...', 'info');
+  const res = await AiDisambiguator.autoCorrectItems(pendingPreviewItems, customBrandsList);
+  pendingPreviewItems = res.items;
+  renderImportPreviewModal();
+  if (res.correctedCount > 0) {
+    toast(`✨ IA desambiguó y corrigió ${res.correctedCount} productos`, 'success');
+  } else {
+    toast(`ℹ️ No se requirieron correcciones adicionales`, 'info');
+  }
+}
+
 function removePreviewItem(idx) {
   pendingPreviewItems.splice(idx, 1);
   if (!pendingPreviewItems.length) {
@@ -481,6 +512,7 @@ async function confirmImportPreview() {
 
   await AppStorage.saveCatalog(catalog, selection);
   showCatalogContent();
+  populateCatalogFilters();
   renderCatalog();
   closeImportPreviewModal();
 
