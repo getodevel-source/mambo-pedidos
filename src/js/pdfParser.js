@@ -1,8 +1,11 @@
 // ============================================
-//  Mambo Pedidos - Módulo de Parser de PDFs con Detección OCR
+//  Mambo Pedidos - Parser de PDFs v2
+//  Extracción precisa basada en análisis real de los 16 PDFs del catálogo
+//  Desarrollado por @geto_dev
 // ============================================
 
 const PdfParser = {
+
   async processPdfFile(file, catalogLength = 0) {
     let pdf = null;
     try {
@@ -15,10 +18,9 @@ const PdfParser = {
         fullText += content.items.map(item => item.str).join('\n') + '\n';
       }
 
-      // Detección de PDF escaneado (sin capa de texto)
       const cleanText = fullText.replace(/\s+/g, '');
       if (pdf.numPages > 0 && cleanText.length < 20) {
-        throw new Error('El PDF no contiene capa de texto seleccionable (parece ser una imagen escaneada). Se requiere OCR para procesarlo.');
+        throw new Error('El PDF no contiene capa de texto seleccionable (imagen escaneada). Requiere OCR.');
       }
 
       const brand = this.detectBrandFromContent(fullText) || this.detectBrandFromFilename(file.name);
@@ -31,131 +33,158 @@ const PdfParser = {
     }
   },
 
+  // ─── Punto de entrada del parser ────────────────────────────────────────────
   parsePdfProducts(text, brandFallback, baseLength = 0) {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    const pricePattern = /\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/;
-    const ignorePatterns = [
-      /^(page|pg\.?)\s*\d+/i,
-      /zhengzhou/i,
-      /damulin/i,
-      /^[\d\s\.,]+$/,
-      /^(model|product|switch|color|colour|image|picture|photo|cny|cn|usd|price)$/i,
-    ];
-    const ignoreWords = new Set([
-      'switch', 'switches', 'rgb', 'wireless', 'wired', 'tri-mode', 'trimode',
-      'magnetic', 'mechanical', 'gaming', 'edition', 'limited', 'mode',
-      'black', 'white', 'red', 'blue', 'green', 'yellow', 'pink', 'purple',
-      'orange', 'gray', 'grey', 'silver', 'gold', 'pro', 'max', 'mini', 'plus',
-      'ultra', 'lite', 'air', 'ii', 'iii', 'he', 'magspeed', 'hall', 'effect',
-      'edition', 'le', 'la', 'el', 'los', 'las', 'de', 'con', 'sin', 'para',
-    ]);
-
-    const mainCat = this.detectMainCategory(text);
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     const products = [];
     const seen = new Set();
-    let lastModel = '';
 
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(pricePattern);
-      if (!m) continue;
-      const price = parseFloat(m[1].replace(/,/g, ''));
-      if (isNaN(price) || price < 1 || price > 500) continue;
+      const line = lines[i];
 
-      const ctx = [];
-      for (let j = Math.max(0, i - 8); j < i; j++) {
-        const l = lines[j];
-        if (pricePattern.test(l)) continue;
-        if (l.length < 2 || l.length > 80) continue;
-        if (ignorePatterns.some(p => p.test(l))) continue;
-        if (/^[\u4e00-\u9fff\s]+$/.test(l)) continue;
-        if (ignoreWords.has(l.toLowerCase().trim())) continue;
-        ctx.push(l);
-      }
+      // Extraer precio USD de la línea actual
+      const usdPrice = this.extractUsdPrice(line);
+      if (usdPrice === null) continue;
 
-      let modelo = '';
-      let variante = '';
-      if (ctx.length > 0) {
-        modelo = ctx[0];
-        variante = ctx.slice(1, 4).join(' ').replace(/\s+/g, ' ').trim();
-      }
-      if (!modelo) {
-        modelo = lastModel;
-      } else {
-        lastModel = modelo;
-      }
+      // Extraer marca y modelo del contexto alrededor de esta línea
+      const ctx = this.buildContext(lines, i);
+      if (!ctx.modelo) continue;
 
-      // Detección de marca por línea de producto (prioridad sobre la marca general del PDF)
-      const lineBrand = this.detectBrandFromTextLine(modelo + ' ' + variante);
-      const productBrand = lineBrand || brandFallback || 'OTRO';
+      // Determinar marca
+      const detectedBrand = this.detectBrandFromTextLine(ctx.rawText) || brandFallback || 'OTRO';
 
-      const key = (productBrand + '|' + modelo.substring(0, 40) + '|' + variante.substring(0, 40) + '|' + price).toLowerCase();
+      // Determinar categoría
+      const cat = this.detectCategory(ctx.rawText, detectedBrand);
+
+      // Clave de deduplicación
+      const key = (detectedBrand + '|' + ctx.modelo.substring(0, 50) + '|' + ctx.variante.substring(0, 30) + '|' + usdPrice).toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const guessedCat = this.guessCategory(modelo, variante) || mainCat || 'OTRO';
-      const catCode = guessedCat.substring(0, 3).toUpperCase();
-      const brandCode = productBrand.substring(0, 3).toUpperCase();
+      const catCode = cat.substring(0, 3).toUpperCase();
+      const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
       products.push({
         sku,
-        cat: guessedCat,
-        marca: productBrand,
-        modelo: modelo,
-        variante,
-        fob: price,
+        cat,
+        marca: detectedBrand,
+        modelo: ctx.modelo,
+        variante: ctx.variante,
+        fob: usdPrice,
       });
     }
 
     return products;
   },
 
-  detectBrandFromTextLine(textLine) {
-    const t = (textLine || '').toLowerCase();
-    if (t.includes('8bitdo') || t.includes('8-bitdo') || t.includes('8 bitdo')) return '8BitDo';
-    if (t.includes('flydigi')) return 'Flydigi';
-    if (t.includes('gamesir')) return 'GameSir';
-    if (t.includes('machenike')) return 'MACHENIKE';
-    if (t.includes('akko')) return 'Akko';
-    if (t.includes('keychron')) return 'Keychron';
-    if (t.includes('darmoshark')) return 'Darmoshark';
-    if (t.includes('ajazz')) return 'AJAZZ';
-    if (t.includes('aula')) return 'AULA';
-    if (t.includes('atk')) return 'ATK';
-    if (t.includes('attack shark') || t.includes('attackshark')) return 'Attack Shark';
-    if (t.includes('mchose')) return 'MCHOSE';
-    if (t.includes('vgn')) return 'VGN';
-    if (t.includes('razer')) return 'Razer';
-    if (t.includes('logitech')) return 'Logitech';
-    if (t.includes('royal kludge')) return 'Royal Kludge';
-    if (t.includes('madlions')) return 'Madlions';
-    if (t.includes('irok')) return 'Irok Mars';
+  // ─── Extracción de precio USD ────────────────────────────────────────────────
+  extractUsdPrice(line) {
+    // Precio en USD con símbolo $ (no ¥ ni ￥)
+    // Formatos encontrados: "$35.19", "$ 49.09", "$1,170.21"
+    // El precio debe estar entre $0.10 y $500 para ser un producto válido de catálogo
+    const match = line.match(/(?<![¥￥])\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/);
+    if (!match) return null;
+    const price = parseFloat(match[1].replace(/,/g, ''));
+    if (isNaN(price) || price < 0.10 || price > 500) return null;
+    return price;
+  },
+
+  // ─── Construcción de contexto alrededor del precio ──────────────────────────
+  buildContext(lines, priceIdx) {
+    const ignoreLine = (l) => {
+      if (!l || l.length < 2) return true;
+      if (/^[\u4e00-\u9fff\s]+$/.test(l)) return true;  // Solo chino
+      if (/zhengzhou|damulin/i.test(l)) return true;
+      if (/^(page|pg\.?)\s*\d+$/i.test(l)) return true;
+      if (/^[\d\s\.,\-]+$/.test(l)) return true;  // Solo números
+      if (/^(model|product|picture|photo|image|switch|color|colour|axis|wired|wireless)$/i.test(l)) return true;
+      if (/^(cny|rmb|usd|price|remark|note)$/i.test(l)) return true;
+      if (/^\$\s*\d/.test(l)) return true;  // Es una línea de precio
+      if (/^[¥￥]\s*[\d,]+/.test(l)) return true;  // Es precio en RMB
+      if (/^[A-Z]{2}\d{2}-[\dA-Z-]+$/.test(l)) return true;  // Código Razer RZ01-xxx
+      if (/^\d{13}$/.test(l)) return true;  // EAN barcode
+      if (l.length > 100) return true;
+      return false;
+    };
+
+    // Recopilar hasta 8 líneas previas NO ignoradas
+    const prev = [];
+    for (let j = priceIdx - 1; j >= Math.max(0, priceIdx - 12) && prev.length < 8; j--) {
+      const l = lines[j];
+      // Parar si hay otro precio USD en el camino
+      if (this.extractUsdPrice(l) !== null) break;
+      if (!ignoreLine(l)) prev.unshift(l);
+    }
+
+    // También incluir texto de la línea del precio (puede tener modelo)
+    const priceLine = lines[priceIdx];
+    const priceLineModel = priceLine.replace(/(?<![¥￥])\$\s*[\d,]+\.?\d*/g, '').trim();
+
+    const rawText = [...prev, priceLineModel].join(' ').replace(/\s+/g, ' ').trim();
+
+    if (!rawText || rawText.length < 2) return { modelo: '', variante: '', rawText: '' };
+
+    // El primer token significativo es el modelo, el resto variante
+    const parts = prev.length > 0 ? prev : [priceLineModel];
+    const modelo = parts[0] ? parts[0].substring(0, 80).trim() : '';
+    const variante = parts.slice(1, 4).join(' ').replace(/\s+/g, ' ').trim().substring(0, 80);
+
+    return { modelo, variante, rawText };
+  },
+
+  // ─── Detección de marca desde una línea de texto ────────────────────────────
+  detectBrandFromTextLine(text) {
+    const t = (text || '').toLowerCase();
+    // Orden importante: marcas más específicas primero
+    if (/8bitdo|8-bitdo|8 bitdo/.test(t)) return '8BitDo';
+    if (/flydigi/.test(t)) return 'Flydigi';
+    if (/gamesir/.test(t)) return 'GameSir';
+    if (/attack shark|attackshark/.test(t)) return 'Attack Shark';
+    if (/royal kludge|rk-s\d|rk\d{2}(?:\s|$)|rk61|rk87|r65|r75|r87/.test(t)) return 'Royal Kludge';
+    if (/\birok\b/.test(t)) return 'Irok';
+    if (/mars75|mars68|mars mer|iyx/.test(t)) return 'Mars';
+    if (/\bajazz\b|ak820|ak870|ak980|ak650|mk87/.test(t)) return 'AJAZZ';
+    if (/\baula\b|f75|f75max|f99|f108|au75/.test(t)) return 'AULA';
+    if (/\batk\b|atk 68|atk rs6|atk rs7|atk v75|atk v100/.test(t)) return 'ATK';
+    if (/mchose|mchose ace|ace 68|ace 75|mix 87|mchose jet|mchose v9|mchose a7|mchose k7/.test(t)) return 'MCHOSE';
+    if (/\bvgn\b|dragonfly/.test(t)) return 'VGN';
+    if (/\bmadlions\b|mad 60|mad 68|mad light|mad 60 he|titan 68|mad 68 he|mad 68 r|mad 68 pro/.test(t)) return 'Madlions';
+    if (/\brazer\b|deathadder|viper v|blackwidow|huntsman|basilisk|naga v|cobra pro|orochi|razer/.test(t)) return 'Razer';
+    if (/\blogitech\b|logitech m\d|logitech g\d|logitech pop|logitech mx|logitech lift/.test(t)) return 'Logitech';
+    if (/\bkz\b|zst|zsn|zs10|zax|asx|edx|zex|das|eda|zar/.test(t)) return 'KZ';
+    if (/\bpolaroid\b|polaroid go|polaroid i-2/.test(t)) return 'Polaroid';
+    if (/\bphilips\b|philips electric|philips hairclipper|hx\d{4}/.test(t)) return 'Philips';
+    if (/haimu switch/.test(t)) return 'Haimu';
+    if (/machenike/.test(t)) return 'MACHENIKE';
+    if (/\bakko\b/.test(t)) return 'Akko';
+    if (/keychron/.test(t)) return 'Keychron';
+    if (/darmoshark/.test(t)) return 'Darmoshark';
     return null;
   },
 
+  // ─── Detección de marca desde el texto completo del PDF ─────────────────────
   detectBrandFromContent(text) {
-    const t = (text || '').toLowerCase().substring(0, 5000);
+    const t = (text || '').toLowerCase().substring(0, 3000);
     const checks = [
-      ['8BitDo', ['8bitdo', '8-bitdo', '8 bitdo']],
+      ['8BitDo', ['8bitdo']],
       ['Flydigi', ['flydigi']],
       ['GameSir', ['gamesir']],
-      ['MACHENIKE', ['machenike']],
-      ['Akko', ['akko']],
-      ['Keychron', ['keychron']],
-      ['Darmoshark', ['darmoshark']],
-      ['AULA', ['aula']],
-      ['ATK', ['atk ']],
-      ['Attack Shark', ['attack shark', 'attackshark']],
-      ['MCHOSE', ['mchose']],
-      ['Razer', ['razer']],
-      ['Logitech', ['logitech']],
-      ['Madlions', ['madlions', 'mad lions']],
-      ['VGN', ['vgn ']],
       ['AJAZZ', ['ajazz']],
+      ['AULA', ['zhengzhou damulin -aula', 'aula 75%', 'aula catalogue']],
+      ['ATK', ['atk catalog', 'atk price list']],
+      ['Attack Shark', ['attack shark']],
+      ['MCHOSE', ['mchose', '迈从']],
+      ['VGN', ['vgn\nzhengzhou', 'vgn-damulin']],
+      ['Madlions', ['madlions']],
+      ['Razer', ['razer\nzhengzhou']],
+      ['Logitech', ['logitech\nzhengzhou']],
       ['Royal Kludge', ['royal kludge']],
-      ['Irok Mars', ['irok', 'iyx']],
-      ['Philips', ['philips']],
-      ['Polaroid', ['polaroid']],
+      ['Irok', ['mars&iyx &irok', 'irok mars iyx']],
+      ['KZ', ['kz price list']],
+      ['Polaroid', ['polaroid\nzhengzhou']],
+      ['Philips', ['philips catalogue']],
+      ['Haimu', ['haimu switch']],
     ];
     for (const [brand, patterns] of checks) {
       for (const p of patterns) {
@@ -165,63 +194,62 @@ const PdfParser = {
     return null;
   },
 
+  // ─── Detección de marca desde el nombre de archivo ──────────────────────────
   detectBrandFromFilename(filename) {
     const f = filename.toLowerCase();
     if (f.includes('8bitdo')) return '8BitDo';
-    if (f.includes('flydigi')) return 'Flydigi';
-    if (f.includes('gamesir')) return 'GameSir';
-    if (f.includes('machenike')) return 'MACHENIKE';
-    if (f.includes('akko')) return 'Akko';
-    if (f.includes('keychron')) return 'Keychron';
-    if (f.includes('darmoshark')) return 'Darmoshark';
+    if (f.includes('ajazz')) return 'AJAZZ';
     if (f.includes('aula')) return 'AULA';
     if (f.includes('atk')) return 'ATK';
-    if (f.includes('attackshark') || f.includes('attack shark')) return 'Attack Shark';
-    if (f.includes('mchose')) return 'MCHOSE';
+    if (f.includes('attack') || f.includes('attackshark')) return 'Attack Shark';
+    if (f.includes('mchose') || f.includes('迈从')) return 'MCHOSE';
+    if (f.includes('vgn')) return 'VGN';
+    if (f.includes('madlions')) return 'Madlions';
     if (f.includes('razer')) return 'Razer';
     if (f.includes('logitech')) return 'Logitech';
-    if (f.includes('madlions')) return 'Madlions';
-    if (f.includes('vgn')) return 'VGN';
-    if (f.includes('ajazz')) return 'AJAZZ';
-    if (f.includes('rk') || f.includes('royal kludge')) return 'Royal Kludge';
-    if (f.includes('irok') || f.includes('mars')) return 'Irok Mars';
-    if (f.includes('philips')) return 'Philips';
+    if (f.includes('royal kludge') || f.includes('rk ')) return 'Royal Kludge';
+    if (f.includes('irok') || f.includes('mars') || f.includes('iyx')) return 'Irok';
+    if (f.includes('kz')) return 'KZ';
     if (f.includes('polaroid')) return 'Polaroid';
+    if (f.includes('philips')) return 'Philips';
+    if (f.includes('keyboard switch')) return 'Haimu';
+    if (f.includes('flydigi')) return 'Flydigi';
+    if (f.includes('gamesir')) return 'GameSir';
     return 'OTRO';
   },
 
-  detectMainCategory(text) {
+  // ─── Categorización ─────────────────────────────────────────────────────────
+  detectCategory(text, brand) {
     const t = (text || '').toLowerCase();
-    const cats = {
-      'CONTROLLER': ['controller', 'gamepad', 'joystick', '8bitdo', 'flydigi', 'gamesir', 'ultimate c', 'sn30', 'pro 2'],
-      'TECLADO': ['keyboard', 'f75', 'f99', 'f108', 'rk68', 'rk84', 'rk100', 'ace', 'mad 60', 'mad 68', 'z87', 'titan', 'mix 87', 'rs6', 'atk 68', 'x75', 'jet', 'g98', 'g87', 'g75', 'attack shark'],
-      'MOUSE': ['mouse', 'mice', 'pa3950', 'pa3395', '8khz', 'deathadder', 'viper'],
-      'MOUSEPAD': ['mouse pad', 'mousepad'],
-      'HEADSET': ['headset', 'headphone', 'earphone'],
-      'SWITCH': ['switch catalog', 'key switch'],
-      'MONITOR': ['monitor', 'display', 'screen', '144hz', '240hz'],
-    };
-    const scores = {};
-    for (const cat in cats) {
-      scores[cat] = cats[cat].reduce((s, k) => s + (t.split(k).length - 1), 0);
+
+    // Categorías por marca que no tienen ambigüedad
+    if (brand === 'Polaroid') return 'CAMARA';
+    if (brand === 'KZ') return 'AURICULAR';
+    if (brand === 'Haimu') return 'SWITCH';
+    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
+
+    // Detectar categoría por contenido del texto del producto
+    if (/controller|gamepad|joystick|sn30|ultimate 2|ultimate c|8bitdo/.test(t)) return 'CONTROLLER';
+    if (/electric shaver|electric shave|nose trimmer|hairclipper|toothbrush|boothbrush|s1125|s5366|x5001|s5831|pq888|s8850|s9935|s9642|hc\d{4}|nt\d{4}|hx\d{4}/.test(t)) return 'CUIDADO_PERSONAL';
+    if (/earphone|earbuds|\bkz\b|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs/.test(t)) return 'AURICULAR';
+    if (/headset|headphone|gaming headset|v9 turbo/.test(t)) return 'HEADSET';
+    if (/mousepad|mouse pad|\bmat\b/.test(t)) return 'MOUSEPAD';
+    if (/\bmouse\b|mice|paw\d{4}|wired mouse|wireless mouse|gaming mouse/.test(t)) return 'MOUSE';
+    if (/\bmonitor\b|display|screen|144hz|240hz/.test(t)) return 'MONITOR';
+    if (/\bswitch\b catalog|key switch|haimu|mechanical switch|linear|tactile|clicky/.test(t)) return 'SWITCH';
+    if (/keyboard|wired keyboard|wireless keyboard|teclado|f75|f99|f108|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75|v75|v100/.test(t)) return 'TECLADO';
+    // Inferir por marca cuando no hay texto de categoría
+    if (['AULA', 'ATK', 'MCHOSE', 'AJAZZ', 'Madlions', 'Royal Kludge'].includes(brand)) return 'TECLADO';
+    if (['VGN', 'Attack Shark', 'Logitech', 'Razer'].includes(brand)) {
+      if (/mouse|paw|wired|wireless/.test(t)) return 'MOUSE';
+      if (/keyboard|blackwidow|huntsman/.test(t)) return 'TECLADO';
     }
-    let max = 0, best = null;
-    for (const cat in scores) {
-      if (scores[cat] > max) { max = scores[cat]; best = cat; }
-    }
-    return best;
+    return 'OTRO';
   },
 
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
   guessCategory(modelo, variante) {
-    const m = ((modelo || '') + ' ' + (variante || '')).toLowerCase();
-    if (m.includes('controller') || m.includes('gamepad') || m.includes('joystick') || m.includes('8bitdo') || m.includes('flydigi') || m.includes('gamesir') || m.includes('sn30') || m.includes('pro 2') || m.includes('ultimate c') || m.includes('ultimate 2.4g')) return 'CONTROLLER';
-    if (m.includes('mouse pad') || m.includes('mousepad') || m.includes(' mat ')) return 'MOUSEPAD';
-    if (m.includes('mouse') && !m.includes('pad')) return 'MOUSE';
-    if (m.includes('headset') || m.includes('headphone') || m.includes('earphone')) return 'HEADSET';
-    if (/keyboard|k68|k75|k87|f75|f99|f108|rk68|rk84|\bmix\b|\bace\b|\bmad\b|\btitan\b|\bz87\b|v75|rs6|k99|x75|jet|g98|g87|g75|68v3|v100|v87|atk 68/.test(m)) return 'TECLADO';
-    if (m.includes('switch')) return 'SWITCH';
-    if (m.includes('monitor') || m.includes('display')) return 'MONITOR';
-    return 'OTRO';
+    return this.detectCategory((modelo || '') + ' ' + (variante || ''), '');
   }
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "mambo-pedidos",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Mambo Pedidos - Gestor de catalogos y pedidos para perifericos gamer",
   "main": "src/index.html",
   "scripts": {
@@ -31,3 +31,4 @@
     "@tauri-apps/plugin-updater": "^2.0.0"
   }
 }
+
