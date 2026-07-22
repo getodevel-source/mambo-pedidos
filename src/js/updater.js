@@ -4,9 +4,9 @@
 // ============================================
 
 const AppUpdater = {
-  CURRENT_VERSION: '0.3.3',
+  CURRENT_VERSION: '0.3.4',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
-
+  latestReleaseUrl: null,
   isChecking: false,
 
   async checkUpdate(userInitiated = false) {
@@ -14,44 +14,42 @@ const AppUpdater = {
     this.isChecking = true;
 
     if (userInitiated) {
-      toast('🔄 Buscando actualizaciones en GitHub...', 'info');
+      toast('🔄 Buscando actualizaciones...', 'info');
     }
 
     try {
-      // 1. Si estamos corriendo dentro de la app nativa de Tauri 2.0
-      if (window.__TAURI__ && window.__TAURI__.updater) {
-        const update = await window.__TAURI__.updater.check();
-        if (update && update.available) {
-          const confirmMsg = `🚀 ¡Nueva versión disponible (${update.version})!\n\n¿Querés descargar e instalar la actualización ahora?`;
-          if (confirm(confirmMsg)) {
-            await this.installUpdate(update);
-            return;
-          }
-        }
+      const res = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        cache: 'no-store'
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP Error ${res.status}`);
       }
 
-      // 2. Comprobación directa vía API de GitHub Releases
-      const res = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest');
-      if (res.ok) {
-        const release = await res.json();
-        const latestVersion = release.tag_name ? release.tag_name.replace(/^v/, '') : '';
+      const release = await res.json();
+      const latestVersion = release.tag_name ? release.tag_name.replace(/^v/, '') : '';
 
-        if (latestVersion && this.isNewerVersion(latestVersion, this.CURRENT_VERSION)) {
-          const confirmMsg = `🚀 ¡Nueva versión v${latestVersion} disponible en GitHub!\n\n¿Querés abrir la página de descarga para instalarla?`;
-          if (confirm(confirmMsg)) {
-            const url = release.html_url || `${this.REPO_URL}/releases/latest`;
-            window.open(url, '_blank');
-          }
-        } else if (userInitiated) {
-          toast(`✅ Estás en la última versión (v${this.CURRENT_VERSION})`, 'success');
+      if (latestVersion && this.isNewerVersion(latestVersion, this.CURRENT_VERSION)) {
+        this.latestReleaseUrl = release.html_url || `${this.REPO_URL}/releases/tag/v${latestVersion}`;
+
+        // Preferir el ejecutable .exe de Windows si está en los assets
+        const exeAsset = (release.assets || []).find(a => a.name && (a.name.endsWith('.exe') || a.name.endsWith('.msi')));
+        if (exeAsset && exeAsset.browser_download_url) {
+          this.latestReleaseUrl = exeAsset.browser_download_url;
+        }
+
+        this.showModal(latestVersion, release.body || 'Correcciones y mejoras generales.');
+        if (userInitiated) {
+          toast(`🚀 ¡Nueva versión v${latestVersion} disponible!`, 'success');
         }
       } else if (userInitiated) {
-        toast(`✅ Versión v${this.CURRENT_VERSION} al día`, 'success');
+        toast(`✅ Estás en la versión más reciente (v${this.CURRENT_VERSION})`, 'success');
       }
     } catch (err) {
       console.error('Error al buscar actualizaciones:', err);
       if (userInitiated) {
-        toast(`ℹ️ Versión activa: v${this.CURRENT_VERSION}`, 'info');
+        toast(`ℹ️ No se pudo conectar a GitHub (Versión v${this.CURRENT_VERSION})`, 'info');
       }
     } finally {
       this.isChecking = false;
@@ -71,33 +69,40 @@ const AppUpdater = {
     return false;
   },
 
-  async installUpdate(update) {
-    try {
-      toast('📥 Descargando actualización...', 'info');
-      if (typeof showProgress === 'function') showProgress(30);
+  showModal(version, notes) {
+    const modal = document.getElementById('updateModal');
+    const verEl = document.getElementById('updateModalVersion');
+    const notesEl = document.getElementById('updateModalNotes');
+    const btnEl = document.getElementById('updateModalBtn');
 
-      let downloaded = 0;
-      await update.downloadAndInstall((event) => {
-        if (event.event === 'Started' && event.data.contentLength) {
-          if (typeof showProgress === 'function') showProgress(50);
-        } else if (event.event === 'Finished') {
-          if (typeof showProgress === 'function') showProgress(100);
-        }
-      });
+    if (verEl) verEl.textContent = `Versión v${version} disponible (tenés la v${this.CURRENT_VERSION})`;
+    if (notesEl) notesEl.textContent = notes || 'Se publicaron arreglos y optimizaciones.';
+    if (btnEl) btnEl.textContent = `📥 Descargar v${version}`;
 
-      toast('🎉 Actualización instalada. Reiniciando...', 'success');
-      setTimeout(async () => {
-        if (window.__TAURI__ && window.__TAURI__.process) {
-          await window.__TAURI__.process.relaunch();
-        } else {
-          location.reload();
-        }
-      }, 1500);
-    } catch (e) {
-      console.error('Error instalando actualización:', e);
-      toast('❌ Falló la instalación: ' + e.message, 'error');
-      if (typeof hideProgress === 'function') hideProgress();
+    if (modal) {
+      modal.style.display = 'flex';
     }
+  },
+
+  closeModal() {
+    const modal = document.getElementById('updateModal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  openExternal(url) {
+    if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+      window.__TAURI__.core.invoke('open_external_url', { url }).catch(() => {
+        window.open(url, '_blank');
+      });
+    } else {
+      window.open(url, '_blank');
+    }
+  },
+
+  downloadLatest() {
+    const url = this.latestReleaseUrl || `${this.REPO_URL}/releases/latest`;
+    this.openExternal(url);
+    this.closeModal();
   }
 };
 
