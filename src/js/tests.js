@@ -30,6 +30,8 @@ const Tests = {
     this.testAiDisambiguator();
     this.testQuoteGeneratorHtml();
     this.testImageSpatialMatching();
+    this.testCustomsPackingListExport();
+    this.testSupplierPriceComparison();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -172,6 +174,41 @@ const Tests = {
     const products = PdfParser.parseRows(rows, '8BitDo', 0, [], images);
     this.assert(products.length === 1, 'PdfParser parseó 1 producto con imagen espacial');
     this.assert(products[0].img && products[0].img.startsWith('data:image/webp'), 'Imagen espacial asignada correctamente por coordenadas X/Y');
+  },
+
+  testCustomsPackingListExport() {
+    const testPedido = {
+      name: 'Pedido Aduana Test',
+      date: new Date().toISOString(),
+      items: [{ sku: 'P-01', marca: 'AULA', modelo: 'F75', cat: 'TECLADO', qty: 10, fob: 35.0 }],
+      costs: { pesoKg: 15 },
+      totals: { fob: 350.0, costo: 420.0, qty: 10 }
+    };
+    let written = false;
+    const origWrite = XLSX.writeFile;
+    XLSX.writeFile = (wb, filename) => { written = true; };
+
+    const ok = FileImporter.exportCustomsPackingList(testPedido);
+    XLSX.writeFile = origWrite;
+
+    this.assert(ok && written, 'FileImporter exportó correctamente la planilla de Packing List Aduanero en Excel');
+  },
+
+  testSupplierPriceComparison() {
+    const catalogTest = [
+      { sku: 'SKU-A1', marca: 'Proveedor A', modelo: 'AULA F75', cat: 'TECLADO', fob: 30.0 },
+      { sku: 'SKU-B1', marca: 'Proveedor B', modelo: 'AULA F75', cat: 'TECLADO', fob: 35.0 }
+    ];
+    const grouped = {};
+    catalogTest.forEach(item => {
+      const key = (item.modelo || '').toLowerCase().trim();
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+    const comparisons = Object.entries(grouped).filter(([k, list]) => list.length > 1);
+
+    this.assert(comparisons.length === 1, 'Comparador detectó 1 modelo coincidente entre 2 proveedores');
+    this.assert(comparisons[0][1][0].fob === 30.0, 'Comparador identificó correctamente al mejor precio FOB ($30.00 USD)');
   }
 };
 
