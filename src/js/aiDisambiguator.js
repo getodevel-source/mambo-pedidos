@@ -197,6 +197,59 @@ const AiDisambiguator = {
   },
 
   // Desambiguar un ítem dudoso
+  /**
+   * Desglose Inteligente NLP de Modelo y Variante / Color
+   * Separa cadenas sueltas tipo "F75 Mechanical Keyboard Gasket Structure (White / Purple Switch)"
+   * en { modelo: "F75", variante: "White / Purple Switch" }
+   */
+  parseModelAndVariant(rawText, brand = '') {
+    if (!rawText) return { modelo: '', variante: '' };
+
+    let text = String(rawText).trim();
+
+    if (brand && brand !== 'OTRO') {
+      const reBrand = new RegExp('^' + brand + '\\s+', 'i');
+      text = text.replace(reBrand, '').trim();
+    }
+
+    let model = '';
+    let variant = '';
+
+    const matchParentheses = text.match(/^(.*?)\s*[\(\[\{](.*?)[\)\]\}]\s*$/);
+    if (matchParentheses) {
+      let rawModel = matchParentheses[1].trim();
+      model = rawModel.replace(/\b(mechanical keyboard|teclado|gaming mouse|mouse|headset|auricular|controller|joystick|mousepad|mat)\b/gi, '').trim();
+      variant = matchParentheses[2].trim();
+    }
+
+    if (!model && text.includes(' - ')) {
+      const parts = text.split(' - ');
+      model = parts[0].trim();
+      variant = parts.slice(1).join(' - ').trim();
+    }
+
+    if (!model) {
+      const matchCode = text.match(/\b([A-Za-z]{1,4}[-_\s]?\d{2,4}[A-Za-z]?)\b/);
+      if (matchCode) {
+        model = matchCode[1].toUpperCase();
+        const rest = text.replace(matchCode[0], '').replace(/mechanical keyboard|gaming mouse|headset|wireless|bluetooth/gi, '').trim();
+        variant = rest.replace(/^[,\s\-\/]+|[,\s\-\/]+$/g, '');
+      } else {
+        model = text;
+      }
+    }
+
+    if (variant) {
+      variant = variant.replace(/\b(teclado|keyboard|mouse|headset|auricular|controller|joystick|mousepad|mat)\b/gi, '').trim();
+      variant = variant.replace(/^[\s\-\/,]+|[\s\-\/,]+$/g, '');
+    }
+
+    return {
+      modelo: model || text,
+      variante: variant || ''
+    };
+  },
+
   disambiguateItem(item, customBrands = []) {
     const text = ((item.marca || '') + ' ' + (item.modelo || '') + ' ' + (item.variante || '') + ' ' + (item.rawText || '')).trim();
     let detectedBrand = item.marca;
@@ -239,18 +292,23 @@ const AiDisambiguator = {
       }
     }
 
-    // 3. Limpieza inteligente del nombre de modelo
+    // 3. Limpieza inteligente del nombre de modelo y separación NLP de variante
     let cleanedModel = item.modelo || '';
     if (detectedBrand !== 'OTRO') {
       const reBrand = new RegExp('^' + detectedBrand + '\\s+', 'i');
       cleanedModel = cleanedModel.replace(reBrand, '').trim();
     }
 
+    const nlpRes = this.parseModelAndVariant(cleanedModel || item.modelo, detectedBrand);
+    const finalModel = nlpRes.modelo || cleanedModel || item.modelo;
+    const finalVariant = item.variante || nlpRes.variante || '';
+
     const updated = {
       ...item,
       marca: detectedBrand,
       cat: detectedCat,
-      modelo: cleanedModel || item.modelo
+      modelo: finalModel,
+      variante: finalVariant
     };
 
     const evalRes = PdfParser.evaluateItemConfidence(updated);
