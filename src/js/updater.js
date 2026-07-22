@@ -4,7 +4,7 @@
 // ============================================
 
 const AppUpdater = {
-  CURRENT_VERSION: '0.5.0',
+  CURRENT_VERSION: '0.5.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestReleaseUrl: null,
   isChecking: false,
@@ -90,12 +90,35 @@ const AppUpdater = {
   },
 
   openExternal(url) {
+    if (!url) return;
+
+    // Intento 1: Tauri 2.0 Internals invoke
+    if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
+      window.__TAURI_INTERNALS__.invoke('open_external_url', { url }).catch(() => {
+        window.location.href = url;
+      });
+      return;
+    }
+
+    // Intento 2: Tauri Core invoke
     if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
       window.__TAURI__.core.invoke('open_external_url', { url }).catch(() => {
-        window.open(url, '_blank');
+        window.location.href = url;
       });
-    } else {
-      window.open(url, '_blank');
+      return;
+    }
+
+    // Intento 3: Anchor click & location fallback
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      window.location.href = url;
     }
   },
 
@@ -107,6 +130,7 @@ const AppUpdater = {
 };
 
 window.AppUpdater = AppUpdater;
+
 
 
 
