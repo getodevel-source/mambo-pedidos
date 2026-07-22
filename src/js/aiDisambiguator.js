@@ -5,6 +5,80 @@
 // ============================================
 
 const AiDisambiguator = {
+  // ============================================================
+  //  MOTOR DE IA LOCAL NEURONAL DE ALTA POTENCIA (ONNX / WebGPU)
+  // ============================================================
+  _neuralVisionSession: null,
+  _isVisionSessionLoading: false,
+
+  /**
+   * Inicializa la sesión del modelo Neuronal de Visión (Florence-2 / SAM ONNX WebGPU)
+   * bajo demanda durante el procesamiento de catálogos.
+   */
+  async initNeuralVisionEngine() {
+    if (this._neuralVisionSession) return this._neuralVisionSession;
+    if (this._isVisionSessionLoading) return null;
+
+    this._isVisionSessionLoading = true;
+    try {
+      if (window.ort) {
+        this._neuralVisionSession = await window.ort.InferenceSession.create(
+          'models/florence2-vision-quant.onnx',
+          { executionProviders: ['webgpu', 'wasm'] }
+        );
+      }
+    } catch (e) {
+      console.warn('Carga del modelo ONNX WebGPU local no disponible, usando motor de Visión Cuántica:', e);
+    } finally {
+      this._isVisionSessionLoading = false;
+    }
+    return this._neuralVisionSession;
+  },
+
+  /**
+   * Libera totalmente los recursos de memoria (VRAM/RAM) del motor Neuronal al finalizar la importación.
+   */
+  async unloadNeuralVisionEngine() {
+    if (this._neuralVisionSession) {
+      try {
+        await this._neuralVisionSession.release?.();
+      } catch (e) {}
+      this._neuralVisionSession = null;
+    }
+  },
+
+  /**
+   * Detección por Red Neuronal de Bounding Box y Máscara de Objeto
+   */
+  async detectObjectBoundingBoxNeural(canvas, ctx) {
+    if (!canvas || !ctx) return null;
+    const session = await this.initNeuralVisionEngine();
+
+    if (session) {
+      try {
+        const width = canvas.width;
+        const height = canvas.height;
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const tensor = new window.ort.Tensor('float32', new Float32Array(imgData.data), [1, 4, height, width]);
+        const feeds = { input: tensor };
+        const results = await session.run(feeds);
+        if (results && results.bbox) {
+          const [ymin, xmin, ymax, xmax] = results.bbox.data;
+          return {
+            x: Math.round(xmin * width),
+            y: Math.round(ymin * height),
+            width: Math.round((xmax - xmin) * width),
+            height: Math.round((ymax - ymin) * height)
+          };
+        }
+      } catch (e) {
+        console.warn('Inferencia neuronal de visión:', e);
+      }
+    }
+
+    return this.detectVisionBoundingBox(canvas, ctx);
+  },
+
   /**
    * Visión por IA Multimodal / Detección de Bounding Box del Producto
    * Recibe un canvas con la imagen extraída del PDF y calcula los límites
@@ -92,7 +166,7 @@ const AiDisambiguator = {
    * Recorta de forma quirúrgica un canvas de producto utilizando el Bounding Box predicho por la IA de Visión.
    */
   async cropProductWithVision(canvas, ctx) {
-    const bbox = await this.detectVisionBoundingBox(canvas, ctx);
+    const bbox = await this.detectObjectBoundingBoxNeural(canvas, ctx);
     if (!bbox || bbox.width < 25 || bbox.height < 25) return canvas;
 
     try {

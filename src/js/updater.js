@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '1.2.4',
+  CURRENT_VERSION: '1.2.5',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,

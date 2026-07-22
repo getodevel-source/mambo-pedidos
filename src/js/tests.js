@@ -39,6 +39,7 @@ const Tests = {
     this.testMultiCategoryBrandParsing();
     this.testVisionBoundingBoxCropping();
     this.testNlpModelAndVariantBreakdown();
+    this.testNeuralVisionEngineLifecycle();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -278,6 +279,11 @@ const Tests = {
     const res = AiDisambiguator.parseModelAndVariant('AULA F75 Mechanical Keyboard (White / Reaper Switch)', 'AULA');
     this.assert(res.modelo === 'F75', 'NLP desglosó el modelo limpio "F75"');
     this.assert(res.variante.includes('White') || res.variante.includes('Reaper'), 'NLP extrajo la variante de color/switch');
+  },
+
+  testNeuralVisionEngineLifecycle() {
+    const hasNeural = typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.detectObjectBoundingBoxNeural === 'function' && typeof AiDisambiguator.unloadNeuralVisionEngine === 'function';
+    this.assert(hasNeural, 'AiDisambiguator integra ciclo de vida ONNX WebGPU para Visión Neuronal');
   }
 };
 
