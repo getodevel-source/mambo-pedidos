@@ -7,7 +7,7 @@
 
 const PdfParser = {
 
-  async processPdfFile(file, catalogLength = 0, customBrands = []) {
+  async processPdfFile(file, catalogLength = 0, customBrands = [], onProgress = null) {
     let pdf = null;
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -18,6 +18,9 @@ const PdfParser = {
       let fullTextForBrand = '';
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        if (typeof onProgress === 'function') {
+          try { onProgress(pageNum, pdf.numPages); } catch (e) {}
+        }
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
         const viewport = page.getViewport({ scale: 1.0 });

@@ -19,18 +19,43 @@ function toast(msg, type = '') {
   setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-function showProgress(pct) {
+function showProgress(pct, statusText = 'Procesando archivos...', subText = '') {
   const p = document.getElementById('progress');
   const b = document.getElementById('progressBar');
   if (p && b) {
     p.style.display = 'block';
     b.style.width = `${pct}%`;
   }
+
+  const overlay = document.getElementById('loadingOverlay');
+  const progressBar = document.getElementById('progressBarInner');
+  const progressPct = document.getElementById('progressPctText');
+  const progressTitle = document.getElementById('progressTitleText');
+  const progressSub = document.getElementById('progressSubText');
+
+  const cleanPct = Math.min(100, Math.max(0, Math.round(pct)));
+
+  if (overlay) overlay.style.display = 'flex';
+  if (progressBar) progressBar.style.width = `${cleanPct}%`;
+  if (progressPct) progressPct.textContent = `${cleanPct}%`;
+  if (progressTitle && statusText) progressTitle.textContent = statusText;
+  if (progressSub && subText) progressSub.textContent = subText;
 }
 
 function hideProgress() {
   const p = document.getElementById('progress');
   if (p) p.style.display = 'none';
+
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    showProgress(100, '¡Carga completada al 100%!', 'Abriendo vista previa...');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
+        AiDisambiguator.unloadNeuralVisionEngine();
+      }
+    }, 450);
+  }
 }
 
 function switchView(name) {
@@ -436,22 +461,33 @@ function renderBrandList() {
 // Interceptor de Importación con Vista Previa por Semáforo
 async function processFiles(files) {
   if (!files.length) return;
-  showProgress(0);
+  showProgress(0, 'Iniciando carga de catálogos...', `0 de ${files.length} archivos`);
   customBrandsList = await AppStorage.loadBrands();
   pendingPreviewItems = [];
 
-  for (let i = 0; i < files.length; i++) {
+  const totalFiles = files.length;
+  for (let i = 0; i < totalFiles; i++) {
     const f = files[i];
-    showProgress(((i) / files.length) * 100);
+    const basePct = (i / totalFiles) * 100;
+    const stepPct = (1 / totalFiles) * 100;
+
+    showProgress(basePct, `Cargando ${f.name}...`, `Archivo ${i + 1} de ${totalFiles}`);
+
     try {
       let incoming = [];
       if (f.name.toLowerCase().endsWith('.pdf')) {
-        const res = await PdfParser.processPdfFile(f, catalog.length, customBrandsList);
+        const res = await PdfParser.processPdfFile(f, catalog.length, customBrandsList, (page, totalPages) => {
+          const filePct = (page / totalPages) * stepPct;
+          const currentPct = Math.round(basePct + filePct);
+          showProgress(currentPct, `Analizando ${f.name}`, `Página ${page} de ${totalPages} · ${currentPct}%`);
+        });
         incoming = res.products;
       } else if (f.name.toLowerCase().endsWith('.csv')) {
         incoming = await FileImporter.processCsvFile(f, catalog);
+        showProgress(basePct + stepPct, `Procesando ${f.name}`, `Archivo ${i + 1} de ${totalFiles}`);
       } else {
         incoming = await FileImporter.processExcelFile(f, catalog);
+        showProgress(basePct + stepPct, `Procesando ${f.name}`, `Archivo ${i + 1} de ${totalFiles}`);
       }
 
       for (const item of incoming) {
@@ -471,7 +507,7 @@ async function processFiles(files) {
     }
   }
 
-  showProgress(100);
+  showProgress(100, '¡Carga completada al 100%!', 'Procesando catálogo final...');
   setTimeout(hideProgress, 400);
 
   if (pendingPreviewItems.length > 0) {
