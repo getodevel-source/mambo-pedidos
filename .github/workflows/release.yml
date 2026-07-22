@@ -49,16 +49,36 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # Decode the base64-encoded private key stored in the secret into its raw minisign format.
+      # The secret TAURI_SIGNING_PRIVATE_KEY must contain the raw base64 content of the .key file
+      # (i.e. the file starts with: untrusted comment: ... encoded as base64).
+      # We decode it here to avoid newline/space issues when setting multi-line GitHub secrets.
+      - name: Decode signing key (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"))
+          echo "TAURI_SIGNING_PRIVATE_KEY=$decoded" >> $env:GITHUB_ENV
+
+      - name: Decode signing key (Unix)
+        if: matrix.platform != 'windows-latest'
+        shell: bash
+        run: |
+          decoded=$(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" | base64 --decode)
+          echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+          echo "$decoded" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Build Tauri App & Create Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Mambo Pedidos ${{ github.ref_name }}'
-          releaseBody: 'Instaladores nativos de Mambo Pedidos para Windows (.exe / .msi), Linux (.AppImage / .deb) y macOS.'
+          releaseBody: 'Instaladores nativos de Mambo Pedidos para Windows (.exe / .msi), Linux (.AppImage / .deb) y macOS. El actualizador automático in-place descarga solo el parche firmado sin desinstalar.'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
