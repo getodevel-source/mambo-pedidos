@@ -27,7 +27,7 @@ jobs:
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,8 +42,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -54,27 +52,49 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      # The TAURI_SIGNING_PRIVATE_KEY secret is stored as the base64-encoded content
-      # of the minisign .key file. We decode it here so Tauri receives the raw text
-      # (starting with "untrusted comment: ...") that it expects.
-      - name: Decode signing key (Windows)
+      - name: Setup signing key file (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          $b64 = "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
-          $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64.Trim()))
-          "TAURI_SIGNING_PRIVATE_KEY<<EOF`n$decoded`nEOF" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $secret = @"
+          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          "@.Trim()
+          $keyText = $secret
+          if (-not $secret.StartsWith("untrusted comment:")) {
+              try {
+                  $bytes = [System.Convert]::FromBase64String($secret)
+                  $decoded = [System.Text.Encoding]::UTF8.GetString($bytes)
+                  if ($decoded.StartsWith("untrusted comment:")) {
+                      $keyText = $decoded
+                  }
+              } catch {}
+          }
+          $keyPath = "$env:RUNNER_TEMP\minisign.key"
+          [System.IO.File]::WriteAllText($keyPath, $keyText, [System.Text.Encoding]::UTF8)
+          "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Decode signing key (Unix)
+      - name: Setup signing key file (Unix)
         if: matrix.platform != 'windows-latest'
         shell: bash
         run: |
-          decoded=$(printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" | base64 --decode)
-          {
-            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF"
-            echo "$decoded"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
+          secret=$(cat << 'EOF'
+          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          EOF
+          )
+          secret=$(echo "$secret" | tr -d '\r')
+          if [[ "$secret" == untrusted\ comment:* ]]; then
+              keyText="$secret"
+          else
+              decoded=$(echo "$secret" | base64 --decode 2>/dev/null || echo "$secret")
+              if [[ "$decoded" == untrusted\ comment:* ]]; then
+                  keyText="$decoded"
+              else
+                  keyText="$secret"
+              fi
+          fi
+          keyPath="$RUNNER_TEMP/minisign.key"
+          printf '%s\n' "$keyText" > "$keyPath"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" >> "$GITHUB_ENV"
 
       - name: Resolve tag name
         id: tag
@@ -92,7 +112,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ steps.tag.outputs.name }}
