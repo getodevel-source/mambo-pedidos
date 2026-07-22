@@ -121,17 +121,28 @@ function nextPage() {
   }
 }
 
+function adjustQty(sku, delta) {
+  const current = selection[sku] || 0;
+  const next = Math.max(0, current + delta);
+  if (next > 0) selection[sku] = next;
+  else delete selection[sku];
+  renderCatalog();
+}
+
 function renderCatalog() {
   if (!catalog.length) return;
   const txt = (document.getElementById('catSearch')?.value || '').toLowerCase();
   const marca = document.getElementById('catFilterMarca')?.value;
   const cat = document.getElementById('catFilterCat')?.value;
+  const minPrice = parseFloat(document.getElementById('catFilterMinPrice')?.value) || 0;
+  const maxPrice = parseFloat(document.getElementById('catFilterMaxPrice')?.value) || Infinity;
 
   const filtered = catalog.filter(r => {
     const matchTxt = !txt || (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt);
     const matchMarca = !marca || r.marca === marca;
     const matchCat = !cat || r.cat === cat;
-    return matchTxt && matchMarca && matchCat;
+    const matchPrice = (r.fob >= minPrice) && (r.fob <= maxPrice);
+    return matchTxt && matchMarca && matchCat && matchPrice;
   });
 
   const totalPages = Math.ceil(filtered.length / pageSize) || 1;
@@ -173,7 +184,13 @@ function renderCatalog() {
     html += '<td><input class="inline" value="' + esc(r.modelo) + '" onchange="updateField(\'' + skuJs + '\', \'modelo\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.cat) + '" onchange="updateField(\'' + skuJs + '\', \'cat\', this.value)"></td>';
     html += '<td><input class="inline num" value="' + r.fob.toFixed(2) + '" onchange="updateField(\'' + skuJs + '\', \'fob\', this.value)"></td>';
-    html += '<td><input class="inline num qty" type="number" value="' + qty + '" min="0" onchange="setQty(\'' + skuJs + '\', this.value)"></td>';
+    html += '<td>';
+    html += '<div style="display: flex; align-items: center; gap: 4px;">';
+    html += '<button class="btn btn-sm" onclick="adjustQty(\'' + skuJs + '\', -1)" style="padding: 1px 6px; font-weight: 700;">-</button>';
+    html += '<input class="inline num qty" type="number" value="' + qty + '" min="0" style="width: 45px; text-align: center;" onchange="setQty(\'' + skuJs + '\', this.value)">';
+    html += '<button class="btn btn-sm" onclick="adjustQty(\'' + skuJs + '\', 1)" style="padding: 1px 6px; font-weight: 700;">+</button>';
+    html += '</div>';
+    html += '</td>';
     html += '<td class="action"><button class="btn btn-sm" onclick="removeItem(\'' + skuJs + '\')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);">🗑</button></td>';
     html += '</tr>';
   });
@@ -562,12 +579,23 @@ function armarPedido() {
 }
 
 function getCostInputs() {
+  const getRadioVal = (name, defaultVal) => {
+    const el = document.querySelector(`input[name="${name}"]:checked`);
+    return el ? el.value : defaultVal;
+  };
+
   return {
     flete: document.getElementById('cFlete')?.value || 15,
+    fleteModo: getRadioVal('rFleteModo', 'porcentaje'),
+    pesoKg: document.getElementById('cPesoKg')?.value || 0,
+    costoPorKg: document.getElementById('cCostoPorKg')?.value || 12,
+    logisticaModo: getRadioVal('rLogisticaModo', 'courier'),
+    transporteModo: getRadioVal('rTransporteModo', 'aereo'),
     seguro: document.getElementById('cSeguro')?.value || 2,
     derechos: document.getElementById('cDerechos')?.value || 16,
     tasa: document.getElementById('cTasa')?.value || 3,
     perc: document.getElementById('cPerc')?.value || 6,
+    ivaPct: document.getElementById('cIvaPct')?.value || 21,
     desp: document.getElementById('cDesp')?.value || 500,
     courier: document.getElementById('cCourier')?.value || 8,
     markup: document.getElementById('cMarkup')?.value || 2.5,
@@ -584,14 +612,26 @@ function renderPedido() {
   if (currentPedido.costs) {
     const c = currentPedido.costs;
     if (document.getElementById('cFlete')) document.getElementById('cFlete').value = c.flete;
+    if (document.getElementById('cPesoKg')) document.getElementById('cPesoKg').value = c.pesoKg || 0;
+    if (document.getElementById('cCostoPorKg')) document.getElementById('cCostoPorKg').value = c.costoPorKg || 12;
     if (document.getElementById('cSeguro')) document.getElementById('cSeguro').value = c.seguro;
     if (document.getElementById('cDerechos')) document.getElementById('cDerechos').value = c.derechos;
     if (document.getElementById('cTasa')) document.getElementById('cTasa').value = c.tasa;
     if (document.getElementById('cPerc')) document.getElementById('cPerc').value = c.perc;
+    if (document.getElementById('cIvaPct')) document.getElementById('cIvaPct').value = c.ivaPct || 21;
     if (document.getElementById('cDesp')) document.getElementById('cDesp').value = c.desp;
     if (document.getElementById('cCourier')) document.getElementById('cCourier').value = c.courier;
     if (document.getElementById('cMarkup')) document.getElementById('cMarkup').value = c.markup;
     if (document.getElementById('cTasaCambio')) document.getElementById('cTasaCambio').value = c.tipoCambio || 1400;
+
+    // Radios
+    const setRadio = (name, val) => {
+      const el = document.querySelector(`input[name="${name}"][value="${val}"]`);
+      if (el) el.checked = true;
+    };
+    if (c.logisticaModo) setRadio('rLogisticaModo', c.logisticaModo);
+    if (c.transporteModo) setRadio('rTransporteModo', c.transporteModo);
+    if (c.fleteModo) setRadio('rFleteModo', c.fleteModo);
   }
 
   recalc();
@@ -604,17 +644,47 @@ function recalc() {
 
   currentPedido.items = res.items;
   currentPedido.costs = costInputs;
+  currentPedido.totals = res.totals;
+  currentPedido.warnings = res.warnings;
+  currentPedido.cautions = res.cautions;
+
   const t = res.totals;
 
-  document.getElementById('pedFob').textContent = '$' + t.fob.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' USD';
-  document.getElementById('pedFobSub').textContent = t.qty + ' u · ARS $' + (t.fobArs || 0).toLocaleString();
-  document.getElementById('pedCosto').textContent = '$' + Math.round(t.costo).toLocaleString() + ' USD';
-  document.getElementById('pedFact').textContent = '$' + t.facturacion.toLocaleString() + ' USD';
-  document.getElementById('pedMargen').textContent = '$' + Math.round(t.margen).toLocaleString() + ' USD';
-  document.getElementById('pedMargenSub').textContent = t.facturacion > 0 ? t.margenPct + '% margen (ARS $' + (t.margenArs || 0).toLocaleString() + ')' : '—';
-  document.getElementById('pedidoSubtitle').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades · TC: $' + t.tipoCambio + '/USD';
-  document.getElementById('pedidoMeta').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR') + ' · Facturación ARS: $' + (t.facturacionArs || 0).toLocaleString();
-  document.getElementById('pedTableMeta').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades';
+  if (document.getElementById('pedFob')) document.getElementById('pedFob').textContent = '$' + t.fob.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' USD';
+  if (document.getElementById('pedFobSub')) document.getElementById('pedFobSub').textContent = t.qty + ' u · ARS $' + (t.fobArs || 0).toLocaleString();
+  if (document.getElementById('pedCosto')) document.getElementById('pedCosto').textContent = '$' + Math.round(t.costo).toLocaleString() + ' USD';
+  if (document.getElementById('pedFact')) document.getElementById('pedFact').textContent = '$' + Math.round(t.facturacion).toLocaleString() + ' USD';
+  if (document.getElementById('pedMargen')) document.getElementById('pedMargen').textContent = '$' + Math.round(t.margen).toLocaleString() + ' USD';
+  if (document.getElementById('pedMargenSub')) document.getElementById('pedMargenSub').textContent = t.facturacion > 0 ? t.margenPct + '% margen (ARS $' + (t.margenArs || 0).toLocaleString() + ')' : '—';
+
+  if (document.getElementById('pedRoi')) document.getElementById('pedRoi').textContent = (t.roiPct || 0) + '%';
+  if (document.getElementById('pedIva')) document.getElementById('pedIva').textContent = '$' + Math.round(t.ivaUsd || 0).toLocaleString() + ' USD';
+  if (document.getElementById('pedIvaSub')) document.getElementById('pedIvaSub').textContent = 'ARS $' + (t.ivaArs || 0).toLocaleString();
+
+  if (document.getElementById('pedidoSubtitle')) document.getElementById('pedidoSubtitle').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades · TC: $' + t.tipoCambio + '/USD';
+  if (document.getElementById('pedidoMeta')) document.getElementById('pedidoMeta').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR') + ' · Facturación ARS: $' + (t.facturacionArs || 0).toLocaleString();
+  if (document.getElementById('pedTableMeta')) document.getElementById('pedTableMeta').textContent = currentPedido.items.length + ' SKUs · ' + t.qty + ' unidades';
+
+  // Renderear advertencias y regulaciones
+  const warnCont = document.getElementById('orderWarningsContainer');
+  if (warnCont) {
+    let warnHtml = '';
+    if (res.cautions && res.cautions.length) {
+      warnHtml += `<div style="background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #a5b4fc;">${res.cautions.join(' · ')}</div>`;
+    }
+    if (res.warnings && res.warnings.length) {
+      res.warnings.forEach(w => {
+        const bg = w.type === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)';
+        const border = w.type === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(234,179,8,0.4)';
+        const color = w.type === 'danger' ? '#f87171' : '#fde047';
+        warnHtml += `<div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; font-size: 13px; color: ${color};">
+          <strong>${esc(w.title)}:</strong> ${esc(w.message)}
+        </div>`;
+      });
+    }
+    warnCont.innerHTML = warnHtml;
+  }
+
   renderPedidoTable();
 }
 

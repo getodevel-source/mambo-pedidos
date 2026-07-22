@@ -158,7 +158,7 @@
 
       <div class="table-wrap">
         <div class="table-toolbar">
-          <div class="table-toolbar-left">
+          <div class="table-toolbar-left" style="flex-wrap: wrap;">
             <input type="text" class="input search" id="catSearch" placeholder="Buscar SKU, marca, modelo..." oninput="renderCatalog()">
             <select class="select" id="catFilterMarca" onchange="renderCatalog()">
               <option value="">Todas las marcas</option>
@@ -166,6 +166,12 @@
             <select class="select" id="catFilterCat" onchange="renderCatalog()">
               <option value="">Todas las categorías</option>
             </select>
+            <div style="display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--text-3);">
+              <span>Min $:</span>
+              <input type="number" id="catFilterMinPrice" placeholder="0" style="width: 55px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff;" oninput="renderCatalog()">
+              <span>Max $:</span>
+              <input type="number" id="catFilterMaxPrice" placeholder="Max" style="width: 60px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff;" oninput="renderCatalog()">
+            </div>
           </div>
           <div class="table-toolbar-left">
             <div class="row" style="gap: 6px; font-size: 11px; color: var(--text-3);">
@@ -220,14 +226,18 @@
 
     <div id="pedidoContent" style="display: none;">
       <div class="card">
-        <div class="row" style="gap: 12px;">
-          <input type="text" class="input" id="pedidoName" placeholder="Nombre del pedido" style="flex: 1; font-size: 14px; font-weight: 500;">
+        <div class="row" style="gap: 12px; flex-wrap: wrap;">
+          <input type="text" class="input" id="pedidoName" placeholder="Nombre del pedido" style="flex: 1; min-width: 200px; font-size: 14px; font-weight: 500;">
           <button class="btn" onclick="FileImporter.exportCSV(currentPedido)">📤 Exportar CSV</button>
           <button class="btn" onclick="FileImporter.exportXLSX(currentPedido)">📊 Exportar Excel</button>
+          <button class="btn" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; font-weight: 600;" onclick="QuoteGenerator.generatePrintableQuote(currentPedido)">📄 Cotización Cliente (PDF)</button>
           <button class="btn btn-primary" onclick="saveToHistorial()">💾 Guardar en historial</button>
         </div>
         <div class="muted text-sm mt-2" id="pedidoMeta">—</div>
       </div>
+
+      <!-- Contenedor de Alertas de Regulaciones y Precaución -->
+      <div id="orderWarningsContainer"></div>
 
       <div class="stats">
         <div class="stat">
@@ -236,32 +246,84 @@
           <div class="stat-sub" id="pedFobSub">— unidades</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Costo final</div>
+          <div class="stat-label">Costo Final</div>
           <div class="stat-value blue" id="pedCosto">$0</div>
           <div class="stat-sub">Puesto en país</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Facturación</div>
+          <div class="stat-label">Facturación (PVP)</div>
           <div class="stat-value accent" id="pedFact">$0</div>
-          <div class="stat-sub">Si vendés todo</div>
+          <div class="stat-sub">Venta total proyectada</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Margen bruto</div>
+          <div class="stat-label">Margen Bruto</div>
           <div class="stat-value green" id="pedMargen">$0</div>
           <div class="stat-sub" id="pedMargenSub">—%</div>
         </div>
+        <div class="stat">
+          <div class="stat-label">ROI Est.</div>
+          <div class="stat-value" style="color: #38bdf8;" id="pedRoi">0%</div>
+          <div class="stat-sub">Retorno sobre inversión</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">IVA Est.</div>
+          <div class="stat-value" style="color: #f472b6;" id="pedIva">$0</div>
+          <div class="stat-sub" id="pedIvaSub">ARS $0</div>
+        </div>
       </div>
 
+      <!-- Parámetros Logísticos y Fiscales Avanzados -->
       <div class="card">
-        <div class="card-title">Costos de importación</div>
-        <div class="card-sub">Ajustá los valores según tu operación real</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div class="card-title" style="margin: 0;">🚚 Logística, Impuestos y Costos</div>
+            <div class="card-sub" style="margin: 0;">Configurá el régimen (Courier vs Importador), modo de envío y peso real</div>
+          </div>
+        </div>
+
+        <!-- Selectores de Régimen Logístico -->
+        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px;">
+          <div>
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Régimen de Importación:</span>
+            <label style="margin-right: 12px; cursor: pointer;">
+              <input type="radio" name="rLogisticaModo" value="courier" checked onchange="recalc()"> 🚀 Courier Simplificado
+            </label>
+            <label style="cursor: pointer;">
+              <input type="radio" name="rLogisticaModo" value="importador" onchange="recalc()"> ⚓ Importación General (Despachante)
+            </label>
+          </div>
+
+          <div>
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Vía de Transporte:</span>
+            <label style="margin-right: 12px; cursor: pointer;">
+              <input type="radio" name="rTransporteModo" value="aereo" checked onchange="recalc()"> ✈️ Aéreo
+            </label>
+            <label style="cursor: pointer;">
+              <input type="radio" name="rTransporteModo" value="maritimo" onchange="recalc()"> 🚢 Marítimo
+            </label>
+          </div>
+
+          <div>
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Cálculo de Flete:</span>
+            <label style="margin-right: 12px; cursor: pointer;">
+              <input type="radio" name="rFleteModo" value="porcentaje" checked onchange="recalc()"> % Porcentaje FOB
+            </label>
+            <label style="cursor: pointer;">
+              <input type="radio" name="rFleteModo" value="peso" onchange="recalc()"> ⚖️ Por Peso (Kg)
+            </label>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
           <div class="cost"><label>Flete (% FOB)</label><input type="number" id="cFlete" value="15" onchange="recalc()"></div>
+          <div class="cost"><label>Peso Total (Kg)</label><input type="number" id="cPesoKg" value="0" placeholder="Ej: 12.5" onchange="recalc()"></div>
+          <div class="cost"><label>Costo/Kg (USD)</label><input type="number" id="cCostoPorKg" value="12" placeholder="Ej: 12" onchange="recalc()"></div>
           <div class="cost"><label>Seguro (% FOB)</label><input type="number" id="cSeguro" value="2" onchange="recalc()"></div>
           <div class="cost"><label>Derechos (% CIF)</label><input type="number" id="cDerechos" value="16" onchange="recalc()"></div>
           <div class="cost"><label>Tasa (% CIF)</label><input type="number" id="cTasa" value="3" onchange="recalc()"></div>
           <div class="cost"><label>Perc. Gan (% CIF)</label><input type="number" id="cPerc" value="6" onchange="recalc()"></div>
-          <div class="cost"><label>Despachante (USD)</label><input type="number" id="cDesp" value="500" onchange="recalc()"></div>
+          <div class="cost"><label>IVA Aprox (%)</label><input type="number" id="cIvaPct" value="21" onchange="recalc()"></div>
+          <div class="cost"><label>Despachante ($)</label><input type="number" id="cDesp" value="500" onchange="recalc()"></div>
           <div class="cost"><label>Courier (USD/u)</label><input type="number" id="cCourier" value="8" onchange="recalc()"></div>
           <div class="cost"><label>Markup (x)</label><input type="number" id="cMarkup" value="2.5" step="0.1" onchange="recalc()"></div>
           <div class="cost"><label>Tipo Cambio ($/USD)</label><input type="number" id="cTasaCambio" value="1400" onchange="recalc()"></div>
@@ -449,6 +511,7 @@
 <script src="js/pdfParser.js"></script>
 <script src="js/aiDisambiguator.js"></script>
 <script src="js/fileImporter.js"></script>
+<script src="js/quoteGenerator.js"></script>
 <script src="js/app.js"></script>
 <script src="js/updater.js"></script>
 <script src="js/tests.js"></script>
