@@ -25,6 +25,10 @@ const Tests = {
     this.testZeroCosts();
     this.testLatamDecimalFormat();
     this.test8BitDoBrand();
+    this.testWeightBasedFreight();
+    this.testCourierWarnings();
+    this.testAiDisambiguator();
+    this.testQuoteGeneratorHtml();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -110,6 +114,51 @@ const Tests = {
 
     const cat = PdfParser.guessCategory('8BitDo Ultimate Controller', 'Wireless');
     this.assert(cat === 'CONTROLLER', 'Clasificación correcta de categoría CONTROLLER para mandos 8BitDo');
+  },
+
+  testWeightBasedFreight() {
+    const items = [{ sku: 'W-01', fob: 100, qty: 1 }];
+    const config = { fleteModo: 'peso', pesoKg: 10, costoPorKg: 15, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, markup: 2.0, tipoCambio: 1000 };
+    const res = Calculator.calculateOrder(items, config);
+
+    // Flete por peso = 10kg * $15 = $150 USD. Total Costo = $100 + $150 = $250 USD
+    this.assert(res.totals.fleteUsd === 150, 'Cálculo de flete por peso ($150 USD para 10kg a $15/kg) correcto');
+    this.assert(res.totals.costo === 250, 'Costo final incluye flete por peso ($250 USD)');
+  },
+
+  testCourierWarnings() {
+    const items = [{ sku: 'OVER-01', fob: 3500, qty: 1 }];
+    const config = { logisticaModo: 'courier', flete: 0, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, markup: 1.0, tipoCambio: 1000 };
+    const res = Calculator.calculateOrder(items, config);
+
+    const hasWarning = res.warnings.some(w => w.code === 'COURIER_FOB_EXCEEDED');
+    this.assert(hasWarning, 'Advertencia activada cuando el pedido Courier supera USD 3000 FOB');
+  },
+
+  testAiDisambiguator() {
+    const item = { marca: 'OTRO', cat: 'OTRO', modelo: 'Redragon Kumara K552 RGB Mechanical Keyboard', fob: 35.0, rawText: 'Redragon Kumara K552' };
+    const resolved = AiDisambiguator.disambiguateItem(item);
+
+    this.assert(resolved.marca === 'Redragon', 'AiDisambiguator identificó correctamente la marca Redragon');
+    this.assert(resolved.cat === 'TECLADO', 'AiDisambiguator identificó correctamente la categoría TECLADO');
+    this.assert(resolved.status === 'VALID', 'AiDisambiguator elevó el estado a VALID (🟢)');
+  },
+
+  testQuoteGeneratorHtml() {
+    const testPedido = {
+      name: 'Pedido Prueba',
+      date: new Date().toISOString(),
+      items: [{ sku: 'P-01', marca: 'AULA', modelo: 'F75', color: 'Blue', qty: 2, pvp: 50.0, pvpArs: 70000, subPvp: 100.0 }],
+      totals: { facturacion: 100.0, facturacionArs: 140000, tipoCambio: 1400, qty: 2 }
+    };
+    let opened = false;
+    const origOpen = window.open;
+    window.open = (url, name) => { opened = true; return { document: { write: () => {}, close: () => {} } }; };
+
+    QuoteGenerator.generatePrintableQuote(testPedido);
+    window.open = origOpen;
+
+    this.assert(opened, 'QuoteGenerator generó y abrió exitosamente la ventana imprimible de cotización');
   }
 };
 
