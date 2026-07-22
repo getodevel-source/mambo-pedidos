@@ -83,7 +83,7 @@
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span style="color: var(--primary); font-weight: 600;">v1.0.0</span>
+      <span style="color: var(--primary); font-weight: 600;">v1.1.0</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -708,6 +708,90 @@
 <script src="js/app.js"></script>
 <script src="js/updater.js"></script>
 <script src="js/tests.js"></script>
+
+<script>
+  /* ============================================================
+     PREMIUM UI MICRO-ANIMATIONS — Mambo Pedidos v1.1.0
+     ============================================================ */
+
+  // Animated number counter for KPI stat values
+  function animateCounter(el, targetRaw) {
+    if (!el) return;
+    const text = String(targetRaw);
+    const hasPrefix = text.startsWith('$');
+    const hasSuffix = text.endsWith('%') || text.endsWith(' u') || text.endsWith(' sku') || text.endsWith(' marcas');
+    const numStr = text.replace(/[^0-9.,]/g, '');
+    const num = parseFloat(numStr.replace(',', '.'));
+    if (isNaN(num) || num === 0) { el.textContent = targetRaw; return; }
+
+    const suffix = hasSuffix ? text.slice(numStr.length) : '';
+    const prefix = hasPrefix ? '$' : '';
+    const duration = 600;
+    const steps = 30;
+    const stepTime = duration / steps;
+    let current = 0;
+    const increment = num / steps;
+    const isFloat = numStr.includes('.') || numStr.includes(',');
+    const decimals = isFloat ? 2 : 0;
+
+    el.style.animation = 'countUp 0.4s cubic-bezier(0.16,1,0.3,1) both';
+    const interval = setInterval(() => {
+      current = Math.min(current + increment, num);
+      const display = current.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      el.textContent = `${prefix}${display}${suffix}`;
+      if (current >= num) clearInterval(interval);
+    }, stepTime);
+  }
+
+  // Patch stat value updates to run the counter animation
+  const _origSetTextContent = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent')?.set;
+  if (_origSetTextContent) {
+    const statValueEls = new WeakSet();
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.stat-value').forEach(el => statValueEls.add(el));
+    });
+  }
+
+  // Helper: animate all .stat-value elements when their content changes
+  window.updateStatValue = function(id, value) {
+    const el = document.getElementById(id);
+    if (el) animateCounter(el, value);
+  };
+
+  // Nav ripple effect on click
+  document.addEventListener('click', function(e) {
+    const navItem = e.target.closest('.nav-item');
+    if (!navItem) return;
+    const rect = navItem.getBoundingClientRect();
+    navItem.style.setProperty('--x', ((e.clientX - rect.left) / rect.width * 100) + '%');
+    navItem.style.setProperty('--y', ((e.clientY - rect.top) / rect.height * 100) + '%');
+  });
+
+  // Modal entrance animations — patch all modal open functions
+  const _patchModalOpen = () => {
+    document.querySelectorAll('[id$="Modal"]').forEach(modal => {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+          if (m.attributeName === 'style' || m.attributeName === 'class') {
+            const isVisible = modal.style.display !== 'none' && modal.style.display !== '';
+            if (isVisible) {
+              const inner = modal.querySelector('div[style*="background"], div[style*="border-radius"], .modal-inner');
+              if (inner && !inner.dataset.animated) {
+                inner.dataset.animated = '1';
+                inner.style.animation = 'modalIn 0.28s cubic-bezier(0.16,1,0.3,1) both';
+                setTimeout(() => { delete inner.dataset.animated; inner.style.animation = ''; }, 400);
+              }
+            }
+          }
+        });
+      });
+      observer.observe(modal, { attributes: true });
+    });
+  };
+
+  document.addEventListener('DOMContentLoaded', _patchModalOpen);
+  setTimeout(_patchModalOpen, 1000); // Re-run after dynamic content loads
+</script>
 </body>
 </html>
 
