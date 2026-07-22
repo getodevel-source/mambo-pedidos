@@ -243,22 +243,48 @@ async function processFiles(files) {
   if (!files.length) return;
   showProgress(0);
   let totalProducts = 0;
+  let skippedTotal = 0;
+
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     showProgress(((i) / files.length) * 100);
     try {
-      let addedItems = [];
+      let incoming = [];
       if (f.name.toLowerCase().endsWith('.pdf')) {
         const res = await PdfParser.processPdfFile(f, catalog.length);
-        addedItems = res.products;
+        incoming = res.products;
       } else if (f.name.toLowerCase().endsWith('.csv')) {
-        addedItems = await FileImporter.processCsvFile(f, catalog);
+        incoming = await FileImporter.processCsvFile(f, catalog);
       } else {
-        addedItems = await FileImporter.processExcelFile(f, catalog);
+        incoming = await FileImporter.processExcelFile(f, catalog);
       }
-      catalog.push(...addedItems);
-      totalProducts += addedItems.length;
-      toast('➕ ' + addedItems.length + ' productos de ' + f.name.substring(0, 30), 'success');
+
+      // Desduplicación Inteligente
+      const unique = [];
+      for (const item of incoming) {
+        const isDuplicate = catalog.some(c => 
+          (c.sku && item.sku && c.sku === item.sku) ||
+          (c.marca.toLowerCase().trim() === item.marca.toLowerCase().trim() &&
+           c.modelo.toLowerCase().trim() === item.modelo.toLowerCase().trim() &&
+           (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim() &&
+           Math.abs(c.fob - item.fob) < 0.01)
+        );
+
+        if (!isDuplicate) {
+          unique.push(item);
+        } else {
+          skippedTotal++;
+        }
+      }
+
+      catalog.push(...unique);
+      totalProducts += unique.length;
+
+      if (unique.length > 0) {
+        toast('➕ ' + unique.length + ' productos nuevos de ' + f.name.substring(0, 30), 'success');
+      } else {
+        toast('ℹ️ ' + f.name.substring(0, 25) + ': Ítems ya existentes en el catálogo', 'info');
+      }
     } catch (err) {
       console.error('Error procesando ' + f.name, err);
       toast('❌ ' + f.name + ': ' + err.message, 'error');
@@ -269,7 +295,9 @@ async function processFiles(files) {
   if (totalProducts > 0) {
     showCatalogContent();
     renderCatalog();
-    toast('✅ ' + totalProducts + ' productos cargados en total', 'success');
+    toast('✅ ' + totalProducts + ' productos nuevos cargados' + (skippedTotal > 0 ? ' (' + skippedTotal + ' duplicados ignorados)' : ''), 'success');
+  } else if (skippedTotal > 0) {
+    toast('ℹ️ Todos los productos ya existían en el catálogo (' + skippedTotal + ' duplicados ignorados)', 'info');
   }
 }
 

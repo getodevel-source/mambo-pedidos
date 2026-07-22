@@ -24,6 +24,7 @@ const Tests = {
     this.testDualCurrency();
     this.testZeroCosts();
     this.testLatamDecimalFormat();
+    this.test8BitDoBrand();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -101,6 +102,14 @@ const Tests = {
 
     const valResult = Validations.validateField('fob', '45,50');
     this.assert(valResult.valid && valResult.value === 45.5, 'Validación acepta y convierte FOB con coma ("45,50")');
+  },
+
+  test8BitDoBrand() {
+    const brand = PdfParser.detectBrandFromTextLine('8BitDo Ultimate C 2.4G Controller Black');
+    this.assert(brand === '8BitDo', 'Detección correcta de la marca 8BitDo en línea de producto');
+
+    const cat = PdfParser.guessCategory('8BitDo Ultimate Controller', 'Wireless');
+    this.assert(cat === 'CONTROLLER', 'Clasificación correcta de categoría CONTROLLER para mandos 8BitDo');
   }
 };
 
