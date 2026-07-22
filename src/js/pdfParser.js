@@ -148,8 +148,12 @@ const PdfParser = {
                 }
 
                 if (visiblePixels >= 10) {
-                  const dataUrl = canvas.toDataURL('image/png');
-                  pageImages.push({ pageNum, y, x, width: imgObj.width, height: imgObj.height, dataUrl });
+                  let finalCanvas = canvas;
+                  if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.cropProductWithVision) {
+                    finalCanvas = await AiDisambiguator.cropProductWithVision(canvas, ctx);
+                  }
+                  const dataUrl = finalCanvas.toDataURL('image/png');
+                  pageImages.push({ pageNum, y, x, width: finalCanvas.width, height: finalCanvas.height, dataUrl });
                 }
               }
             }

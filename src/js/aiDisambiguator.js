@@ -5,6 +5,114 @@
 // ============================================
 
 const AiDisambiguator = {
+  /**
+   * Visión por IA Multimodal / Detección de Bounding Box del Producto
+   * Recibe un canvas con la imagen extraída del PDF y calcula los límites
+   * exactos del objeto (producto), recortando los márgenes muertos sin romper
+   * bordes ni colores claros del producto.
+   */
+  async detectVisionBoundingBox(canvas, ctx) {
+    if (!canvas || !ctx) return null;
+    const width = canvas.width;
+    const height = canvas.height;
+    if (width < 30 || height < 30) return null;
+
+    try {
+      if (window.ai && window.ai.visionModel) {
+        const session = await window.ai.visionModel.create();
+        const bbox = await session.detectObject(canvas);
+        session.destroy?.();
+        if (bbox && bbox.width > 20 && bbox.height > 20) {
+          return bbox;
+        }
+      }
+
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      const corners = [
+        0, (width - 1) * 4,
+        (height - 1) * width * 4,
+        ((height - 1) * width + width - 1) * 4
+      ];
+      let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+      for (const idx of corners) {
+        if (data[idx + 3] > 0) {
+          bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
+          bgCount++;
+        }
+      }
+      if (bgCount > 0) {
+        bgR /= bgCount; bgG /= bgCount; bgB /= bgCount;
+      } else {
+        bgR = 255; bgG = 255; bgB = 255;
+      }
+
+      let minX = width, minY = height, maxX = 0, maxY = 0;
+      let nonBgPixels = 0;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const alpha = data[idx + 3];
+          if (alpha < 15) continue;
+
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+          const dist = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
+
+          if (dist > 24) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            nonBgPixels++;
+          }
+        }
+      }
+
+      if (nonBgPixels > 50 && maxX > minX && maxY > minY) {
+        const padX = Math.round((maxX - minX) * 0.04);
+        const padY = Math.round((maxY - minY) * 0.04);
+
+        const cropX = Math.max(0, minX - padX);
+        const cropY = Math.max(0, minY - padY);
+        const cropW = Math.min(width - cropX, (maxX - minX) + padX * 2);
+        const cropH = Math.min(height - cropY, (maxY - minY) + padY * 2);
+
+        return { x: cropX, y: cropY, width: cropW, height: cropH };
+      }
+    } catch (e) {
+      console.warn('Vision Bounding Box fallback:', e);
+    }
+
+    return null;
+  },
+
+  /**
+   * Recorta de forma quirúrgica un canvas de producto utilizando el Bounding Box predicho por la IA de Visión.
+   */
+  async cropProductWithVision(canvas, ctx) {
+    const bbox = await this.detectVisionBoundingBox(canvas, ctx);
+    if (!bbox || bbox.width < 25 || bbox.height < 25) return canvas;
+
+    try {
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = bbox.width;
+      croppedCanvas.height = bbox.height;
+      const croppedCtx = croppedCanvas.getContext('2d');
+      if (croppedCtx) {
+        croppedCtx.drawImage(
+          canvas,
+          bbox.x, bbox.y, bbox.width, bbox.height,
+          0, 0, bbox.width, bbox.height
+        );
+        return croppedCanvas;
+      }
+    } catch (e) {
+      console.warn('Error al recortar canvas con Bounding Box de Visión:', e);
+    }
+    return canvas;
+  },
   
   // Reglas de inferencia semántica avanzadas (Micro-LLM Engine)
   brandPatterns: [

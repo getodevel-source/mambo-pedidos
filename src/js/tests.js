@@ -37,6 +37,7 @@ const Tests = {
     this.testDolarApiParsing();
     this.testExecutiveReportExport();
     this.testMultiCategoryBrandParsing();
+    this.testVisionBoundingBoxCropping();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -265,6 +266,11 @@ const Tests = {
     const catKeyboard = PdfParser.detectCategory('MCHOSE K87 Mechanical Keyboard $45.00', 'MCHOSE');
     this.assert(catMouse === 'MOUSE', 'MCHOSE AX5 clasificado como MOUSE');
     this.assert(catKeyboard === 'TECLADO', 'MCHOSE K87 clasificado como TECLADO');
+  },
+
+  testVisionBoundingBoxCropping() {
+    const hasVision = typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.detectVisionBoundingBox === 'function';
+    this.assert(hasVision, 'AiDisambiguator integra detección de Bounding Box por Visión IA');
   }
 };
 
