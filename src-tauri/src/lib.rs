@@ -133,7 +133,7 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         } else {
             std::process::Command::new(&temp_path)
-                .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"])
+                .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/REINSTALL", "/NOUNINSTALL"])
                 .spawn()
                 .map_err(|e| e.to_string())?;
         }
