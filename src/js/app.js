@@ -1079,9 +1079,172 @@ function runSensitivitySimulation() {
   body.innerHTML = html;
 }
 
-function triggerImageUpload() {
-  const input = document.getElementById('productImageFileInput');
-  if (input) input.click();
+let liveDolarData = null;
+
+async function fetchLiveDolarRates(userInitiated = false) {
+  if (userInitiated) toast('🔄 Consultando DólarAPI en vivo...', 'info');
+  try {
+    const res = await fetch('https://dolarapi.com/v1/dolares', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    liveDolarData = {};
+    data.forEach(item => {
+      liveDolarData[item.casa] = item;
+    });
+
+    renderDolarBadges();
+    if (userInitiated) toast('✅ Cotizaciones Dólar actualizadas', 'success');
+  } catch (err) {
+    console.warn('Error al obtener cotizaciones de dólar:', err);
+    if (userInitiated) toast('⚠️ No se pudo conectar con la API de Dólar', 'error');
+  }
+}
+
+function renderDolarBadges() {
+  if (!liveDolarData) return;
+  const badgeList = document.getElementById('dolarRatesBadgeList');
+  if (!badgeList) return;
+
+  const mayorista = liveDolarData.mayorista?.venta || liveDolarData.mayorista?.compra;
+  const oficial = liveDolarData.oficial?.venta;
+  const blue = liveDolarData.blue?.venta;
+  const mep = liveDolarData.bolsa?.venta;
+  const cripto = liveDolarData.cripto?.venta;
+
+  let html = '';
+  if (mayorista) html += `<span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #fff;" title="Click para aplicar $${mayorista} ARS">🏛️ Mayorista: $${Math.round(mayorista)}</span>`;
+  if (oficial) html += `<span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #fff;" title="Click para aplicar $${oficial} ARS">🏢 Oficial: $${Math.round(oficial)}</span>`;
+  if (blue) html += `<span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #38bdf8;" title="Click para aplicar $${blue} ARS">💙 Blue: $${Math.round(blue)}</span>`;
+  if (mep) html += `<span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #a5b4fc;" title="Click para aplicar $${mep} ARS">📈 MEP: $${Math.round(mep)}</span>`;
+  if (cripto) html += `<span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #34d399;" title="Click para aplicar $${cripto} ARS">⚡ Cripto: $${Math.round(cripto)}</span>`;
+
+  badgeList.innerHTML = html;
+}
+
+function applyDolarRate(key) {
+  if (!liveDolarData || !liveDolarData[key]) {
+    fetchLiveDolarRates(true);
+    return;
+  }
+  const val = liveDolarData[key].venta || liveDolarData[key].compra;
+  if (!val) return;
+
+  const tcInput = document.getElementById('cTasaCambio');
+  if (tcInput) {
+    tcInput.value = Math.round(val);
+    recalc();
+    toast(`💵 Tasa de Cambio aplicada: Dólar ${key.toUpperCase()} ($${Math.round(val)} ARS)`, 'success');
+  }
+}
+
+function syncDescuentoNegociado(val) {
+  const pct = parseFloat(val) || 0;
+  const label = document.getElementById('cDescuentoNegociadoVal');
+  if (label) label.textContent = `${pct}%`;
+
+  if (currentPedido && currentPedido.items) {
+    let origFobTotal = 0;
+    let realFobTotal = 0;
+    currentPedido.items.forEach(i => {
+      if (i.fobOriginal === undefined) i.fobOriginal = i.fob;
+      i.fob = i.fobOriginal * (1 - (pct / 100));
+      origFobTotal += i.fobOriginal * (i.qty || 1);
+      realFobTotal += i.fob * (i.qty || 1);
+    });
+
+    const diffSavings = origFobTotal - realFobTotal;
+    const badge = document.getElementById('negotiationSavingsBadge');
+    if (badge) {
+      if (pct > 0) {
+        badge.innerHTML = `🤝 Ahorro por Negociación: <strong>-$${Math.round(diffSavings)} USD</strong> (${pct}% off list)`;
+        badge.style.background = 'rgba(16,185,129,0.2)';
+      } else {
+        badge.textContent = '🤝 Sin descuento negociado';
+        badge.style.background = 'rgba(16,185,129,0.15)';
+      }
+    }
+  }
+  recalc();
+}
+
+function openBreakEvenModal() {
+  if (!currentPedido || !currentPedido.items || !currentPedido.items.length) {
+    toast('Armá o abrí un pedido para calcular el punto de equilibrio', 'error');
+    return;
+  }
+  const modal = document.getElementById('breakEvenModal');
+  if (modal) modal.style.display = 'flex';
+  runBreakEvenCalculation();
+}
+
+function closeBreakEvenModal() {
+  const modal = document.getElementById('breakEvenModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function runBreakEvenCalculation() {
+  if (!currentPedido || !currentPedido.items || !currentPedido.items.length) return;
+
+  const alquiler = parseFloat(document.getElementById('beAlquiler')?.value) || 0;
+  const sueldos = parseFloat(document.getElementById('beSueldos')?.value) || 0;
+  const servicios = parseFloat(document.getElementById('beServicios')?.value) || 0;
+  const publicidad = parseFloat(document.getElementById('bePublicidad')?.value) || 0;
+
+  const totalFixedCostsUsd = alquiler + sueldos + servicios + publicidad;
+
+  const t = currentPedido.totals || {};
+  const totalQty = currentPedido.items.reduce((sum, i) => sum + (i.qty || 0), 0);
+  const netProfitUsd = t.margen || 0;
+  const avgProfitPerUnitUsd = totalQty > 0 ? (netProfitUsd / totalQty) : 0;
+
+  const unitsNeeded = avgProfitPerUnitUsd > 0 ? Math.ceil(totalFixedCostsUsd / avgProfitPerUnitUsd) : 0;
+  const totalFactNeededUsd = unitsNeeded * (totalQty > 0 ? (t.facturacion / totalQty) : 0);
+
+  const tc = parseFloat(document.getElementById('cTasaCambio')?.value) || 1400;
+
+  const body = document.getElementById('breakEvenResultsBody');
+  if (!body) return;
+
+  let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px; margin-bottom: 20px;">`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Gastos Fijos Mensuales</div>
+    <div style="font-size: 18px; font-weight: 800; color: #f87171;">$${totalFixedCostsUsd.toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: var(--text-muted);">ARS $${Math.round(totalFixedCostsUsd * tc).toLocaleString()}</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Ganancia Limpia / Unidad</div>
+    <div style="font-size: 18px; font-weight: 800; color: #34d399;">$${avgProfitPerUnitUsd.toFixed(2)} USD</div>
+    <div style="font-size: 11px; color: var(--text-muted);">Margen promedio por producto</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Unidades para Equilibrio</div>
+    <div style="font-size: 18px; font-weight: 800; color: #38bdf8;">${unitsNeeded} unidades</div>
+    <div style="font-size: 11px; color: #34d399;">Punto de Equilibrio (0% pérdida)</div>
+  </div>`;
+
+  html += `</div>`;
+
+  html += `<div class="card" style="padding: 14px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 8px;">`;
+  html += `<div style="font-weight: 800; font-size: 14px; color: #fff; margin-bottom: 4px;">🎯 Resumen de Operación</div>`;
+  html += `<div style="font-size: 13px; color: var(--text-muted);">Para cubrir tus <strong>$${totalFixedCostsUsd} USD</strong> de gastos fijos este mes, necesitás vender un total de <strong>${unitsNeeded} unidades</strong> (equivalente a una facturación de <strong>$${Math.round(totalFactNeededUsd).toLocaleString()} USD</strong> o <strong>$${Math.round(totalFactNeededUsd * tc).toLocaleString()} ARS</strong>).</div>`;
+  html += `</div>`;
+
+  body.innerHTML = html;
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  } else {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }
 }
 
 function handleProductImageFile(e) {

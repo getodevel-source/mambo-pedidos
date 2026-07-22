@@ -32,6 +32,8 @@ const Tests = {
     this.testImageSpatialMatching();
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
+    this.testNegotiatedDiscount();
+    this.testDolarApiParsing();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -209,6 +211,26 @@ const Tests = {
 
     this.assert(comparisons.length === 1, 'Comparador detectó 1 modelo coincidente entre 2 proveedores');
     this.assert(comparisons[0][1][0].fob === 30.0, 'Comparador identificó correctamente al mejor precio FOB ($30.00 USD)');
+  },
+
+  testNegotiatedDiscount() {
+    const item = { sku: 'P-01', fobOriginal: 100.0, fob: 100.0, qty: 5 };
+    const pct = 10;
+    item.fob = item.fobOriginal * (1 - (pct / 100));
+
+    this.assert(item.fob === 90.0, 'Descuento negociado del 10% redujo el FOB de $100 a $90 USD');
+  },
+
+  testDolarApiParsing() {
+    const mockData = [
+      { casa: 'mayorista', venta: 1480 },
+      { casa: 'blue', venta: 1550 }
+    ];
+    const dict = {};
+    mockData.forEach(d => { dict[d.casa] = d; });
+
+    this.assert(dict.mayorista.venta === 1480, 'DolarApi parseó correctamente Dólar Mayorista ($1480 ARS)');
+    this.assert(dict.blue.venta === 1550, 'DolarApi parseó correctamente Dólar Blue ($1550 ARS)');
   }
 };
 

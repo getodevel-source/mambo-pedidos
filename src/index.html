@@ -76,10 +76,14 @@
     </div>
   </div>
 
+  <div style="padding: 0 20px 8px 20px;">
+    <button class="btn btn-sm" style="width: 100%; justify-content: center; font-size: 11px; background: rgba(255,255,255,0.06); color: var(--text-muted); border: 1px solid var(--border);" onclick="toggleFullscreen()">⛶ Pantalla Completa</button>
+  </div>
+
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span style="color: var(--primary); font-weight: 600;">v0.8.0</span>
+      <span style="color: var(--primary); font-weight: 600;">v0.9.0</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -356,6 +360,34 @@
           </div>
           <div class="cost"><label>Tipo Cambio ($/USD) <span class="info-tooltip" data-tooltip="Cotización del dólar para calcular importes equivalentes en Pesos ARS.">?</span></label><input type="number" id="cTasaCambio" value="1400" onchange="recalc()"></div>
         </div>
+
+        <!-- Barra de Cotización Dólar en Vivo (DolarApi) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 8px 12px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #a5b4fc;">
+            <span>🌐 Cotizaciones Dólar Argentina:</span>
+            <span id="dolarRatesBadgeList" style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">🏛️ Mayorista: ...</span>
+              <span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">🏢 Oficial: ...</span>
+              <span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">💙 Blue: ...</span>
+              <span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">📈 MEP: ...</span>
+              <span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">⚡ Cripto: ...</span>
+            </span>
+          </div>
+          <button class="btn btn-sm" onclick="fetchLiveDolarRates(true)" style="font-size: 11px; padding: 3px 10px; background: rgba(99,102,241,0.3); color: #fff;">🔄 Actualizar Dólar</button>
+        </div>
+
+        <!-- Barra de Control de Descuento Negociado & Punto de Equilibrio -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 14px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px;">
+            <span style="font-size: 12px; font-weight: 800; color: #34d399;">🤼 Descuento Negociado:</span>
+            <input type="range" id="cDescuentoNegociadoRange" min="0" max="40" step="1" value="0" style="flex: 1; accent-color: #34d399; cursor: pointer;" oninput="syncDescuentoNegociado(this.value)">
+            <span id="cDescuentoNegociadoVal" style="font-size: 13px; font-weight: 800; color: #fff; min-width: 45px;">0%</span>
+          </div>
+          <div id="negotiationSavingsBadge" style="font-size: 12px; font-weight: 800; color: #34d399; background: rgba(16,185,129,0.15); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(16,185,129,0.4);">
+            🤝 Sin descuento negociado
+          </div>
+          <button class="btn btn-sm" style="background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); font-size: 11px;" onclick="openBreakEvenModal()">💵 Punto de Equilibrio</button>
+        </div>
       </div>
 
       <div class="table-wrap">
@@ -629,6 +661,41 @@
   </div>
 </div>
 
+<!-- Modal Calculadora de Punto de Equilibrio (Break-Even Engine) -->
+<div class="modal-backdrop" id="breakEvenModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeBreakEvenModal()">
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 750px; max-height: 85vh; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.7);" onclick="event.stopPropagation()">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+      <div>
+        <div style="font-size: 18px; font-weight: 800; color: #fff;">💵 Calculadora de Punto de Equilibrio (Break-Even)</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Calculá cuántas unidades necesitás vender por mes para cubrir el 100% de tus costos fijos</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="closeBreakEvenModal()">❌ Cerrar</button>
+    </div>
+
+    <!-- Controles de Gastos Fijos -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px;">
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Alquiler / Depósito (USD):</label>
+        <input type="number" id="beAlquiler" value="300" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Sueldos / Empleados (USD):</label>
+        <input type="number" id="beSueldos" value="500" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Servicios y Sistema (USD):</label>
+        <input type="number" id="beServicios" value="100" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Publicidad / Mkt (USD):</label>
+        <input type="number" id="bePublicidad" value="200" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
+      </div>
+    </div>
+
+    <div id="breakEvenResultsBody" style="overflow-y: auto; max-height: 50vh;"></div>
+  </div>
+</div>
+
 <!-- Application Modules -->
 <script src="validator.js"></script>
 <script src="js/calculator.js"></script>
@@ -642,6 +709,7 @@
 <script src="js/tests.js"></script>
 </body>
 </html>
+
 
 
 
