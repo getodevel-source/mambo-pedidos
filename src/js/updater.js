@@ -4,7 +4,7 @@
 // ============================================
 
 const AppUpdater = {
-  CURRENT_VERSION: '0.5.1',
+  CURRENT_VERSION: '0.5.2',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestReleaseUrl: null,
   isChecking: false,
@@ -74,10 +74,17 @@ const AppUpdater = {
     const verEl = document.getElementById('updateModalVersion');
     const notesEl = document.getElementById('updateModalNotes');
     const btnEl = document.getElementById('updateModalBtn');
+    const linkAnchor = document.getElementById('updateModalLinkAnchor');
+
+    const downloadUrl = this.latestReleaseUrl || `${this.REPO_URL}/releases/tag/v${version}`;
 
     if (verEl) verEl.textContent = `Versión v${version} disponible (tenés la v${this.CURRENT_VERSION})`;
     if (notesEl) notesEl.textContent = notes || 'Se publicaron arreglos y optimizaciones.';
     if (btnEl) btnEl.textContent = `📥 Descargar v${version}`;
+    if (linkAnchor) {
+      linkAnchor.textContent = downloadUrl;
+      linkAnchor.href = downloadUrl;
+    }
 
     if (modal) {
       modal.style.display = 'flex';
@@ -108,18 +115,8 @@ const AppUpdater = {
       return;
     }
 
-    // Intento 3: Anchor click & location fallback
-    try {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e) {
-      window.location.href = url;
-    }
+    // Intento 3: Direct location navigation (forces Webview2 download or navigation)
+    window.location.href = url;
   },
 
   downloadLatest() {
@@ -130,6 +127,7 @@ const AppUpdater = {
 };
 
 window.AppUpdater = AppUpdater;
+
 
 
 
