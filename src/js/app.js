@@ -1111,7 +1111,7 @@ function renderDolarBadges() {
   const mayorista = liveDolarData.mayorista?.venta || liveDolarData.mayorista?.compra;
   const oficial = liveDolarData.oficial?.venta;
   const blue = liveDolarData.blue?.venta;
-  const mep = liveDolarData.bolsa?.venta;
+  const mep = liveDolarData.bolsa?.venta || liveDolarData.mep?.venta;
   const cripto = liveDolarData.cripto?.venta;
 
   let html = '';
