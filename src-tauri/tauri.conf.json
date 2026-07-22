@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mambo Pedidos",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "identifier": "com.mambo.pedidos",
   "build": {
     "beforeDevCommand": "",
@@ -45,8 +45,16 @@
     "shortDescription": "Mambo Pedidos",
     "longDescription": "Gestor de catalogos y pedidos para perifericos gamer. Carga PDFs, Excels o CSVs, arma pedidos con calculo de rentabilidad automatico."
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBOUFCQ0Y5NkExQjBBNUQKUldSZENodHErYnlhNnEzd2ZSRGxaZFE3cjlWWVNjb0hYaVU5S1ZGdHBVVVVhU0RZSjdaVnNyYVEK",
+      "endpoints": [
+        "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json"
+      ]
+    }
+  }
 }
+
 
 
 

@@ -1,5 +1,5 @@
 const AppUpdater = {
-  CURRENT_VERSION: '0.7.0',
+  CURRENT_VERSION: '0.7.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestReleaseUrl: null,
   latestVersion: null,
@@ -167,8 +167,49 @@ const AppUpdater = {
     const btn = document.getElementById('updateModalBtn');
 
     if (progressWrap) progressWrap.style.display = 'block';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Descargando...'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Instalando en segundo plano...'; }
 
+    // Intento 1: Tauri 2.0 Native Auto-Updater (Descarga silenciosa in-app y reinicio automático)
+    try {
+      const updater = window.__TAURI__?.updater || window.__TAURI_PLUGIN_UPDATER__;
+      if (updater && typeof updater.check === 'function') {
+        const update = await updater.check();
+        if (update && update.available) {
+          let downloaded = 0;
+          let contentLength = 0;
+          await update.downloadAndInstall((event) => {
+            switch (event.event) {
+              case 'Started':
+                contentLength = event.data.contentLength || 0;
+                if (progressText) progressText.textContent = 'Iniciando descarga nativa...';
+                break;
+              case 'Progress':
+                downloaded += event.data.chunkLength || 0;
+                if (contentLength > 0) {
+                  const pct = Math.round((downloaded / contentLength) * 100);
+                  if (progressBar) progressBar.style.width = `${pct}%`;
+                  if (progressText) progressText.textContent = `Actualizando en segundo plano... ${pct}% (${(downloaded / (1024*1024)).toFixed(1)} MB / ${(contentLength / (1024*1024)).toFixed(1)} MB)`;
+                } else {
+                  if (progressText) progressText.textContent = `Descargando... (${(downloaded / (1024*1024)).toFixed(1)} MB)`;
+                }
+                break;
+              case 'Finished':
+                if (progressText) progressText.textContent = '✅ Actualización completada. Reiniciando app...';
+                break;
+            }
+          });
+          toast('⚡ Instalación nativa completada. Reiniciando Mambo Pedidos...', 'success');
+          if (typeof update.relaunch === 'function') {
+            await update.relaunch();
+          }
+          return;
+        }
+      }
+    } catch (nativeErr) {
+      console.warn('Tauri native updater error, falling back to direct stream:', nativeErr);
+    }
+
+    // Intento 2: Direct Stream Downloader Fallback
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
@@ -223,6 +264,7 @@ const AppUpdater = {
 };
 
 window.AppUpdater = AppUpdater;
+
 
 
 

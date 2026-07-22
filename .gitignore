@@ -41,3 +41,8 @@ src-tauri/.cargo/
 # Node
 npm-debug.log
 .pnpm-store/
+
+# Keys & Secrets
+tauri-key.key*
+*.key
+
