@@ -52,7 +52,7 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Setup signing key file (Windows)
+      - name: Setup signing key (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
@@ -69,11 +69,10 @@ jobs:
                   }
               } catch {}
           }
-          $keyPath = "$env:RUNNER_TEMP\minisign.key"
-          [System.IO.File]::WriteAllText($keyPath, $keyText, [System.Text.Encoding]::UTF8)
-          "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "TAURI_SIGNING_PRIVATE_KEY<<EOF`n$keyText`nEOF`n", $utf8NoBom)
 
-      - name: Setup signing key file (Unix)
+      - name: Setup signing key (Unix)
         if: matrix.platform != 'windows-latest'
         shell: bash
         run: |
@@ -92,9 +91,11 @@ jobs:
                   keyText="$secret"
               fi
           fi
-          keyPath="$RUNNER_TEMP/minisign.key"
-          printf '%s\n' "$keyText" > "$keyPath"
-          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" >> "$GITHUB_ENV"
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF"
+            echo "$keyText"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Resolve tag name
         id: tag
@@ -112,7 +113,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PATH }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ steps.tag.outputs.name }}
