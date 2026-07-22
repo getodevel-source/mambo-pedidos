@@ -52,46 +52,11 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Setup signing key (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $rawSecret = @"
-          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          "@.Trim()
-          try {
-              $bytes = [System.Convert]::FromBase64String($rawSecret)
-              $decodedText = [System.Text.Encoding]::UTF8.GetString($bytes)
-              if ($decodedText.StartsWith("untrusted comment:")) {
-                  $base64Key = $rawSecret -replace '\s',''
-              } else {
-                  $base64Key = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($rawSecret))
-              }
-          } catch {
-              $base64Key = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($rawSecret))
-          }
-          "TAURI_SIGNING_PRIVATE_KEY=$base64Key" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Setup signing key (Unix)
-        if: matrix.platform != 'windows-latest'
+      - name: Setup signing key
         shell: bash
         run: |
-          secret=$(cat << 'EOF'
-          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          EOF
-          )
-          secret=$(echo "$secret" | tr -d '\r\n ')
-          decoded=$(echo "$secret" | base64 --decode 2>/dev/null || echo "")
-          if [[ "$decoded" == untrusted\ comment:* ]]; then
-              base64Key="$secret"
-          else
-              rawSecret=$(cat << 'EOF'
-              ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-              EOF
-              )
-              base64Key=$(printf '%s' "$rawSecret" | base64 | tr -d '\r\n ')
-          fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$base64Key" >> "$GITHUB_ENV"
+          key=$(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" | tr -d '\r\n ')
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Resolve tag name
         id: tag

@@ -48,7 +48,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBOUFCQ0Y5NkExQjBBNUQKUldSZENodHErYnlhNnEzd2ZSRGxaZFE3cjlWWVNjb0hYaVU5S1ZGdHBVVVVhU0RZSjdaVnNyYVEK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyODFBQTg1MDg0OUZCRQpSV1MrbjRSUXFCb29BcCt6RVRlUXNTYVNIRFNIQjV4Tjk3dnVpRUZ2VytYYnVZS3liTXNmVytxNAo=",
       "endpoints": [
         "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json"
       ]
