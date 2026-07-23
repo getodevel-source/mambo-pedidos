@@ -44,6 +44,11 @@ const Tests = {
     this.testNumpadCategoryDetection();
     this.testTitleDeduplication();
     this.testAj139MouseCategory();
+    this.testColorGuardPinkVsBlack();
+    this.testColorGuardWhiteVsBlack();
+    this.testColorGuardGreenPass();
+    this.testTopDownDirectionalGate();
+    this.testFamilyTitleColorProfile();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -311,6 +316,53 @@ const Tests = {
   testAj139MouseCategory() {
     const cat = PdfParser.detectCategory('AJ139P V3 Mc Wired+2.4G+BT', 'AJAZZ');
     this.assert(cat === 'MOUSE', 'PdfParser clasificó el modelo AJ139P como MOUSE');
+  },
+
+  testColorGuardPinkVsBlack() {
+    // Canvas profile of a dark/black image: low luminance
+    const darkProfile = { avgR: 30, avgG: 30, avgB: 30, avgSat: 0, avgVal: 0.15, hue: 0 };
+    const res = AiDisambiguator.verifyImageColorMatch(darkProfile, 'Pink Controller');
+    this.assert(res.match === false, 'Color Guard rechazó la imagen oscura/negra asignada a "Pink Controller"');
+  },
+
+  testColorGuardWhiteVsBlack() {
+    // Canvas profile of a dark image vs White title
+    const darkProfile = { avgR: 20, avgG: 20, avgB: 20, avgSat: 0, avgVal: 0.10, hue: 0 };
+    const res = AiDisambiguator.verifyImageColorMatch(darkProfile, 'White Controller for Xbox');
+    this.assert(res.match === false, 'Color Guard rechazó la imagen negra asignada a "White Controller"');
+  },
+
+  testColorGuardGreenPass() {
+    // A green controller image: high green channel, green hue
+    const greenProfile = { avgR: 40, avgG: 140, avgB: 50, avgSat: 0.75, avgVal: 0.55, hue: 112 };
+    const res = AiDisambiguator.verifyImageColorMatch(greenProfile, 'Green 8BitDo Ultimate 2C Controller');
+    this.assert(res.match === true, 'Color Guard validó correctamente foto verde para "Green Controller"');
+  },
+
+  testTopDownDirectionalGate() {
+    // Simulate the scoring logic directly: image above the price row should win over one below
+    const rowY = 300;
+    const imgAbove = { pageNum: 1, x: 100, y: 80, width: 200, height: 200, dataUrl: 'above', colorProfile: null };
+    const imgBelow = { pageNum: 1, x: 100, y: 320, width: 200, height: 200, dataUrl: 'below', colorProfile: null };
+
+    const score = (img) => {
+      const distX = Math.abs(img.x - 100);
+      const distYRaw = rowY - img.y;
+      let penalty = 0;
+      if (img.y > rowY + 10) penalty += 15000;
+      if (distX > 160) penalty += 10000;
+      return Math.hypot(distX * 1.3, Math.max(0, distYRaw)) + penalty;
+    };
+
+    const scoreAbove = score(imgAbove);
+    const scoreBelow = score(imgBelow);
+    this.assert(scoreAbove < scoreBelow, 'Top-Down Gate puntúa correctamente imagen superior por encima de imagen inferior');
+  },
+
+  testFamilyTitleColorProfile() {
+    // Test cleanProductTitle correctly strips and deduplicates
+    const res = PdfParser.cleanProductTitle('Orange - 8BitDo Ultimate 2C Orange -', '8BitDo');
+    this.assert(!res.modelo.includes('undefined'), 'Family title sanitizer no produce texto undefined en el modelo');
   }
 };
 

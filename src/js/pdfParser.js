@@ -155,8 +155,13 @@ const PdfParser = {
                   if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.cropProductWithVision) {
                     finalCanvas = await AiDisambiguator.cropProductWithVision(canvas, ctx);
                   }
+                  const finalCtx = finalCanvas.getContext('2d');
+                  let colorProfile = null;
+                  if (finalCtx && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.extractCanvasColorProfile) {
+                    colorProfile = AiDisambiguator.extractCanvasColorProfile(finalCtx, finalCanvas.width, finalCanvas.height);
+                  }
                   const dataUrl = finalCanvas.toDataURL('image/png');
-                  pageImages.push({ pageNum, y, x, width: finalCanvas.width, height: finalCanvas.height, dataUrl });
+                  pageImages.push({ pageNum, y, x, width: finalCanvas.width, height: finalCanvas.height, dataUrl, colorProfile });
                 }
               }
             }
@@ -313,10 +318,36 @@ const PdfParser = {
       const detectedBrand = this.detectBrandFromTextLine(ctx.rawText, customBrands) || brandFallback || 'OTRO';
       const cat = this.detectCategory(ctx.rawText, detectedBrand);
 
-      // Sanitización profunda del título y modelo
-      const cleanTitle = this.cleanProductTitle(ctx.modelo + ' ' + ctx.variante, detectedBrand);
-      const finalModel = cleanTitle.modelo || ctx.modelo;
-      const finalVariant = cleanTitle.variante || ctx.variante;
+      // Layer 2: Sanitización profunda + Herencia de Familia para títulos truncados
+      const rawCombined = ctx.modelo + ' ' + ctx.variante;
+      const cleanTitle = this.cleanProductTitle(rawCombined, detectedBrand);
+      let finalModel = cleanTitle.modelo || ctx.modelo;
+      let finalVariant = cleanTitle.variante || ctx.variante;
+
+      // Si el modelo resultante es muy corto (solo color/variante), heredar nombre base de la familia
+      const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
+      if (finalModel.trim().length <= 18 && (COLOR_WORDS.test(finalModel.trim()) || /^[a-z\s\-]+[\-\s]*$/i.test(finalModel.trim()))) {
+        // Buscar modelo padre cercano (mismo precio aprox, misma marca, misma página) entre productos ya parseados
+        const familyBase = products
+          .filter(p => p.marca === detectedBrand && p.cat === cat)
+          .slice(-3) // Últimos 3 productos de la misma familia
+          .reverse()
+          .find(p => p.modelo && p.modelo.length > 15 && !COLOR_WORDS.test(p.modelo.trim()));
+
+        if (familyBase) {
+          // Extrae el núcleo del modelo padre sin color (ej: "8BitDo Ultimate 2C Wireless Controller")
+          const baseCore = familyBase.modelo
+            .replace(COLOR_WORDS, '')
+            .replace(/\b(pink|green|purple|orange|coffee|white|black|grey|gray|blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong)\b/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          if (baseCore.length > 8) {
+            finalVariant = (finalModel.trim() + (finalVariant ? ' ' + finalVariant : '')).trim();
+            finalModel = baseCore;
+          }
+        }
+      }
 
       const key = (detectedBrand + '|' + finalModel.substring(0, 50) + '|' + finalVariant.substring(0, 30) + '|' + usdPrice).toLowerCase();
       if (seen.has(key)) continue;
@@ -326,44 +357,57 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      // Asociación espacial de imagen 2D con Candado de Columna & Vision Guard Aspect Check
+      // Asociación espacial de imagen 2D con Top-Down Directional Anchor, Column Lock & Color Guard Check
       let matchedImg = '';
       if (allImages && allImages.length) {
         const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum && !claimedImages.has(img));
         if (pageImgs.length) {
           const rowX = rows[i].x || 0;
           const rowY = rows[i].y || 0;
+          const fullTitleText = finalModel + ' ' + finalVariant;
 
-          // Ordenar por distancia ponderada + penalización de Vision Guard por aspecto incompatible
-          pageImgs.sort((a, b) => {
-            let distA = Math.hypot((a.x - rowX) * 1.2, (a.y - rowY) * 1.0);
-            let distB = Math.hypot((b.x - rowX) * 1.2, (b.y - rowY) * 1.0);
+          // Ordenar imágenes por penalización multicapa
+          const scored = pageImgs.map(img => {
+            const distX = Math.abs(img.x - rowX);
+            const distYRaw = rowY - img.y; // Distancia vertical desde la foto (arriba) hacia la etiqueta (abajo)
 
-            // Vision Guard: penalizar imágenes cuyo aspect ratio contradiga la categoría
-            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-              const checkA = AiDisambiguator.verifyImageAspect(a.width, a.height, cat);
-              const checkB = AiDisambiguator.verifyImageAspect(b.width, b.height, cat);
-              if (!checkA.valid) distA += 1000;
-              if (!checkB.valid) distB += 1000;
+            let penalty = 0;
+
+            // Capa 1: Regla Top-Down Estricta (La foto DEBE estar arriba de la etiqueta de precio)
+            if (img.y > rowY + 10) {
+              penalty += 15000; // Foto por debajo de la etiqueta (pertenece a otra fila)
+            } else if (distYRaw > 280) {
+              penalty += 6000; // Demasiado arriba en la página
             }
 
-            return distA - distB;
+            // Capa 1: Candado de Columna X
+            if (distX > 160) {
+              penalty += 10000; // Columna diferente
+            }
+
+            // Capa 3: Vision Guard Aspect Ratio Check
+            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+              const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, cat);
+              if (!aspectCheck.valid) penalty += 8000;
+            }
+
+            // Capa 4: Color Guard Chromatic Verification (RGB/HSV)
+            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
+              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
+              if (!colorCheck.match) penalty += 12000; // Título rosa pero foto oscura/negra
+            }
+
+            const baseDist = Math.hypot(distX * 1.3, Math.max(0, distYRaw) * 1.0);
+            return { img, totalScore: baseDist + penalty, distX, distYRaw, penalty };
           });
 
-          const best = pageImgs[0];
-          const distY = Math.abs(best.y - rowY);
-          const distX = Math.abs(best.x - rowX);
+          scored.sort((a, b) => a.totalScore - b.totalScore);
+          const winner = scored[0];
 
-          // Verificar tolerancia espacial y Vision Guard
-          let isAspectOk = true;
-          if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-            const vCheck = AiDisambiguator.verifyImageAspect(best.width, best.height, cat);
-            isAspectOk = vCheck.valid;
-          }
-
-          if (distY <= 160 && distX <= 220 && isAspectOk) {
-            matchedImg = best.dataUrl;
-            claimedImages.add(best);
+          // Capa 5: Lock Checksum & Confidence Gate (< 2500 penalización total)
+          if (winner && winner.penalty < 5000 && winner.distX <= 180 && winner.distYRaw >= -25 && winner.distYRaw <= 260) {
+            matchedImg = winner.img.dataUrl;
+            claimedImages.add(winner.img);
           }
         }
       }

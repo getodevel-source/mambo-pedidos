@@ -272,6 +272,116 @@ const AiDisambiguator = {
     return { valid: true, ratio };
   },
 
+  /**
+   * Color Guard (Layer 4): Analiza el perfil cromático dominante de un canvas de producto (RGB/HSV)
+   * y verifica si concuerda con las palabras clave de color en el título del producto.
+   */
+  extractCanvasColorProfile(canvasCtx, width, height) {
+    if (!canvasCtx || !width || !height) return null;
+    try {
+      const imgData = canvasCtx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      let totalSat = 0, totalVal = 0;
+      let rSum = 0, gSum = 0, bSum = 0;
+      let nonBgCount = 0;
+
+      const step = Math.max(1, Math.floor((width * height) / 1200));
+      for (let i = 0; i < data.length; i += step * 4) {
+        const a = data[i + 3];
+        if (a < 30) continue;
+
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (r > 240 && g > 240 && b > 240) continue;
+
+        rSum += r; gSum += g; bSum += b;
+
+        const max = Math.max(r, g, b) / 255;
+        const min = Math.min(r, g, b) / 255;
+        const delta = max - min;
+
+        const sat = max === 0 ? 0 : delta / max;
+        totalSat += sat;
+        totalVal += max;
+        nonBgCount++;
+      }
+
+      if (nonBgCount === 0) return { avgR: 255, avgG: 255, avgB: 255, avgSat: 0, avgVal: 1, hue: 0 };
+
+      const avgR = rSum / nonBgCount;
+      const avgG = gSum / nonBgCount;
+      const avgB = bSum / nonBgCount;
+      const avgSat = totalSat / nonBgCount;
+      const avgVal = totalVal / nonBgCount;
+
+      let hue = 0;
+      const rN = avgR / 255, gN = avgG / 255, bN = avgB / 255;
+      const cMax = Math.max(rN, gN, bN);
+      const cMin = Math.min(rN, gN, bN);
+      const cDelta = cMax - cMin;
+      if (cDelta > 0.05) {
+        if (cMax === rN) hue = ((gN - bN) / cDelta) % 6;
+        else if (cMax === gN) hue = (bN - rN) / cDelta + 2;
+        else hue = (rN - gN) / cDelta + 4;
+        hue = Math.round(hue * 60);
+        if (hue < 0) hue += 360;
+      }
+
+      return { avgR, avgG, avgB, avgSat, avgVal, hue };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  verifyImageColorMatch(profile, titleText) {
+    if (!profile || !titleText) return { match: true, confidence: 100 };
+    const text = String(titleText).toLowerCase();
+
+    let targetColor = null;
+    if (/\b(pink|rosa|rosado)\b/i.test(text)) targetColor = 'pink';
+    else if (/\b(green|verde)\b/i.test(text)) targetColor = 'green';
+    else if (/\b(purple|wukong|violeta|morado)\b/i.test(text)) targetColor = 'purple';
+    else if (/\b(orange|naranja|coffee|brown|café|cafe)\b/i.test(text)) targetColor = 'orange';
+    else if (/\b(blue|dark blue|azul)\b/i.test(text)) targetColor = 'blue';
+    else if (/\b(white|blanco)\b/i.test(text)) targetColor = 'white';
+    else if (/\b(black|negro|dark)\b/i.test(text)) targetColor = 'black';
+    else if (/\b(grey|gray|gris)\b/i.test(text)) targetColor = 'grey';
+
+    if (!targetColor) return { match: true, confidence: 100 };
+
+    const { avgSat, avgVal, hue, avgR, avgG, avgB } = profile;
+
+    if (targetColor === 'pink') {
+      const isRedHue = (hue >= 300 || hue <= 35) && avgSat > 0.10;
+      const isHighRed = (avgR > avgG + 10) && (avgR > avgB) && avgVal > 0.40;
+      if (!isRedHue && !isHighRed && avgVal < 0.35) {
+        return { match: false, confidence: 0, reason: 'Título dice Pink pero la foto es oscura' };
+      }
+    } else if (targetColor === 'green') {
+      const isGreenHue = (hue >= 70 && hue <= 165) && avgSat > 0.10;
+      const isGreenDOM = (avgG > avgR + 10) && (avgG > avgB + 10);
+      if (!isGreenHue && !isGreenDOM) {
+        return { match: false, confidence: 0, reason: 'Título dice Green pero la foto no es verde' };
+      }
+    } else if (targetColor === 'purple') {
+      const isPurpleHue = (hue >= 235 && hue <= 325) && avgSat > 0.10;
+      const isPurpleDOM = (avgB > avgG + 10) && (avgR > avgG + 10);
+      if (!isPurpleHue && !isPurpleDOM && avgVal < 0.30) {
+        return { match: false, confidence: 0, reason: 'Título dice Purple pero la foto no coincide' };
+      }
+    } else if (targetColor === 'black') {
+      if (avgVal > 0.85 && avgSat < 0.15) {
+        return { match: false, confidence: 0, reason: 'Título dice Black pero la foto es completamente blanca' };
+      }
+    } else if (targetColor === 'white') {
+      if (avgVal < 0.35) {
+        return { match: false, confidence: 0, reason: 'Título dice White pero la foto es negra' };
+      }
+    }
+
+    return { match: true, confidence: 100 };
+  },
+
   // Consulta a la IA nativa del WebView (window.ai / Gemini Nano) con fallback a Ollama local
   async queryWebViewAi(rawText) {
     // 1. Probar window.ai (Chrome/Chromium Built-in WebAI en WebView)
