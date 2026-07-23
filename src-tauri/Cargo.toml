@@ -1,6 +1,6 @@
 [package]
 name = "mambo-pedidos"
-version = "1.3.0"
+version = "1.3.1"
 description = "Mambo Pedidos - Gestor de catalogos y pedidos"
 authors = ["Mambo"]
 edition = "2021"
@@ -26,8 +26,8 @@ reqwest = { version = "0.12", features = ["json"] }
 
 [profile.release]
 panic = "abort"
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = "thin"
 opt-level = "s"
 strip = true
 

@@ -297,18 +297,10 @@ const PdfParser = {
   parseRows(rows, brandFallback, baseLength = 0, customBrands = [], allImages = []) {
     const products = [];
     const seen = new Set();
-    const claimedImages = new Set();
 
-    // Pre-calcular clusters de columnas X por página
-    const pageXCols = {};
-    for (const r of rows) {
-      if (!pageXCols[r.pageNum]) pageXCols[r.pageNum] = [];
-      pageXCols[r.pageNum].push(r.x || 0);
-    }
-
+    // 1. Parsear todas las filas candidatas a productos
     for (let i = 0; i < rows.length; i++) {
       const rowText = rows[i].text;
-
       const usdPrice = this.extractUsdPrice(rowText);
       if (usdPrice === null) continue;
 
@@ -324,18 +316,25 @@ const PdfParser = {
       let finalModel = cleanTitle.modelo || ctx.modelo;
       let finalVariant = cleanTitle.variante || ctx.variante;
 
+      // Limpiar guiones o restos en variante (ej: "Orange -" -> "Orange", "mode" -> "3-Mode")
+      if (finalVariant) {
+        finalVariant = finalVariant
+          .replace(/[\-\s]+$/g, '')
+          .replace(/^[\-\s]+/g, '')
+          .replace(/\bmode\b/i, '3-Mode')
+          .trim();
+      }
+
       // Si el modelo resultante es muy corto (solo color/variante), heredar nombre base de la familia
       const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
       if (finalModel.trim().length <= 18 && (COLOR_WORDS.test(finalModel.trim()) || /^[a-z\s\-]+[\-\s]*$/i.test(finalModel.trim()))) {
-        // Buscar modelo padre cercano (mismo precio aprox, misma marca, misma página) entre productos ya parseados
         const familyBase = products
           .filter(p => p.marca === detectedBrand && p.cat === cat)
-          .slice(-3) // Últimos 3 productos de la misma familia
+          .slice(-3)
           .reverse()
           .find(p => p.modelo && p.modelo.length > 15 && !COLOR_WORDS.test(p.modelo.trim()));
 
         if (familyBase) {
-          // Extrae el núcleo del modelo padre sin color (ej: "8BitDo Ultimate 2C Wireless Controller")
           const baseCore = familyBase.modelo
             .replace(COLOR_WORDS, '')
             .replace(/\b(pink|green|purple|orange|coffee|white|black|grey|gray|blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong)\b/gi, '')
@@ -357,78 +356,102 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      // Asociación espacial de imagen 2D con Top-Down Directional Anchor, Column Lock & Color Guard Check
-      let matchedImg = '';
-      if (allImages && allImages.length) {
-        const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum && !claimedImages.has(img));
-        if (pageImgs.length) {
-          const rowX = rows[i].x || 0;
-          const rowY = rows[i].y || 0;
-          const fullTitleText = finalModel + ' ' + finalVariant;
-
-          // Ordenar imágenes por penalización multicapa
-          const scored = pageImgs.map(img => {
-            const distX = Math.abs(img.x - rowX);
-            const distYRaw = rowY - img.y; // Distancia vertical desde la foto (arriba) hacia la etiqueta (abajo)
-
-            let penalty = 0;
-
-            // Capa 1: Regla Top-Down Estricta (La foto DEBE estar arriba de la etiqueta de precio)
-            if (img.y > rowY + 10) {
-              penalty += 15000; // Foto por debajo de la etiqueta (pertenece a otra fila)
-            } else if (distYRaw > 280) {
-              penalty += 6000; // Demasiado arriba en la página
-            }
-
-            // Capa 1: Candado de Columna X
-            if (distX > 160) {
-              penalty += 10000; // Columna diferente
-            }
-
-            // Capa 3: Vision Guard Aspect Ratio Check
-            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-              const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, cat);
-              if (!aspectCheck.valid) penalty += 8000;
-            }
-
-            // Capa 4: Color Guard Chromatic Verification (RGB/HSV)
-            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
-              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
-              if (!colorCheck.match) penalty += 12000; // Título rosa pero foto oscura/negra
-            }
-
-            const baseDist = Math.hypot(distX * 1.3, Math.max(0, distYRaw) * 1.0);
-            return { img, totalScore: baseDist + penalty, distX, distYRaw, penalty };
-          });
-
-          scored.sort((a, b) => a.totalScore - b.totalScore);
-          const winner = scored[0];
-
-          // Capa 5: Lock Checksum & Confidence Gate (< 2500 penalización total)
-          if (winner && winner.penalty < 5000 && winner.distX <= 180 && winner.distYRaw >= -25 && winner.distYRaw <= 260) {
-            matchedImg = winner.img.dataUrl;
-            claimedImages.add(winner.img);
-          }
-        }
-      }
-
-      const rawItem = {
+      products.push({
         sku,
         cat,
         marca: detectedBrand,
         modelo: finalModel,
         variante: finalVariant,
         fob: usdPrice,
-        img: matchedImg,
-        rawText: ctx.rawText
-      };
+        img: '',
+        rawText: ctx.rawText,
+        pageNum: rows[i].pageNum,
+        x: rows[i].x || 0,
+        y: rows[i].y || 0
+      });
+    }
 
-      const evalScore = this.evaluateItemConfidence(rawItem);
-      rawItem.confidence = evalScore.confidence;
-      rawItem.status = evalScore.status;
-      rawItem.warnings = evalScore.warnings;
+    // 2. ASIGNACIÓN GLOBAL BIPARTITA DE IMÁGENES POR PÁGINA (Previene robo de fotos e índices desfasados)
+    if (allImages && allImages.length && products.length) {
+      const pageNumbers = [...new Set(products.map(p => p.pageNum))];
 
-      products.push(rawItem);
+      for (const pNum of pageNumbers) {
+        const pageProds = products.filter(p => p.pageNum === pNum);
+        const pageImgs = allImages.filter(img => img.pageNum === pNum);
+        if (!pageProds.length || !pageImgs.length) continue;
+
+        // Construir matriz de costos global [N_prods x M_imgs]
+        const costMatrix = [];
+        for (let i = 0; i < pageProds.length; i++) {
+          const p = pageProds[i];
+          const fullTitleText = p.modelo + ' ' + p.variante;
+          const rowCost = [];
+
+          for (let j = 0; j < pageImgs.length; j++) {
+            const img = pageImgs[j];
+            const distX = Math.abs(img.x - p.x);
+            const distYRaw = p.y - img.y; // Distancia desde la foto hacia la etiqueta abajo
+
+            let penalty = 0;
+
+            // Bloqueos estrictos (Hard Penalties)
+            if (img.y > p.y + 10) penalty += 50000;  // Foto por debajo de la etiqueta (Imposible)
+            if (distX > 160) penalty += 30000;       // Columna diferente (Imposible)
+
+            // Vision Guard Aspect Ratio
+            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+              const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, p.cat);
+              if (!aspectCheck.valid) penalty += 20000;
+            }
+
+            // Color Guard Chromatic Verification
+            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
+              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
+              if (!colorCheck.match) penalty += 40000; // Penalización masiva por descalce cromático (ej: Pink vs Purple)
+            }
+
+            const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
+            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty });
+          }
+          costMatrix.push(rowCost);
+        }
+
+        // Algoritmo de Asignación Bipartita Mínima Iterativa
+        const assignedProds = new Set();
+        const assignedImgs = new Set();
+
+        while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
+          let minPair = null;
+
+          for (let i = 0; i < pageProds.length; i++) {
+            if (assignedProds.has(i)) continue;
+            for (let j = 0; j < pageImgs.length; j++) {
+              if (assignedImgs.has(j)) continue;
+              const pair = costMatrix[i][j];
+              if (!minPair || pair.totalScore < minPair.totalScore) {
+                minPair = pair;
+              }
+            }
+          }
+
+          if (!minPair || minPair.totalScore >= 5000) break; // Umbral de confianza estricto
+
+          const winnerProd = pageProds[minPair.prodIdx];
+          const winnerImg = pageImgs[minPair.imgIdx];
+
+          winnerProd.img = winnerImg.dataUrl;
+          assignedProds.add(minPair.prodIdx);
+          assignedImgs.add(minPair.imgIdx);
+        }
+      }
+    }
+
+    // 3. Evaluar confianza final para cada producto
+    for (const p of products) {
+      const evalScore = this.evaluateItemConfidence(p);
+      p.confidence = evalScore.confidence;
+      p.status = evalScore.status;
+      p.warnings = evalScore.warnings;
     }
 
     return products;
@@ -533,19 +556,24 @@ const PdfParser = {
 
     let modelo = '';
     let variante = '';
-    const rawParts = [];
 
-    if (inlineParts.length > 3 && !isNoise(inlineParts)) {
-      rawParts.push(inlineParts);
+    const cleanInline = (inlineParts.length > 1 && !isNoise(inlineParts))
+      ? inlineParts.replace(/[\-\s]+$/g, '').trim()
+      : '';
+
+    if (prevLines.length > 0) {
+      // El nombre principal del modelo SIEMPRE proviene del encabezado superior (prevLines)
+      modelo = prevLines[0].substring(0, 80).trim();
+      const restLines = prevLines.slice(1);
+      const varParts = [...restLines, cleanInline].filter(Boolean);
+      variante = varParts.join(' ').replace(/\s+/g, ' ').trim().substring(0, 80);
+    } else if (cleanInline) {
+      modelo = cleanInline.substring(0, 80).trim();
     }
-    rawParts.push(...prevLines);
 
-    if (rawParts.length === 0) return { modelo: '', variante: '', rawText: '' };
+    if (!modelo) return { modelo: '', variante: '', rawText: '' };
 
-    modelo = rawParts[0].substring(0, 80).trim();
-    variante = rawParts.slice(1, 4).join(' ').replace(/\s+/g, ' ').trim().substring(0, 80);
-    const rawText = rawParts.join(' ').replace(/\s+/g, ' ').trim();
-
+    const rawText = (modelo + ' ' + variante).trim();
     return { modelo, variante, rawText };
   },
 

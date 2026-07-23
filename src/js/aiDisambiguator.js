@@ -339,10 +339,10 @@ const AiDisambiguator = {
 
     let targetColor = null;
     if (/\b(pink|rosa|rosado)\b/i.test(text)) targetColor = 'pink';
-    else if (/\b(green|verde)\b/i.test(text)) targetColor = 'green';
-    else if (/\b(purple|wukong|violeta|morado)\b/i.test(text)) targetColor = 'purple';
+    else if (/\b(purple|violeta|morado|wukong)\b/i.test(text)) targetColor = 'purple';
+    else if (/\b(green|verde|mint|menta)\b/i.test(text)) targetColor = 'green';
     else if (/\b(orange|naranja|coffee|brown|café|cafe)\b/i.test(text)) targetColor = 'orange';
-    else if (/\b(blue|dark blue|azul)\b/i.test(text)) targetColor = 'blue';
+    else if (/\b(blue|dark blue|azul|cyan)\b/i.test(text)) targetColor = 'blue';
     else if (/\b(white|blanco)\b/i.test(text)) targetColor = 'white';
     else if (/\b(black|negro|dark)\b/i.test(text)) targetColor = 'black';
     else if (/\b(grey|gray|gris)\b/i.test(text)) targetColor = 'grey';
@@ -352,22 +352,42 @@ const AiDisambiguator = {
     const { avgSat, avgVal, hue, avgR, avgG, avgB } = profile;
 
     if (targetColor === 'pink') {
-      const isRedHue = (hue >= 300 || hue <= 35) && avgSat > 0.10;
-      const isHighRed = (avgR > avgG + 10) && (avgR > avgB) && avgVal > 0.40;
-      if (!isRedHue && !isHighRed && avgVal < 0.35) {
+      // Pink is high-R/B hue (310-355 or 0-15) with high luminance (> 0.45)
+      const isPurpleHue = (hue >= 245 && hue <= 300);
+      const isGreenHue = (hue >= 70 && hue <= 165);
+      if (isPurpleHue) {
+        return { match: false, confidence: 0, reason: 'Título dice Pink pero la foto es Violeta/Púrpura' };
+      }
+      if (isGreenHue) {
+        return { match: false, confidence: 0, reason: 'Título dice Pink pero la foto es Verde' };
+      }
+      if (avgVal < 0.35) {
         return { match: false, confidence: 0, reason: 'Título dice Pink pero la foto es oscura' };
       }
+    } else if (targetColor === 'purple') {
+      // Purple is hue 240-305 with B > G
+      const isPinkHue = (hue >= 320 || hue <= 15) && (avgR > avgB + 15);
+      const isGreenHue = (hue >= 70 && hue <= 165);
+      if (isPinkHue) {
+        return { match: false, confidence: 0, reason: 'Título dice Purple pero la foto es Rosa/Pink' };
+      }
+      if (isGreenHue) {
+        return { match: false, confidence: 0, reason: 'Título dice Purple pero la foto es Verde' };
+      }
+      if (avgVal < 0.30) {
+        return { match: false, confidence: 0, reason: 'Título dice Purple pero la foto es completamente oscura' };
+      }
     } else if (targetColor === 'green') {
-      const isGreenHue = (hue >= 70 && hue <= 165) && avgSat > 0.10;
-      const isGreenDOM = (avgG > avgR + 10) && (avgG > avgB + 10);
+      const isGreenHue = (hue >= 65 && hue <= 170) && avgSat > 0.08;
+      const isGreenDOM = (avgG > avgR + 8) && (avgG > avgB + 8);
       if (!isGreenHue && !isGreenDOM) {
         return { match: false, confidence: 0, reason: 'Título dice Green pero la foto no es verde' };
       }
-    } else if (targetColor === 'purple') {
-      const isPurpleHue = (hue >= 235 && hue <= 325) && avgSat > 0.10;
-      const isPurpleDOM = (avgB > avgG + 10) && (avgR > avgG + 10);
-      if (!isPurpleHue && !isPurpleDOM && avgVal < 0.30) {
-        return { match: false, confidence: 0, reason: 'Título dice Purple pero la foto no coincide' };
+    } else if (targetColor === 'orange') {
+      const isOrangeHue = (hue >= 10 && hue <= 50);
+      const isGreenOrPurple = (hue >= 70 && hue <= 310);
+      if (isGreenOrPurple) {
+        return { match: false, confidence: 0, reason: 'Título dice Orange/Coffee pero la foto es Verde o Violeta' };
       }
     } else if (targetColor === 'black') {
       if (avgVal > 0.85 && avgSat < 0.15) {

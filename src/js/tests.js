@@ -49,6 +49,9 @@ const Tests = {
     this.testColorGuardGreenPass();
     this.testTopDownDirectionalGate();
     this.testFamilyTitleColorProfile();
+    this.testColorGuardPinkVsPurple();
+    this.testGlobalBipartiteMatching();
+    this.testHeaderPriorityRowContext();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -363,6 +366,50 @@ const Tests = {
     // Test cleanProductTitle correctly strips and deduplicates
     const res = PdfParser.cleanProductTitle('Orange - 8BitDo Ultimate 2C Orange -', '8BitDo');
     this.assert(!res.modelo.includes('undefined'), 'Family title sanitizer no produce texto undefined en el modelo');
+  },
+
+  testColorGuardPinkVsPurple() {
+    // Purple profile: hue 270 (purple/violet)
+    const purpleProfile = { avgR: 120, avgG: 60, avgB: 180, avgSat: 0.65, avgVal: 0.70, hue: 270 };
+    const resPink = AiDisambiguator.verifyImageColorMatch(purpleProfile, '8BitDo Ultimate 2C Controller Pink');
+    this.assert(resPink.match === false, 'Color Guard rechazó la imagen Violeta/Púrpura asignada a "Pink Controller"');
+
+    // Pink profile: hue 330 (pink/magenta)
+    const pinkProfile = { avgR: 220, avgG: 80, avgB: 160, avgSat: 0.64, avgVal: 0.86, hue: 330 };
+    const resPurple = AiDisambiguator.verifyImageColorMatch(pinkProfile, '8BitDo Ultimate 2C Controller Purple');
+    this.assert(resPurple.match === false, 'Color Guard rechazó la imagen Rosa/Pink asignada a "Purple Controller"');
+  },
+
+  testGlobalBipartiteMatching() {
+    // Simulate a page with 2 products (Pink at X=100, Purple at X=250) and 2 images (Pink at X=100, Purple at X=250)
+    const rows = [
+      { text: '8BitDo Ultimate 2C Wireless Controller', pageNum: 1, y: 50, x: 100 },
+      { text: 'Pink - $19.40', pageNum: 1, y: 300, x: 100 },
+      { text: '8BitDo Ultimate 2C Wireless Controller', pageNum: 1, y: 50, x: 250 },
+      { text: 'Purple - $19.40', pageNum: 1, y: 300, x: 250 }
+    ];
+    const pinkProfile = { avgR: 220, avgG: 80, avgB: 160, avgSat: 0.64, avgVal: 0.86, hue: 330 };
+    const purpleProfile = { avgR: 120, avgG: 60, avgB: 180, avgSat: 0.65, avgVal: 0.70, hue: 270 };
+
+    const imgPink = { pageNum: 1, x: 100, y: 80, width: 200, height: 200, dataUrl: 'data:pink', colorProfile: pinkProfile };
+    const imgPurple = { pageNum: 1, x: 250, y: 80, width: 200, height: 200, dataUrl: 'data:purple', colorProfile: purpleProfile };
+
+    const products = PdfParser.parseRows(rows, '8BitDo', 0, [], [imgPink, imgPurple]);
+    const prodPink = products.find(p => p.variante.toLowerCase().includes('pink'));
+    const prodPurple = products.find(p => p.variante.toLowerCase().includes('purple'));
+
+    this.assert(prodPink && prodPink.img === 'data:pink', 'Asignación Bipartita asignó correctamente la foto Pink al producto Pink');
+    this.assert(prodPurple && prodPurple.img === 'data:purple', 'Asignación Bipartita asignó correctamente la foto Purple al producto Purple');
+  },
+
+  testHeaderPriorityRowContext() {
+    const rows = [
+      { text: '8BitDo Ultimate 2C Wireless Controller', pageNum: 1, y: 100, x: 100 },
+      { text: 'Orange - $19.40', pageNum: 1, y: 180, x: 100 }
+    ];
+    const ctx = PdfParser.buildRowContext(rows, 1);
+    this.assert(ctx.modelo === '8BitDo Ultimate 2C Wireless Controller', 'buildRowContext priorizó el encabezado de modelo sobre el texto inline del precio');
+    this.assert(ctx.variante === 'Orange', 'buildRowContext aisló la variante limpiando el guión suelto "Orange -"');
   }
 };
 
