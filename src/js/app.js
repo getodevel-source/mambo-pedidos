@@ -19,36 +19,7 @@ function toast(msg, type = '') {
   setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-function updateAiStatusChip() {
-  const chip = document.getElementById('aiStatusChip');
-  const chipText = document.getElementById('aiStatusChipText');
-  const bar = document.getElementById('sidebarAiWidgetBar');
-  const barInner = document.getElementById('sidebarAiWidgetBarInner');
-  if (!chip || !chipText) return;
 
-  const status = (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.getAiEngineStatus)
-    ? AiDisambiguator.getAiEngineStatus()
-    : null;
-  const tfStatus = (typeof TransformersAI !== 'undefined' && TransformersAI.getStatus)
-    ? TransformersAI.getStatus()
-    : null;
-
-  if (tfStatus && tfStatus.downloading) {
-    chip.className = 'downloading';
-    chipText.textContent = `${tfStatus.progress}%`;
-    if (bar) bar.style.display = 'block';
-    if (barInner) barInner.style.width = `${tfStatus.progress}%`;
-  } else if (tfStatus && tfStatus.ready) {
-    chip.className = '';
-    chipText.textContent = 'Distilbert IA';
-    if (bar) bar.style.display = 'none';
-    if (barInner) barInner.style.width = '100%';
-  } else {
-    chip.className = 'nlp';
-    chipText.textContent = 'NLP Local';
-    if (bar) bar.style.display = 'none';
-  }
-}
 
 function showProgress(pct, statusText = 'Procesando archivos...', subText = '') {
   const p = document.getElementById('progress');
@@ -1627,25 +1598,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }, 3000);
 
-  // Init Transformers.js AI engine in background (downloads ~67MB model on first use, cached forever after)
+  // Init Transformers.js AI engine in background
   setTimeout(() => {
     if (typeof TransformersAI !== 'undefined') {
       TransformersAI.init((progress, statusText) => {
-        updateAiStatusChip();
         console.log('[TransformersAI]', statusText, progress + '%');
       }).then(ready => {
-        updateAiStatusChip();
         if (ready) {
           console.log('✅ TransformersAI ready for product classification');
-          toast('🤖 Motor IA Transformers.js listo', 'success');
         }
       });
     }
-  }, 5000); // Delay 5s after startup to not block initial render
-
-  // Update AI status chip every 2s during model download
-  updateAiStatusChip();
-  setInterval(updateAiStatusChip, 2000);
+  }, 1000);
 });
 
 function showDropOverlay() {

@@ -243,8 +243,9 @@ const AiDisambiguator = {
   ],
 
   categoryPatterns: [
+    { cat: 'NUMPAD', patterns: [/numpad/i, /numeric keypad/i, /keypad/i, /np20/i, /ak33 numpad/i] },
     { cat: 'TECLADO', patterns: [/keyboard/i, /teclado/i, /mechanical/i, /switches keyboard/i, /keys/i, /75%/i, /68%/i, /80%/i, /full-aluminum/i, /gasket/i] },
-    { cat: 'MOUSE', patterns: [/mouse/i, /mice/i, /raton/i, /paw\d{4}/i, /8khz/i, /tri-mode mouse/i, /optical mouse/i] },
+    { cat: 'MOUSE', patterns: [/mouse/i, /mice/i, /raton/i, /paw\d{4}/i, /8khz/i, /tri-mode mouse/i, /optical mouse/i, /aj139\w*/i, /aj159\w*/i, /aj199\w*/i, /ax5\w*/i, /r1 ultra/i, /x3 max/i] },
     { cat: 'HEADSET', patterns: [/headset/i, /headphone/i, /auricular gaming/i, /wireless headset/i, /7\.1/i] },
     { cat: 'AURICULAR', patterns: [/earphone/i, /earbuds/i, /in-ear/i, /iem/i, /hifi earphones/i] },
     { cat: 'CONTROLLER', patterns: [/controller/i, /gamepad/i, /joystick/i, /mando/i, /hall effect joystick/i] },
@@ -253,6 +254,23 @@ const AiDisambiguator = {
     { cat: 'CAMARA', patterns: [/camera/i, /camara/i, /film\b/i, /instant camera/i] },
     { cat: 'CUIDADO_PERSONAL', patterns: [/shaver/i, /trimmer/i, /clipper/i, /toothbrush/i, /afeitadora/i] }
   ],
+
+  /**
+   * Vision Guard: Verifica si el Aspect Ratio de una imagen concuerda con la categoría.
+   * Evita asignar fotos de teclados panorámicos (width/height > 1.35) a mouses o viceversa.
+   */
+  verifyImageAspect(imgWidth, imgHeight, category) {
+    if (!imgWidth || !imgHeight || !category) return { valid: true, ratio: 1 };
+    const ratio = imgWidth / imgHeight;
+
+    if (category === 'MOUSE' && ratio >= 1.40) {
+      return { valid: false, ratio, reason: 'Imagen panorámica de Teclado asignada a MOUSE' };
+    }
+    if (category === 'TECLADO' && ratio <= 0.85) {
+      return { valid: false, ratio, reason: 'Imagen angosta asignada a TECLADO' };
+    }
+    return { valid: true, ratio };
+  },
 
   // Consulta a la IA nativa del WebView (window.ai / Gemini Nano) con fallback a Ollama local
   async queryWebViewAi(rawText) {

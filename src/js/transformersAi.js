@@ -13,9 +13,10 @@ const TransformersAI = {
   _downloadProgress: 0,
 
   // Category labels for zero-shot classification
-  LABELS: ['keyboard', 'mouse', 'headset', 'earphones', 'controller', 'mousepad', 'switches', 'camera', 'personal care', 'other'],
+  LABELS: ['keyboard', 'numeric keypad', 'mouse', 'headset', 'earphones', 'controller', 'mousepad', 'switches', 'camera', 'personal care', 'other'],
   LABEL_MAP: {
     'keyboard': 'TECLADO',
+    'numeric keypad': 'NUMPAD',
     'mouse': 'MOUSE',
     'headset': 'HEADSET',
     'earphones': 'AURICULAR',

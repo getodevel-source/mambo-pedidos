@@ -294,6 +294,13 @@ const PdfParser = {
     const seen = new Set();
     const claimedImages = new Set();
 
+    // Pre-calcular clusters de columnas X por página
+    const pageXCols = {};
+    for (const r of rows) {
+      if (!pageXCols[r.pageNum]) pageXCols[r.pageNum] = [];
+      pageXCols[r.pageNum].push(r.x || 0);
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const rowText = rows[i].text;
 
@@ -306,7 +313,12 @@ const PdfParser = {
       const detectedBrand = this.detectBrandFromTextLine(ctx.rawText, customBrands) || brandFallback || 'OTRO';
       const cat = this.detectCategory(ctx.rawText, detectedBrand);
 
-      const key = (detectedBrand + '|' + ctx.modelo.substring(0, 50) + '|' + ctx.variante.substring(0, 30) + '|' + usdPrice).toLowerCase();
+      // Sanitización profunda del título y modelo
+      const cleanTitle = this.cleanProductTitle(ctx.modelo + ' ' + ctx.variante, detectedBrand);
+      const finalModel = cleanTitle.modelo || ctx.modelo;
+      const finalVariant = cleanTitle.variante || ctx.variante;
+
+      const key = (detectedBrand + '|' + finalModel.substring(0, 50) + '|' + finalVariant.substring(0, 30) + '|' + usdPrice).toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
 
@@ -314,16 +326,27 @@ const PdfParser = {
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      // Asociación espacial de imagen 2D con candado de asignación 1-a-1
+      // Asociación espacial de imagen 2D con Candado de Columna & Vision Guard Aspect Check
       let matchedImg = '';
       if (allImages && allImages.length) {
         const pageImgs = allImages.filter(img => img.pageNum === rows[i].pageNum && !claimedImages.has(img));
         if (pageImgs.length) {
           const rowX = rows[i].x || 0;
           const rowY = rows[i].y || 0;
+
+          // Ordenar por distancia ponderada + penalización de Vision Guard por aspecto incompatible
           pageImgs.sort((a, b) => {
-            const distA = Math.hypot((a.x - rowX) * 1.0, (a.y - rowY) * 1.3);
-            const distB = Math.hypot((b.x - rowX) * 1.0, (b.y - rowY) * 1.3);
+            let distA = Math.hypot((a.x - rowX) * 1.2, (a.y - rowY) * 1.0);
+            let distB = Math.hypot((b.x - rowX) * 1.2, (b.y - rowY) * 1.0);
+
+            // Vision Guard: penalizar imágenes cuyo aspect ratio contradiga la categoría
+            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+              const checkA = AiDisambiguator.verifyImageAspect(a.width, a.height, cat);
+              const checkB = AiDisambiguator.verifyImageAspect(b.width, b.height, cat);
+              if (!checkA.valid) distA += 1000;
+              if (!checkB.valid) distB += 1000;
+            }
+
             return distA - distB;
           });
 
@@ -331,7 +354,14 @@ const PdfParser = {
           const distY = Math.abs(best.y - rowY);
           const distX = Math.abs(best.x - rowX);
 
-          if (distY <= 160 && distX <= 220) {
+          // Verificar tolerancia espacial y Vision Guard
+          let isAspectOk = true;
+          if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+            const vCheck = AiDisambiguator.verifyImageAspect(best.width, best.height, cat);
+            isAspectOk = vCheck.valid;
+          }
+
+          if (distY <= 160 && distX <= 220 && isAspectOk) {
             matchedImg = best.dataUrl;
             claimedImages.add(best);
           }
@@ -342,8 +372,8 @@ const PdfParser = {
         sku,
         cat,
         marca: detectedBrand,
-        modelo: ctx.modelo,
-        variante: ctx.variante,
+        modelo: finalModel,
+        variante: finalVariant,
         fob: usdPrice,
         img: matchedImg,
         rawText: ctx.rawText
@@ -358,6 +388,40 @@ const PdfParser = {
     }
 
     return products;
+  },
+
+  cleanProductTitle(rawText, brand = '') {
+    if (!rawText) return { modelo: '', variante: '' };
+
+    let text = String(rawText).replace(/\s+/g, ' ').trim();
+
+    if (brand && brand !== 'OTRO') {
+      const reBrand = new RegExp('^' + brand + '\\s+', 'i');
+      text = text.replace(reBrand, '').trim();
+    }
+
+    // Desduplicar fragmentos de texto repetidos (ej: "AJ139 V2 MC ... AJ139 V2 MC")
+    const words = text.split(/\s+/);
+    const uniqueWords = [];
+    const seenWords = new Set();
+    for (const w of words) {
+      const lower = w.toLowerCase();
+      if (!seenWords.has(lower) || w.length <= 2 || /^[\d\.\,\$\/\-]+$/.test(w)) {
+        if (w.length > 2) seenWords.add(lower);
+        uniqueWords.push(w);
+      }
+    }
+    text = uniqueWords.join(' ');
+
+    if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.parseModelAndVariant) {
+      return AiDisambiguator.parseModelAndVariant(text, brand);
+    }
+
+    const parts = text.split(/\s+-\s+|\s*\(\s*/);
+    const modelo = parts[0] ? parts[0].trim().substring(0, 60) : text.substring(0, 60);
+    const variante = parts.slice(1).join(' ').replace(/[\}\]\)]/g, '').trim().substring(0, 60);
+
+    return { modelo, variante };
   },
 
   evaluateItemConfidence(item) {
@@ -570,11 +634,12 @@ const PdfParser = {
     if (brand === 'Haimu') return 'SWITCH';
     if (brand === 'Philips') return 'CUIDADO_PERSONAL';
 
+    if (/\b(numpad|numeric keypad|keypad|np20|ak33 numpad)\b/i.test(t)) return 'NUMPAD';
     if (/\b(controller|gamepad|joystick|mando|sn30|ultimate 2c|ultimate c|ultimate 3|vader|g7 se|t4 kaleid|g8 galileo)\b/i.test(t)) return 'CONTROLLER';
     if (/\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i.test(t)) return 'AURICULAR';
     if (/\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|g435|g733)\b/i.test(t)) return 'HEADSET';
     if (/\b(mousepad|mouse pad|deskmat|desk mat|playmat|tablemat|glass pad|poron pad|cordura pad|control pad|speed pad|cloth pad|glide pad|extended pad|rgb pad|custom pad|anti-slip mat)\b|\bmat\b/i.test(t)) return 'MOUSEPAD';
-    if (/\b(mouse|mice|raton|paw\d{4}|ax5|a5|l7|g3|sc200|sc580|x3|r1|x11|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|g305|g203|pebble)\b/i.test(t)) return 'MOUSE';
+    if (/\b(mouse|mice|raton|paw\d{4}|aj139\w*|aj159\w*|aj199\w*|ax5\w*|a5|l7|g3|sc200|sc580|x3|r1|x11|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|g305|g203|pebble)\b/i.test(t)) return 'MOUSE';
     if (/\b(monitor|display|144hz|240hz|360hz|oled monitor)\b/i.test(t)) return 'MONITOR';
     if (/\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch)\b/i.test(t)) return 'SWITCH';
     if (/\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75|fizz|kumara)\b/i.test(t)) return 'TECLADO';

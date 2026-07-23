@@ -40,6 +40,10 @@ const Tests = {
     this.testVisionBoundingBoxCropping();
     this.testNlpModelAndVariantBreakdown();
     this.testNeuralVisionEngineLifecycle();
+    this.testVisionGuardAspectVerification();
+    this.testNumpadCategoryDetection();
+    this.testTitleDeduplication();
+    this.testAj139MouseCategory();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -284,6 +288,29 @@ const Tests = {
   testNeuralVisionEngineLifecycle() {
     const hasNeural = typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.detectObjectBoundingBoxNeural === 'function' && typeof AiDisambiguator.unloadNeuralVisionEngine === 'function';
     this.assert(hasNeural, 'AiDisambiguator integra ciclo de vida ONNX WebGPU para Visión Neuronal');
+  },
+
+  testVisionGuardAspectVerification() {
+    const checkKeyboardOnMouse = AiDisambiguator.verifyImageAspect(300, 100, 'MOUSE');
+    this.assert(checkKeyboardOnMouse.valid === false, 'Vision Guard detectó y bloqueó imagen de Teclado asignada a MOUSE');
+
+    const checkMouseOnMouse = AiDisambiguator.verifyImageAspect(200, 200, 'MOUSE');
+    this.assert(checkMouseOnMouse.valid === true, 'Vision Guard validó correctamente imagen cuadrada de MOUSE');
+  },
+
+  testNumpadCategoryDetection() {
+    const cat = PdfParser.detectCategory('Ajazz NP20 Wireless Numeric Keypad', 'AJAZZ');
+    this.assert(cat === 'NUMPAD', 'PdfParser clasificó correctamente la categoría NUMPAD');
+  },
+
+  testTitleDeduplication() {
+    const res = PdfParser.cleanProductTitle('AJ139 V2 MC - White - 3311 AJ139 V2 MC Wired+2.4G+BT', 'AJAZZ');
+    this.assert(res.modelo.includes('AJ139'), 'Sanitizador NLP extrajo correctamente el modelo desduplicado AJ139');
+  },
+
+  testAj139MouseCategory() {
+    const cat = PdfParser.detectCategory('AJ139P V3 Mc Wired+2.4G+BT', 'AJAZZ');
+    this.assert(cat === 'MOUSE', 'PdfParser clasificó el modelo AJ139P como MOUSE');
   }
 };
 
