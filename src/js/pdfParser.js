@@ -13,8 +13,8 @@ const PdfParser = {
       const arrayBuffer = await file.arrayBuffer();
       pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      const allRows = [];   // filas espaciales de todas las páginas
-      const allImages = []; // imágenes extraídas con coordenadas X/Y
+      const allProducts = [];
+      const allImages = [];
       let fullTextForBrand = '';
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -29,12 +29,13 @@ const PdfParser = {
           fullTextForBrand += content.items.map(item => item.str).join(' ') + ' ';
         }
 
-        const rows = this.groupItemsByRow(content.items, viewport.height, pageNum);
-        allRows.push(...rows);
-
-        // Extraer imágenes y aplicar filtro de nitidez por Canvas
+        // Extraer imágenes de la página
         const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
         allImages.push(...pageImages);
+
+        // EXTRAER PRODUCTOS POR CELDAS ESPACIALES 2D (GRID CELL ENGINE V5)
+        const pageProducts = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, '', customBrands, allProducts);
+        allProducts.push(...pageProducts);
       }
 
       const cleanText = fullTextForBrand.replace(/\s+/g, '');
@@ -43,8 +44,10 @@ const PdfParser = {
       }
 
       const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
-      const products = this.parseRows(allRows, brand, catalogLength, customBrands, allImages);
-      return { brand, products };
+
+      // Asignar SKU y formatear catálogo final
+      const finalProducts = this.finalizeCatalogProducts(allProducts, brand, catalogLength, customBrands);
+      return { brand, products: finalProducts };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
         try { await pdf.destroy(); } catch (e) {}
@@ -249,6 +252,297 @@ const PdfParser = {
     } catch (e) {
       console.warn('No se pudo limpiar fondo de imagen:', e);
     }
+  },
+
+  // =========================================================================
+  //  MOTOR DE EXTRACCIÓN POR CELDAS ESPACIALES 2D (GRID CELL ENGINE V5)
+  //  Aísla productos en celdas espaciales puras [X_min, X_max] x [Y_min, Y_max]
+  //  evitando contaminación entre columnas y filtrando ruido de tabla.
+  // =========================================================================
+  extractPageProductsByCellGrid(items, viewportHeight, pageNum, pageImages, brandFallback, customBrands = [], existingProducts = []) {
+    if (!items || !items.length) return [];
+
+    // 1. Mapear elementos de texto a coordenadas espaciales
+    const rawElements = items
+      .filter(item => item.str && item.str.trim())
+      .map(item => ({
+        x: item.transform[4],
+        y: viewportHeight - item.transform[5],
+        text: item.str.trim(),
+        pageNum
+      }));
+
+    // 2. Filtro estricto de Ruido de Encabezados de Tabla & Metadatos
+    const NOISE_PATTERN = /\b(model|model\s*color|color|price|rmb|usd|picture|image|spec|specification|remark|note|moq|fob|cny|usd\s*price|rmb\s*price)\b/i;
+    
+    const isHeaderNoiseLine = (str) => {
+      if (!str) return false;
+      const matches = str.match(new RegExp(NOISE_PATTERN.source, 'gi'));
+      return matches && matches.length >= 2;
+    };
+
+    const isPageNoise = (str) => {
+      if (!str || str.length < 2) return true;
+      if (/^[\u4e00-\u9fff\s]+$/.test(str)) return true;
+      if (/zhengzhou|damulin|www\.|http|tel:|fax:|page\s*\d+/i.test(str)) return true;
+      if (isHeaderNoiseLine(str)) return true;
+      return false;
+    };
+
+    // 3. Localizar todos los Anclas de Precio USD ($XX.XX)
+    const priceAnchors = [];
+    for (const el of rawElements) {
+      if (isHeaderNoiseLine(el.text)) continue;
+      const price = this.extractUsdPrice(el.text);
+      if (price !== null) {
+        priceAnchors.push({
+          x: el.x,
+          y: el.y,
+          price,
+          rawLine: el.text,
+          pageNum
+        });
+      }
+    }
+
+    if (!priceAnchors.length) return [];
+
+    priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
+    const pageProducts = [];
+
+    // 4. Construir Bounding Box de Celda 2D para cada Ancla de Precio
+    for (let i = 0; i < priceAnchors.length; i++) {
+      const anchor = priceAnchors[i];
+
+      // Determinar límites horizontales X de la celda (entre anclas vecinas)
+      const sameRowAnchors = priceAnchors.filter(a => Math.abs(a.y - anchor.y) <= 30);
+      sameRowAnchors.sort((a, b) => a.x - b.x);
+      const anchorIdxInRow = sameRowAnchors.indexOf(anchor);
+
+      let cellMinX = 0;
+      let cellMaxX = 9999;
+
+      if (anchorIdxInRow > 0) {
+        cellMinX = (sameRowAnchors[anchorIdxInRow - 1].x + anchor.x) / 2;
+      } else if (sameRowAnchors.length > 1) {
+        const colWidth = (sameRowAnchors[1].x - sameRowAnchors[0].x);
+        cellMinX = Math.max(0, anchor.x - colWidth / 2);
+      } else {
+        cellMinX = Math.max(0, anchor.x - 140);
+      }
+
+      if (anchorIdxInRow < sameRowAnchors.length - 1) {
+        cellMaxX = (sameRowAnchors[anchorIdxInRow + 1].x + anchor.x) / 2;
+      } else if (sameRowAnchors.length > 1) {
+        const colWidth = (sameRowAnchors[sameRowAnchors.length - 1].x - sameRowAnchors[0].x) / (sameRowAnchors.length - 1);
+        cellMaxX = anchor.x + colWidth / 2;
+      } else {
+        cellMaxX = anchor.x + 140;
+      }
+
+      // Determinar límites verticales Y de la celda (desde el precio hacia arriba)
+      const cellMinY = anchor.y - 240;
+      const cellMaxY = anchor.y + 12;
+
+      // Recolectar elementos de texto STRICTLY dentro del Bounding Box de la Celda
+      const cellTextItems = rawElements.filter(el => {
+        if (el.y < cellMinY || el.y > cellMaxY) return false;
+        if (el.x < cellMinX - 10 || el.x > cellMaxX + 10) return false;
+        if (isPageNoise(el.text)) return false;
+        if (this.extractUsdPrice(el.text) !== null) return false;
+        return true;
+      });
+
+      // Agrupar elementos por sub-filas de Y dentro de la celda
+      cellTextItems.sort((a, b) => a.y - b.y || a.x - b.x);
+
+      const cellLines = [];
+      if (cellTextItems.length) {
+        let curLine = [cellTextItems[0]];
+        let curY = cellTextItems[0].y;
+        for (let j = 1; j < cellTextItems.length; j++) {
+          const item = cellTextItems[j];
+          if (Math.abs(item.y - curY) <= 6) {
+            curLine.push(item);
+          } else {
+            cellLines.push(curLine.map(it => it.text).join(' '));
+            curLine = [item];
+            curY = item.y;
+          }
+        }
+        if (curLine.length) {
+          cellLines.push(curLine.map(it => it.text).join(' '));
+        }
+      }
+
+      const inlinePart = anchor.rawLine
+        .replace(/[¥￥]\s*[\d,]+\.?\d*/g, '')
+        .replace(/(?<![¥￥])\$\s*[\d,]+\.?\d*/g, '')
+        .replace(/[\-\s]+$/g, '')
+        .trim();
+
+      let rawModelo = '';
+      let rawVariante = '';
+
+      if (cellLines.length > 0) {
+        rawModelo = cellLines[0];
+        const restLines = cellLines.slice(1);
+        const varParts = [...restLines, inlinePart].filter(p => p && !isPageNoise(p));
+        rawVariante = varParts.join(' ');
+      } else if (inlinePart && !isPageNoise(inlinePart)) {
+        rawModelo = inlinePart;
+      }
+
+      if (!rawModelo) continue;
+
+      const rawCombined = rawModelo + ' ' + rawVariante;
+      const detectedBrand = this.detectBrandFromTextLine(rawCombined, customBrands) || brandFallback || 'OTRO';
+      const cat = this.detectCategory(rawCombined, detectedBrand);
+
+      // Sanitización quirúrgica de Nombre y Variante
+      const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
+
+      // Búsqueda de Imagen STRICTLY dentro del Bounding Box de la Celda
+      let matchedImg = '';
+      if (pageImages && pageImages.length) {
+        const candidateImgs = pageImages.filter(img => {
+          if (img.pageNum !== pageNum) return false;
+          if (img.y > anchor.y + 10 || img.y < anchor.y - 280) return false;
+          if (img.x < cellMinX - 30 || img.x > cellMaxX + 30) return false;
+          return true;
+        });
+
+        if (candidateImgs.length) {
+          const scored = candidateImgs.map(img => {
+            const distX = Math.abs(img.x - anchor.x);
+            const distY = anchor.y - img.y;
+            let penalty = 0;
+
+            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+              const aspect = AiDisambiguator.verifyImageAspect(img.width, img.height, cat);
+              if (!aspect.valid) penalty += 20000;
+            }
+
+            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
+              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, sanitized.modelo + ' ' + sanitized.variante);
+              if (!colorCheck.match) penalty += 40000;
+            }
+
+            const dist = Math.hypot(distX * 1.5, Math.max(0, distY));
+            return { img, score: dist + penalty, penalty };
+          });
+
+          scored.sort((a, b) => a.score - b.score);
+          if (scored[0] && scored[0].penalty < 5000) {
+            matchedImg = scored[0].img.dataUrl;
+          }
+        }
+      }
+
+      pageProducts.push({
+        sku: '',
+        cat,
+        marca: detectedBrand,
+        modelo: sanitized.modelo,
+        variante: sanitized.variante,
+        fob: anchor.price,
+        img: matchedImg,
+        rawText: rawCombined,
+        pageNum,
+        x: anchor.x,
+        y: anchor.y
+      });
+    }
+
+    return pageProducts;
+  },
+
+  sanitizeProductNames(rawModelo, rawVariante, brand, existingProducts = []) {
+    let modelo = (rawModelo || '').trim();
+    let variante = (rawVariante || '').trim();
+
+    if (brand && brand !== 'OTRO') {
+      const reBrand = new RegExp('^' + brand + '\\s+', 'i');
+      modelo = modelo.replace(reBrand, '').trim();
+    }
+
+    modelo = modelo
+      .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\-\s,:]+|[\-\s,:]+$/g, '')
+      .trim();
+
+    variante = variante
+      .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+      .replace(/[\-\s]+$/g, '')
+      .replace(/^[\-\s]+/g, '')
+      .replace(/\bmode\b/i, '3-Mode')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const varWords = variante.split(/\s+/);
+    const uniqueVarWords = [];
+    for (const w of varWords) {
+      if (!uniqueVarWords.map(x => x.toLowerCase()).includes(w.toLowerCase())) {
+        uniqueVarWords.push(w);
+      }
+    }
+    variante = uniqueVarWords.join(' ');
+
+    const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
+    if (modelo.length <= 18 && (COLOR_WORDS.test(modelo) || /^[a-z\s\-]+$/i.test(modelo))) {
+      const familyBase = existingProducts
+        .filter(p => p.marca === brand)
+        .slice(-3)
+        .reverse()
+        .find(p => p.modelo && p.modelo.length > 15 && !COLOR_WORDS.test(p.modelo.trim()));
+
+      if (familyBase) {
+        const baseCore = familyBase.modelo
+          .replace(COLOR_WORDS, '')
+          .replace(/\b(pink|green|purple|orange|coffee|white|black|grey|gray|blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (baseCore.length > 8) {
+          variante = (modelo + (variante ? ' ' + variante : '')).trim();
+          modelo = baseCore;
+        }
+      }
+    }
+
+    return { modelo: modelo || rawModelo, variante };
+  },
+
+  finalizeCatalogProducts(allProducts, brandFallback, baseLength = 0, customBrands = []) {
+    const products = [];
+    const seen = new Set();
+
+    for (let i = 0; i < allProducts.length; i++) {
+      const p = allProducts[i];
+      const detectedBrand = p.marca !== 'OTRO' ? p.marca : (brandFallback || 'OTRO');
+      const cat = p.cat;
+
+      const key = (detectedBrand + '|' + p.modelo.substring(0, 50) + '|' + p.variante.substring(0, 30) + '|' + p.fob).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const catCode = cat.substring(0, 3).toUpperCase();
+      const brandCode = detectedBrand.substring(0, 3).toUpperCase();
+      const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
+
+      p.sku = sku;
+      p.marca = detectedBrand;
+
+      const evalScore = this.evaluateItemConfidence(p);
+      p.confidence = evalScore.confidence;
+      p.status = evalScore.status;
+      p.warnings = evalScore.warnings;
+
+      products.push(p);
+    }
+
+    return products;
   },
 
   groupItemsByRow(items, pageHeight, pageNum = 1) {

@@ -52,6 +52,8 @@ const Tests = {
     this.testColorGuardPinkVsPurple();
     this.testGlobalBipartiteMatching();
     this.testHeaderPriorityRowContext();
+    this.testTableHeaderNoiseFilter();
+    this.testSpatialCellGridExtraction();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -410,6 +412,35 @@ const Tests = {
     const ctx = PdfParser.buildRowContext(rows, 1);
     this.assert(ctx.modelo === '8BitDo Ultimate 2C Wireless Controller', 'buildRowContext priorizó el encabezado de modelo sobre el texto inline del precio');
     this.assert(ctx.variante === 'Orange', 'buildRowContext aisló la variante limpiando el guión suelto "Orange -"');
+  },
+
+  testTableHeaderNoiseFilter() {
+    const items = [
+      { str: 'Model Color Price RMB USD Purple', transform: [1,0,0,1,100,700] }
+    ];
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], '8BitDo', []);
+    this.assert(products.length === 0, 'Grid Engine v5 ignoró correctamente la fila de encabezado de tabla "Model Color Price RMB USD"');
+  },
+
+  testSpatialCellGridExtraction() {
+    const items = [
+      { str: 'Model Color Price RMB USD', transform: [1,0,0,1,100,750] },
+      { str: 'Ultimate 2 Wireless Controller', transform: [1,0,0,1,100,500] },
+      { str: 'Black - $35.19', transform: [1,0,0,1,100,350] },
+      { str: 'Ultimate 2 Wireless Controller', transform: [1,0,0,1,300,500] },
+      { str: 'White - $35.19', transform: [1,0,0,1,300,350] }
+    ];
+    const imgBlack = { pageNum: 1, x: 100, y: 380, width: 200, height: 200, dataUrl: 'img:black', colorProfile: null };
+    const imgWhite = { pageNum: 1, x: 300, y: 380, width: 200, height: 200, dataUrl: 'img:white', colorProfile: null };
+
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [imgBlack, imgWhite], '8BitDo', []);
+    this.assert(products.length === 2, 'Grid Engine v5 extrajo exactamente 2 productos de la grilla de 2 columnas');
+
+    const pBlack = products.find(p => p.variante.includes('Black'));
+    const pWhite = products.find(p => p.variante.includes('White'));
+
+    this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless Controller' && pBlack.img === 'img:black', 'Producto 1 (Black) extrajo modelo limpio y su foto de celda aislada');
+    this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless Controller' && pWhite.img === 'img:white', 'Producto 2 (White) extrajo modelo limpio y su foto de celda aislada');
   }
 };
 
