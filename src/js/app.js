@@ -892,28 +892,6 @@ function copiarResumenPedido(index) {
   }
 }
 
-// Listener de Drag & Drop para toda la ventana
-window.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  const overlay = document.getElementById('dropOverlay');
-  if (overlay) overlay.style.display = 'flex';
-});
-
-window.addEventListener('dragleave', (e) => {
-  if (e.clientX === 0 && e.clientY === 0) {
-    const overlay = document.getElementById('dropOverlay');
-    if (overlay) overlay.style.display = 'none';
-  }
-});
-
-window.addEventListener('drop', (e) => {
-  e.preventDefault();
-  const overlay = document.getElementById('dropOverlay');
-  if (overlay) overlay.style.display = 'none';
-  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-    FileImporter.processFiles(e.dataTransfer.files);
-  }
-});
 
 let catalogViewMode = 'table';
 let activeZoomSku = null;
@@ -1279,6 +1257,100 @@ function runBreakEvenCalculation() {
   body.innerHTML = html;
 }
 
+function openDoorToDoorModal() {
+  if (!currentPedido || !currentPedido.items || !currentPedido.items.length) {
+    toast('Armá o abrí un pedido para calcular la liquidación Puerta a Puerta', 'error');
+    return;
+  }
+  const modal = document.getElementById('doorToDoorModal');
+  if (modal) modal.style.display = 'flex';
+  runDoorToDoorCalculation();
+}
+
+function closeDoorToDoorModal() {
+  const modal = document.getElementById('doorToDoorModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function runDoorToDoorCalculation() {
+  if (!currentPedido || !currentPedido.items || !currentPedido.items.length) return;
+
+  const tc = parseFloat(document.getElementById('cTasaCambio')?.value) || 1400;
+  const pesoKg = parseFloat(document.getElementById('cPesoKg')?.value) || 0;
+  const costoPorKg = parseFloat(document.getElementById('cCostoPorKg')?.value) || 12;
+
+  const doorConfig = {
+    tipoCambio: tc,
+    pesoKg,
+    costoPorKg,
+    depositoFiscalUsd: parseFloat(document.getElementById('doorDepositoFiscal')?.value) || 150,
+    despachanteUsd: parseFloat(document.getElementById('doorDespachante')?.value) || 450,
+    fleteInternoUsd: parseFloat(document.getElementById('doorFleteInterno')?.value) || 80,
+    simDigitalizacionUsd: parseFloat(document.getElementById('doorSimDigitalizacion')?.value) || 40,
+  };
+
+  const res = Calculator.calculateDoorToDoorExactCost(currentPedido.items, doorConfig);
+  const s = res.summary;
+  const body = document.getElementById('doorToDoorResultsBody');
+  if (!body) return;
+
+  let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px; margin-bottom: 20px;">`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Inversión Total CIF (Mercadería + Flete)</div>
+    <div style="font-size: 18px; font-weight: 800; color: #38bdf8;">$${Math.round(s.cifTotalUsd).toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: var(--text-muted);">FOB $${Math.round(s.fobTotalUsd).toLocaleString()} + Flete $${Math.round(s.fleteTotalUsd).toLocaleString()}</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Tributos Aduana SIM (Derechos+IVA+Perc)</div>
+    <div style="font-size: 18px; font-weight: 800; color: #fde047;">$${Math.round(s.totalTributosAduanaUsd).toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: var(--text-muted);">ARS $${Math.round(s.totalTributosAduanaUsd * tc).toLocaleString()}</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border);">
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Despacho, Depósito & Certificaciones</div>
+    <div style="font-size: 18px; font-weight: 800; color: #a5b4fc;">$${Math.round(s.totalGastosFijosDestinoUsd).toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: var(--text-muted);">Despachante + TCA + Certs + Acarreo</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4);">
+    <div style="font-size: 10px; color: #34d399; text-transform: uppercase; font-weight: 800;">PRECIO FINAL PUESTO EN PUERTA</div>
+    <div style="font-size: 20px; font-weight: 800; color: #34d399;">$${Math.round(s.totalPuertaUsd).toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: #34d399; font-weight: 700;">ARS $${Math.round(s.totalPuertaArs).toLocaleString()}</div>
+  </div>`;
+
+  html += `</div>`;
+
+  if (res.certificationsRequired && res.certificationsRequired.length > 0) {
+    html += `<div class="card" style="padding: 14px; background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); border-radius: 8px; margin-bottom: 16px;">`;
+    html += `<div style="font-weight: 800; font-size: 13px; color: #fde047; margin-bottom: 8px;">⚠️ Trámites Burocráticos & Certificaciones Detectadas (${res.certificationsRequired.length})</div>`;
+    res.certificationsRequired.forEach(c => {
+      html += `<div style="font-size: 12px; color: #fff; margin-bottom: 4px;">• <strong>${c.title}</strong> (Cost. Est: $${c.costUsd} USD) — ${c.description}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="card-title" style="font-size: 13px; margin-bottom: 8px;">Detalle Exacto por Producto (Posición Arancelaria NCM & Costo Puerta Unitario)</div>`;
+  html += `<table style="width: 100%; font-size: 12px; border-collapse: collapse;">`;
+  html += `<thead><tr style="border-bottom: 1px solid var(--border); text-align: left; color: var(--text-muted);"><th style="padding: 6px;">SKU</th><th style="padding: 6px;">Producto</th><th style="padding: 6px;">Posición NCM</th><th style="padding: 6px; text-align: right;">FOB Unit</th><th style="padding: 6px; text-align: right;">Tributos SIM</th><th style="padding: 6px; text-align: right; color: #34d399;">Costo Puerta Unit (USD)</th><th style="padding: 6px; text-align: right; color: var(--accent);">Costo Puerta Unit (ARS)</th></tr></thead><tbody>`;
+
+  res.items.forEach(i => {
+    html += `<tr style="border-bottom: 1px solid var(--border);">`;
+    html += `<td style="padding: 6px; font-family: monospace; color: var(--text-muted);">${esc(i.sku)}</td>`;
+    html += `<td style="padding: 6px; font-weight: 600; color: #fff;">${esc(i.marca)} ${esc(i.modelo)}</td>`;
+    html += `<td style="padding: 6px; font-family: monospace; color: #a5b4fc;">${i.ncm}</td>`;
+    html += `<td style="padding: 6px; text-align: right; color: var(--text-muted);">$${i.fob.toFixed(2)}</td>`;
+    html += `<td style="padding: 6px; text-align: right; color: #fde047;">$${(i.totalTributosItemUsd / i.qty).toFixed(2)}</td>`;
+    html += `<td style="padding: 6px; text-align: right; font-weight: 800; color: #34d399;">$${i.costoPuertaUnitUsd.toFixed(2)}</td>`;
+    html += `<td style="padding: 6px; text-align: right; font-weight: 800; color: var(--accent);">$${Math.round(i.costoPuertaUnitArs).toLocaleString()} ARS</td>`;
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>`;
+  body.innerHTML = html;
+}
+
 function toggleFullscreen() {
   if (document.fullscreenElement) {
     if (document.exitFullscreen) {
@@ -1429,18 +1501,18 @@ async function renderHistorial() {
     const t = p.totals || {};
     const date = new Date(p.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
     html += '<div class="card" style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">';
-    html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="muted text-sm">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + '</div></div>';
+    html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + '</div></div>';
     html += '<div class="row" style="gap: 24px;">';
-    html += '<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;">FOB</div><div style="font-family: JetBrains Mono, monospace; font-weight: 600;">$' + (t.fob || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;">Costo</div><div style="font-family: JetBrains Mono, monospace; font-weight: 600; color: var(--blue);">$' + (t.costo || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;">Fact</div><div style="font-family: JetBrains Mono, monospace; font-weight: 600; color: var(--accent);">$' + (t.facturacion || t.fact || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;">Margen</div><div style="font-family: JetBrains Mono, monospace; font-weight: 600; color: var(--green);">$' + (t.margen || 0).toFixed(0) + '</div></div>';
+    html += '<div><div class="stat-label">FOB</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px;">$' + (t.fob || 0).toFixed(0) + '</div></div>';
+    html += '<div><div class="stat-label">Costo</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--blue);">$' + (t.costo || 0).toFixed(0) + '</div></div>';
+    html += '<div><div class="stat-label">Fact</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--primary);">$' + (t.facturacion || t.fact || 0).toFixed(0) + '</div></div>';
+    html += '<div><div class="stat-label">Margen</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--green);">$' + (t.margen || 0).toFixed(0) + '</div></div>';
     html += '</div>';
-    html += '<div class="row" style="gap: 6px;">';
-    html += '<button class="btn btn-sm" onclick="loadFromHistorial(' + i + ')">Abrir</button>';
-    html += '<button class="btn btn-sm" onclick="clonarPedido(' + i + ')" title="Clonar este pedido como nuevo">👯 Clonar</button>';
-    html += '<button class="btn btn-sm" onclick="copiarResumenPedido(' + i + ')" title="Copiar resumen al portapapeles">📋 Copiar</button>';
-    html += '<button class="btn btn-sm" style="color: var(--red);" onclick="deleteFromHistorial(' + i + ')">🗑</button>';
+    html += '<div class="row" style="gap: 8px;">';
+    html += '<button class="btn btn-primary btn-sm" onclick="loadFromHistorial(' + i + ')">Abrir</button>';
+    html += '<button class="btn btn-secondary btn-sm" onclick="clonarPedido(' + i + ')" title="Clonar este pedido como nuevo">👯 Clonar</button>';
+    html += '<button class="btn btn-secondary btn-sm" onclick="copiarResumenPedido(' + i + ')" title="Copiar resumen al portapapeles">📋 Copiar</button>';
+    html += '<button class="btn btn-danger btn-sm" onclick="deleteFromHistorial(' + i + ')">🗑</button>';
     html += '</div></div>';
   });
   cont.innerHTML = html;

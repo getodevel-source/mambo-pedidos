@@ -38,15 +38,21 @@
   <div class="sidebar-section">
     <div class="sidebar-label">Gestión</div>
     <button class="nav-item active" data-view="catalogo" onclick="switchView('catalogo')">
-      <span class="ico">📚</span> Catálogo
+      <span class="ico">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+      </span> Catálogo
       <span class="badge" id="navBadgeCat">0</span>
     </button>
     <button class="nav-item" data-view="pedido" onclick="switchView('pedido')">
-      <span class="ico">📦</span> Pedido
+      <span class="ico">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      </span> Pedido
       <span class="badge" id="navBadgePed">0</span>
     </button>
     <button class="nav-item" data-view="historial" onclick="switchView('historial')">
-      <span class="ico">📋</span> Historial
+      <span class="ico">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+      </span> Historial
       <span class="badge" id="navBadgeHis">0</span>
     </button>
   </div>
@@ -59,12 +65,12 @@
       <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;">
       <input type="file" id="fileInputPedido" accept=".xlsx,.xls,.csv" style="display: none;">
 
-      <button class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; gap: 8px; font-weight: 700; border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 14px rgba(255,87,34,0.25);" onclick="document.getElementById('folderInput').click()">
-        <span>📁</span> Cargar Carpeta / PDFs
+      <button class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; gap: 8px; font-weight: 700; border-radius: var(--radius); padding: 10px 14px;" onclick="document.getElementById('folderInput').click()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6"/><path d="M9 13h6"/></svg> Cargar Carpeta / PDFs
       </button>
 
-      <div style="margin-top: 8px; font-size: 10px; color: var(--text-muted); text-align: center; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px; border: 1px dashed var(--border);">
-        🖱️ Arrastrá PDFs o carpetas directamente a la pantalla
+      <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: var(--radius-sm); border: 1px dashed var(--border);">
+        Arrastrá PDFs o carpetas directamente a la pantalla
       </div>
     </div>
   </div>
@@ -72,17 +78,19 @@
   <div class="sidebar-section">
     <div class="sidebar-label">Herramientas</div>
     <div style="padding: 8px 20px; display: flex; flex-direction: column; gap: 6px;">
-      <button class="btn btn-sm" style="width: 100%; justify-content: flex-start; font-size: 11px;" onclick="toggleFullscreen()">⛶ Pantalla Completa</button>
-      <button class="btn btn-sm" style="width: 100%; justify-content: flex-start; font-size: 11px; background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border);" onclick="AppUpdater.checkUpdate(true)">🔄 Buscar actualización</button>
+      <button class="btn btn-sm" style="width: 100%; justify-content: flex-start; font-size: 12px;" onclick="toggleFullscreen()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg> Pantalla Completa
+      </button>
+      <button class="btn btn-sm btn-secondary" style="width: 100%; justify-content: flex-start; font-size: 12px;" onclick="AppUpdater.checkUpdate(true)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> Buscar actualización
+      </button>
     </div>
   </div>
-
-
 
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span id="appVersionBadge" style="color: var(--primary); font-weight: 600;">v1.3.2</span>
+      <span id="appVersionBadge" class="badge badge-emerald">v1.4.0</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -93,19 +101,21 @@
 <main class="main">
 
   <!-- Banner Cotizaciones Dólar en Vivo (DolarApi) -->
-  <div id="topDolarBanner" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; padding: 10px 16px; background: rgba(18, 18, 30, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255, 87, 34, 0.2); border-radius: 12px; font-size: 12px; flex-wrap: wrap;">
+  <div id="topDolarBanner" class="dolar-banner">
     <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text);">
-      <span style="font-size: 14px;">💵</span>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       <span>Dólar en Vivo (ARG):</span>
     </div>
     <div id="dolarRatesBadgeList" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-      <span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #fff;" title="Click para aplicar a Tasa de Cambio">🏛️ Mayorista: ...</span>
-      <span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #fff;" title="Click para aplicar a Tasa de Cambio">🏢 Oficial: ...</span>
-      <span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #38bdf8;" title="Click para aplicar a Tasa de Cambio">💙 Blue: ...</span>
-      <span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #a5b4fc;" title="Click para aplicar a Tasa de Cambio">📈 MEP: ...</span>
-      <span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 8px; color: #34d399;" title="Click para aplicar a Tasa de Cambio">⚡ Cripto: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('mayorista')" title="Click para aplicar a Tasa de Cambio">🏛️ Mayorista: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('oficial')" title="Click para aplicar a Tasa de Cambio">🏢 Oficial: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('blue')" title="Click para aplicar a Tasa de Cambio">💙 Blue: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('mep')" title="Click para aplicar a Tasa de Cambio">📈 MEP: ...</span>
+      <span class="dolar-chip" onclick="applyDolarRate('cripto')" title="Click para aplicar a Tasa de Cambio">⚡ Cripto: ...</span>
     </div>
-    <button class="btn btn-sm" onclick="fetchLiveDolarRates(true)" style="padding: 3px 10px; font-size: 11px; background: rgba(255,87,34,0.12); color: var(--primary); border: 1px solid rgba(255,87,34,0.3); border-radius: 6px; cursor: pointer;" title="Actualizar cotización ahora">🔄 Refrescar</button>
+    <button class="btn btn-sm btn-ghost" onclick="fetchLiveDolarRates(true)" title="Actualizar cotización ahora">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> Refrescar
+    </button>
   </div>
 
   <!-- Progress bar & Modal de Carga con Animación 0% a 100% -->
@@ -113,22 +123,20 @@
     <div class="progress-bar" id="progressBar" style="width: 0%"></div>
   </div>
 
-  <div id="loadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(10,10,16,0.85); backdrop-filter: blur(12px); z-index: 999999; align-items: center; justify-content: center;">
-    <div style="background: rgba(24,24,36,0.95); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 440px; max-width: 90vw; box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 16px; text-align: center; position: relative; overflow: hidden;">
-      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary), var(--accent));"></div>
-
-      <div style="font-size: 32px;">📁</div>
+  <div id="loadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(10,10,16,0.85); backdrop-filter: blur(16px); z-index: 999999; align-items: center; justify-content: center;">
+    <div class="modal-card" style="width: 440px; max-width: 90vw; text-align: center;">
+      <div style="font-size: 36px; margin-bottom: 8px;">📁</div>
       <div>
         <div id="progressTitleText" style="font-weight: 700; font-size: 16px; color: #fff; margin-bottom: 4px;">Procesando catálogos...</div>
         <div id="progressSubText" style="font-size: 12px; color: var(--text-muted);">Iniciando lectura de archivos</div>
       </div>
 
-      <div style="background: rgba(0,0,0,0.4); border-radius: 10px; padding: 12px 16px; border: 1px solid var(--border);">
+      <div style="background: rgba(0,0,0,0.4); border-radius: var(--radius); padding: 14px 18px; border: 1px solid var(--border); margin-top: 14px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 700;">PROGRESO</span>
+          <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700;">PROGRESO</span>
           <span id="progressPctText" style="font-family: var(--font-mono); font-weight: 800; font-size: 18px; color: var(--primary);">0%</span>
         </div>
-        <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden;">
+        <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden;">
           <div id="progressBarInner" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ff5722, #ff9800); border-radius: 999px; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 12px rgba(255,87,34,0.6);"></div>
         </div>
       </div>
@@ -144,23 +152,33 @@
         <div class="page-sub" id="catalogSubtitle">Cargá PDFs de tus proveedores para empezar</div>
       </div>
       <div class="page-actions" id="catalogActions" style="display: none;">
-        <button class="btn btn-danger btn-sm" onclick="resetCatalog()">♻️ Limpiar todo</button>
+        <button class="btn btn-danger btn-sm" onclick="resetCatalog()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> Limpiar todo
+        </button>
       </div>
     </div>
 
     <!-- Empty state -->
     <div class="card" id="catalogEmpty">
       <div class="empty">
-        <div class="empty-icon">📚</div>
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+        </div>
         <div class="empty-title">Cargá tu catálogo</div>
         <div class="empty-sub">
           Arrastrá los PDFs de tus proveedores o elegí la carpeta completa.
           Después podés editar cada producto y armar un pedido.
         </div>
         <div class="empty-actions">
-          <button class="btn btn-primary btn-lg" onclick="document.getElementById('fileInputPdf').click()">📥 Cargar PDFs</button>
-          <button class="btn btn-lg" onclick="document.getElementById('folderInput').click()">📁 Carpeta completa</button>
-          <button class="btn btn-lg" onclick="loadDemoCatalog()">🎮 Demo</button>
+          <button class="btn btn-primary btn-lg" onclick="document.getElementById('fileInputPdf').click()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> Cargar PDFs
+          </button>
+          <button class="btn btn-secondary btn-lg" onclick="document.getElementById('folderInput').click()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> Carpeta completa
+          </button>
+          <button class="btn btn-ghost btn-lg" onclick="loadDemoCatalog()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/><rect width="20" height="12" x="2" y="6" rx="2"/></svg> Cargar Demo
+          </button>
         </div>
       </div>
     </div>
@@ -175,7 +193,7 @@
           <div class="stat-sub" id="catKpiMarcas">0 marcas</div>
         </div>
         <div class="stat">
-          <div class="stat-label">FOB Mínimo <span class="info-tooltip" data-tooltip="FOB (Free On Board): Precio de compra unitario en origen (China/proveedor) sin flete ni impuestos.">?</span></div>
+          <div class="stat-label">FOB Mínimo <span class="info-tooltip" data-tooltip="FOB (Free On Board): Precio de compra unitario en origen sin flete ni impuestos.">?</span></div>
           <div class="stat-value" id="catKpiMin">$0</div>
           <div class="stat-sub">Por producto</div>
         </div>
@@ -197,19 +215,19 @@
       </div>
 
       <!-- Chips de Filtro Rápido por Categoría y Estado -->
-      <div id="catFilterChips" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; font-size: 11px;">
-        <button class="chip active" onclick="setCatChip('', this)" style="padding: 4px 12px; border-radius: 20px; border: 1px solid var(--primary); background: rgba(255,87,34,0.15); color: #fff; cursor: pointer; font-weight: 600;">Todas las categorías</button>
-        <button class="chip" onclick="setCatChip('TECLADO', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;">⌨️ Teclados</button>
-        <button class="chip" onclick="setCatChip('MOUSE', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;">🖱️ Mouses</button>
-        <button class="chip" onclick="setCatChip('HEADSET', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;">🎧 Headsets</button>
-        <button class="chip" onclick="setCatChip('CONTROLLER', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;">🎮 Mandos</button>
-        <button class="chip" onclick="setCatChip('MOUSEPAD', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;">🟦 Mousepads</button>
-        <button class="chip" onclick="setCatChip('SELECTED_ONLY', this)" style="padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(16,185,129,0.5); background: rgba(16,185,129,0.15); color: #34d399; cursor: pointer; font-weight: 600;">🟢 Seleccionados</button>
+      <div id="catFilterChips" class="filter-chips">
+        <button class="chip active" onclick="setCatChip('', this)">Todas las categorías</button>
+        <button class="chip" onclick="setCatChip('TECLADO', this)">⌨️ Teclados</button>
+        <button class="chip" onclick="setCatChip('MOUSE', this)">🖱️ Mouses</button>
+        <button class="chip" onclick="setCatChip('HEADSET', this)">🎧 Headsets</button>
+        <button class="chip" onclick="setCatChip('CONTROLLER', this)">🎮 Mandos</button>
+        <button class="chip" onclick="setCatChip('MOUSEPAD', this)">🟦 Mousepads</button>
+        <button class="chip" onclick="setCatChip('SELECTED_ONLY', this)">🟢 Seleccionados</button>
       </div>
 
       <div class="table-wrap">
         <div class="table-toolbar">
-          <div class="table-toolbar-left" style="flex-wrap: wrap;">
+          <div class="table-toolbar-left" style="flex-wrap: wrap; gap: 8px;">
             <input type="text" class="input search" id="catSearch" placeholder="Buscar SKU, marca, modelo..." oninput="renderCatalog()">
             <select class="select" id="catFilterMarca" onchange="renderCatalog()">
               <option value="">Todas las marcas</option>
@@ -217,25 +235,29 @@
             <select class="select" id="catFilterCat" onchange="renderCatalog()">
               <option value="">Todas las categorías</option>
             </select>
-            <div style="display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--text-3);">
+            <div style="display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-muted);">
               <span>Min $:</span>
-              <input type="number" id="catFilterMinPrice" placeholder="0" style="width: 55px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff;" oninput="renderCatalog()">
+              <input type="number" id="catFilterMinPrice" class="input" placeholder="0" style="width: 65px; padding: 5px 8px;" oninput="renderCatalog()">
               <span>Max $:</span>
-              <input type="number" id="catFilterMaxPrice" placeholder="Max" style="width: 60px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff;" oninput="renderCatalog()">
+              <input type="number" id="catFilterMaxPrice" class="input" placeholder="Max" style="width: 75px; padding: 5px 8px;" oninput="renderCatalog()">
             </div>
           </div>
-          <div class="table-toolbar-left">
-            <div class="row" style="gap: 6px; font-size: 11px; color: var(--text-3);">
-              <button class="btn btn-sm" onclick="prevPage()">◀ Anterior</button>
-              <span id="pageIndicator">Página 1 de 1</span>
-              <button class="btn btn-sm" onclick="nextPage()">Siguiente ▶</button>
+          <div class="table-toolbar-left" style="gap: 8px;">
+            <div class="row" style="gap: 6px; font-size: 11px; color: var(--text-muted);">
+              <button class="btn btn-sm btn-secondary" onclick="prevPage()">◀ Anterior</button>
+              <span id="pageIndicator" style="font-family: var(--font-mono); font-weight: 600;">Página 1 de 1</span>
+              <button class="btn btn-sm btn-secondary" onclick="nextPage()">Siguiente ▶</button>
             </div>
-            <div style="display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg);">
+            <div style="display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg);">
               <button id="btnViewTable" class="btn btn-sm" style="border-radius: 0; border: none; font-size: 11px; background: var(--primary); color: #fff;" onclick="setCatalogViewMode('table')">☰ Tabla</button>
               <button id="btnViewGrid" class="btn btn-sm" style="border-radius: 0; border: none; font-size: 11px; color: var(--text-muted); background: transparent;" onclick="setCatalogViewMode('grid')">🪟 Galería</button>
             </div>
-            <button class="btn btn-sm" onclick="addCatalogItem()">➕ Agregar producto</button>
-            <button class="btn btn-primary btn-sm" onclick="validarYOarmarPedido()">📦 Armar pedido →</button>
+            <button class="btn btn-sm btn-secondary" onclick="addCatalogItem()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg> Agregar
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="validarYOarmarPedido()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> Armar pedido →
+            </button>
           </div>
         </div>
         <div class="table-scroll" id="catalogTableWrap">
@@ -272,7 +294,9 @@
 
     <div class="card" id="pedidoEmpty">
       <div class="empty">
-        <div class="empty-icon">📦</div>
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        </div>
         <div class="empty-title">No hay pedido armado</div>
         <div class="empty-sub">Andá a "Catálogo", seleccioná los productos que querés, y hacé click en "Armar pedido".</div>
         <div class="empty-actions">
@@ -283,11 +307,11 @@
 
     <div id="pedidoContent" style="display: none;">
       <div class="card">
-        <div class="row" style="gap: 12px; flex-wrap: wrap;">
-          <input type="text" class="input" id="pedidoName" placeholder="Nombre del pedido" style="flex: 1; min-width: 200px; font-size: 14px; font-weight: 500;">
-          <button class="btn" onclick="FileImporter.exportCSV(currentPedido)">📤 CSV</button>
-          <button class="btn" onclick="FileImporter.exportXLSX(currentPedido)">📊 Excel</button>
-          <button class="btn" style="background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4);" onclick="FileImporter.exportCustomsPackingList(currentPedido)">📦 Packing List Aduanero</button>
+        <div class="row" style="gap: 12px; flex-wrap: wrap; align-items: center;">
+          <input type="text" class="input" id="pedidoName" placeholder="Nombre del pedido" style="flex: 1; min-width: 200px; font-size: 14px; font-weight: 600;">
+          <button class="btn btn-secondary btn-sm" onclick="FileImporter.exportCSV(currentPedido)">📤 CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="FileImporter.exportXLSX(currentPedido)">📊 Excel</button>
+          <button class="btn btn-sm badge-emerald" onclick="FileImporter.exportCustomsPackingList(currentPedido)">📦 Packing List Aduanero</button>
           <button class="btn" style="background: rgba(56,189,248,0.2); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4);" onclick="FileImporter.exportExecutiveReport(currentPedido)">📊 Reporte Ejecutivo</button>
           <button class="btn" style="background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4);" onclick="openSensitivitySimulatorModal()">📈 Simulador Dólar/Margen</button>
           <button class="btn" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; font-weight: 600;" onclick="QuoteGenerator.generatePrintableQuote(currentPedido)">📄 Cotización Cliente (PDF)</button>
@@ -334,47 +358,47 @@
 
       <!-- Parámetros Logísticos y Fiscales Avanzados -->
       <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div class="card-head" style="margin-bottom: 14px;">
           <div>
-            <div class="card-title" style="margin: 0;">🚚 Logística, Impuestos y Costos</div>
-            <div class="card-sub" style="margin: 0;">Configurá el régimen (Courier vs Importador), modo de envío y peso real</div>
+            <div class="card-title">🚚 Logística, Impuestos y Costos</div>
+            <div class="card-sub">Configurá el régimen (Courier vs Importador), modo de envío y peso real</div>
           </div>
         </div>
 
         <!-- Selectores de Régimen Logístico -->
-        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px;">
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 24px; font-size: 12px;">
           <div>
-            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Régimen de Importación:</span>
-            <label style="margin-right: 12px; cursor: pointer;">
-              <input type="radio" name="rLogisticaModo" value="courier" checked onchange="recalc()"> 🚀 Courier Simplificado
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Régimen de Importación:</span>
+            <label style="margin-right: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rLogisticaModo" value="courier" checked onchange="recalc()" style="accent-color: var(--primary);"> 🚀 Courier Simplificado
             </label>
-            <label style="cursor: pointer;">
-              <input type="radio" name="rLogisticaModo" value="importador" onchange="recalc()"> ⚓ Importación General (Despachante)
+            <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rLogisticaModo" value="importador" onchange="recalc()" style="accent-color: var(--primary);"> ⚓ Importación General (Despachante)
             </label>
           </div>
 
           <div>
-            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Vía de Transporte:</span>
-            <label style="margin-right: 12px; cursor: pointer;">
-              <input type="radio" name="rTransporteModo" value="aereo" checked onchange="recalc()"> ✈️ Aéreo
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Vía de Transporte:</span>
+            <label style="margin-right: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rTransporteModo" value="aereo" checked onchange="recalc()" style="accent-color: var(--primary);"> ✈️ Aéreo
             </label>
-            <label style="cursor: pointer;">
-              <input type="radio" name="rTransporteModo" value="maritimo" onchange="recalc()"> 🚢 Marítimo
+            <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rTransporteModo" value="maritimo" onchange="recalc()" style="accent-color: var(--primary);"> 🚢 Marítimo
             </label>
           </div>
 
           <div>
-            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 6px;">Cálculo de Flete:</span>
-            <label style="margin-right: 12px; cursor: pointer;">
-              <input type="radio" name="rFleteModo" value="porcentaje" checked onchange="recalc()"> % Porcentaje FOB
+            <span style="font-weight: 700; color: var(--primary); display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Cálculo de Flete:</span>
+            <label style="margin-right: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rFleteModo" value="porcentaje" checked onchange="recalc()" style="accent-color: var(--primary);"> % Porcentaje FOB
             </label>
-            <label style="cursor: pointer;">
-              <input type="radio" name="rFleteModo" value="peso" onchange="recalc()"> ⚖️ Por Peso (Kg)
+            <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <input type="radio" name="rFleteModo" value="peso" onchange="recalc()" style="accent-color: var(--primary);"> ⚖️ Por Peso (Kg)
             </label>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+        <div class="cost-grid">
           <div class="cost"><label>Flete (% FOB) <span class="info-tooltip" data-tooltip="Costo del transporte internacional como porcentaje del valor FOB.">?</span></label><input type="number" id="cFlete" value="15" onchange="recalc()"></div>
           <div class="cost"><label>Peso Total (Kg) <span class="info-tooltip" data-tooltip="Peso bruto total en kilogramos para calcular flete por peso.">?</span></label><input type="number" id="cPesoKg" value="0" placeholder="Ej: 12.5" onchange="recalc()"></div>
           <div class="cost"><label>Costo/Kg (USD) <span class="info-tooltip" data-tooltip="Tarifa del transporte/courier cobrada por cada kilogramo de peso.">?</span></label><input type="number" id="cCostoPorKg" value="12" placeholder="Ej: 12" onchange="recalc()"></div>
@@ -388,7 +412,7 @@
           <div class="cost" style="grid-column: span 2;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <label style="margin: 0;">Markup (x) <span class="info-tooltip" data-tooltip="Multiplicador de ganancia sobre el costo unitario para calcular el PVP (ej: 2.5 = multiplicar costo x 2.5).">?</span></label>
-              <span id="marginHealthBadge" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">🟢 Excelente Rentabilidad</span>
+              <span id="marginHealthBadge" class="badge badge-emerald">🟢 Excelente Rentabilidad</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <input type="number" id="cMarkup" value="2.5" step="0.1" style="width: 70px;" onchange="syncMarkup(this.value, 'num')">
@@ -398,32 +422,18 @@
           <div class="cost"><label>Tipo Cambio ($/USD) <span class="info-tooltip" data-tooltip="Cotización del dólar para calcular importes equivalentes en Pesos ARS.">?</span></label><input type="number" id="cTasaCambio" value="1400" onchange="recalc()"></div>
         </div>
 
-        <!-- Barra de Cotización Dólar en Vivo (DolarApi) -->
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 8px 12px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #a5b4fc;">
-            <span>🌐 Cotizaciones Dólar Argentina:</span>
-            <span id="dolarRatesBadgeList" style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">🏛️ Mayorista: ...</span>
-              <span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">🏢 Oficial: ...</span>
-              <span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">💙 Blue: ...</span>
-              <span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">📈 MEP: ...</span>
-              <span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 6px;" title="Click para aplicar a Tasa de Cambio">⚡ Cripto: ...</span>
-            </span>
-          </div>
-          <button class="btn btn-sm" onclick="fetchLiveDolarRates(true)" style="font-size: 11px; padding: 3px 10px; background: rgba(99,102,241,0.3); color: #fff;">🔄 Actualizar Dólar</button>
-        </div>
-
         <!-- Barra de Control de Descuento Negociado & Punto de Equilibrio -->
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 14px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px;">
-            <span style="font-size: 12px; font-weight: 800; color: #34d399;">🤼 Descuento Negociado:</span>
-            <input type="range" id="cDescuentoNegociadoRange" min="0" max="40" step="1" value="0" style="flex: 1; accent-color: #34d399; cursor: pointer;" oninput="syncDescuentoNegociado(this.value)">
-            <span id="cDescuentoNegociadoVal" style="font-size: 13px; font-weight: 800; color: #fff; min-width: 45px;">0%</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 12px 18px; background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.25); border-radius: var(--radius); flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--green-hover); font-family: var(--font-headline);">🤼 Descuento Negociado:</span>
+            <input type="range" id="cDescuentoNegociadoRange" min="0" max="40" step="1" value="0" style="flex: 1; accent-color: var(--green); cursor: pointer;" oninput="syncDescuentoNegociado(this.value)">
+            <span id="cDescuentoNegociadoVal" style="font-family: var(--font-mono); font-size: 13px; font-weight: 800; color: #fff; min-width: 45px;">0%</span>
           </div>
-          <div id="negotiationSavingsBadge" style="font-size: 12px; font-weight: 800; color: #34d399; background: rgba(16,185,129,0.15); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(16,185,129,0.4);">
+          <div id="negotiationSavingsBadge" class="badge badge-emerald">
             🤝 Sin descuento negociado
           </div>
-          <button class="btn btn-sm" style="background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); font-size: 11px;" onclick="openBreakEvenModal()">💵 Punto de Equilibrio</button>
+          <button class="btn btn-sm badge-emerald" onclick="openBreakEvenModal()">💵 Punto de Equilibrio</button>
+          <button class="btn btn-sm badge-sky" onclick="openDoorToDoorModal()">🚚 Puerta a Puerta Exacto (NCM)</button>
         </div>
       </div>
 
@@ -473,79 +483,82 @@
 <div class="toast" id="toast"></div>
 
 <!-- Update Modal -->
-<div class="modal-backdrop" id="updateModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px); z-index: 9999; justify-content: center; align-items: center;">
-  <div style="background: var(--bg-card, #1e1e2d); border: 1px solid var(--border, #2b2b40); border-radius: 14px; padding: 24px; max-width: 500px; width: 92%; color: #fff; box-shadow: 0 25px 50px rgba(0,0,0,0.6);">
-    <div style="font-size: 18px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-      🚀 <span>Nueva Versión de Mambo Pedidos</span>
+<div class="modal-backdrop" id="updateModal" style="display: none;">
+  <div class="modal-card" style="max-width: 520px;">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>🚀 Nueva Versión de Mambo Pedidos</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="AppUpdater.closeModal()">✕</button>
     </div>
-    <div style="font-size: 12px; color: var(--text-muted, #a0a0b8); margin-bottom: 14px;" id="updateModalVersion">
+    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;" id="updateModalVersion">
       Versión disponible
     </div>
 
     <!-- Notas de la versión formateadas -->
-    <div style="font-size: 12px; line-height: 1.55; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 8px; margin-bottom: 14px; max-height: 140px; overflow-y: auto; color: var(--text, #e0e0e0);" id="updateModalNotes">
+    <div style="font-size: 12px; line-height: 1.55; background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 14px; border-radius: var(--radius); margin-bottom: 16px; max-height: 140px; overflow-y: auto; color: var(--text);" id="updateModalNotes">
       ¡Hay una nueva versión disponible!
     </div>
 
     <!-- Barra de Progreso de Descarga en Vivo -->
-    <div id="updateProgressWrap" style="display: none; margin-bottom: 16px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 12px;">
+    <div id="updateProgressWrap" style="display: none; margin-bottom: 16px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;">
       <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px; color: var(--text-muted);" id="updateProgressText">
         Descargando actualización... 0%
       </div>
-      <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+      <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden;">
         <div id="updateProgressBarInner" style="width: 0%; height: 100%; background: linear-gradient(90deg, #6366f1, #38bdf8); transition: width 0.2s ease;"></div>
       </div>
     </div>
 
     <!-- Enlace directo visible e interactivo -->
-    <div id="updateModalDirectLink" style="font-size: 11px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 6px; padding: 8px 10px; margin-bottom: 16px; word-break: break-all; color: #a5b4fc;">
+    <div id="updateModalDirectLink" style="font-size: 11px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 18px; word-break: break-all; color: #a5b4fc;">
       🔗 <span>Enlace de descarga directo:</span><br>
       <a id="updateModalLinkAnchor" href="#" onclick="AppUpdater.openInBrowser(); return false;" style="color: #38bdf8; text-decoration: underline; font-weight: 600;"></a>
     </div>
 
     <!-- Botones de Acción Doble -->
-    <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px;">
+    <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px;">
       <button class="btn btn-secondary btn-sm" onclick="AppUpdater.closeModal()">Ahora no</button>
-      <button class="btn btn-sm" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="AppUpdater.openInBrowser()">🌐 En Navegador</button>
+      <button class="btn btn-sm btn-ghost" onclick="AppUpdater.openInBrowser()">🌐 En Navegador</button>
       <button class="btn btn-primary btn-sm" id="updateModalBtn" onclick="AppUpdater.startDirectDownload()">⚡ Actualización Rápida 1-Click</button>
     </div>
   </div>
 </div>
 
 <!-- Modal Vista Previa de Importación (Semáforo de Diagnóstico) -->
-<div class="modal-backdrop" id="importPreviewModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(5px); z-index: 9990; justify-content: center; align-items: center;">
-  <div style="background: var(--bg-card, #1e1e2d); border: 1px solid var(--border, #2b2b40); border-radius: 14px; padding: 24px; max-width: 1080px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; color: #fff; box-shadow: 0 25px 50px rgba(0,0,0,0.6);">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+<div class="modal-backdrop" id="importPreviewModal" style="display: none; z-index: 9990;">
+  <div class="modal-card" style="max-width: 1080px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+    <div class="modal-header">
       <div>
-        <div style="font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-          📊 <span>Vista Previa y Diagnóstico de Importación</span>
+        <div class="modal-title">
+          <span>📊 Vista Previa y Diagnóstico de Importación</span>
         </div>
-        <div style="font-size: 12px; color: var(--text-muted, #a0a0b8);" id="importPreviewSummary">
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;" id="importPreviewSummary">
           Revisá los productos detectados antes de incorporarlos al catálogo.
         </div>
       </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.4);" id="badgeValidCount">🟢 0 Confiables</span>
-        <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid rgba(234,179,8,0.4);" id="badgeWarnCount">🟡 0 Revisar</span>
-        <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4);" id="badgeErrCount">🔴 0 Incertidumbre</span>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="badge badge-emerald" id="badgeValidCount">🟢 0 Confiables</span>
+        <span class="badge badge-amber" id="badgeWarnCount">🟡 0 Revisar</span>
+        <span class="badge badge-rose" id="badgeErrCount">🔴 0 Incertidumbre</span>
       </div>
     </div>
 
     <!-- Barra de edición en lote -->
-    <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border, #2b2b40); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12px;">
-      <span style="font-weight: 600; color: var(--primary, #6366f1);">🛠️ Edición masiva:</span>
-      <label style="display: flex; align-items: center; gap: 4px;">
-        <input type="checkbox" id="chkSelectAllPreview" onchange="toggleSelectAllPreview(this.checked)"> Seleccionar todos
+    <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 12px;">
+      <span style="font-weight: 700; color: var(--primary); font-family: var(--font-headline);">🛠️ Edición masiva:</span>
+      <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+        <input type="checkbox" id="chkSelectAllPreview" onchange="toggleSelectAllPreview(this.checked)" style="accent-color: var(--primary);"> Seleccionar todos
       </label>
-      <button class="btn btn-sm" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-weight: 600; padding: 3px 10px; border-radius: 6px;" onclick="autoCorrectPreviewWithAI()">🧠 Auto-Corregir con IA</button>
+      <button class="btn btn-sm btn-accent" onclick="autoCorrectPreviewWithAI()">🧠 Auto-Corregir con IA</button>
       <div style="display: flex; gap: 6px; align-items: center; margin-left: auto;">
-        <span>Asignar Marca a seleccionados:</span>
-        <input type="text" id="batchBrandInput" placeholder="Ej: HyperX" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff; width: 110px;">
-        <button class="btn btn-sm" onclick="applyBatchBrand()">Aplicar</button>
+        <span>Asignar Marca:</span>
+        <input type="text" id="batchBrandInput" placeholder="Ej: HyperX" class="input" style="width: 120px; padding: 4px 8px;">
+        <button class="btn btn-sm btn-secondary" onclick="applyBatchBrand()">Aplicar</button>
       </div>
       <div style="display: flex; gap: 6px; align-items: center;">
         <span>Categoría:</span>
-        <select id="batchCatSelect" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: #fff;">
+        <select id="batchCatSelect" class="select" style="padding: 4px 8px;">
           <option value="">Seleccionar...</option>
           <option value="TECLADO">TECLADO</option>
           <option value="MOUSE">MOUSE</option>
@@ -558,12 +571,12 @@
           <option value="CUIDADO_PERSONAL">CUIDADO_PERSONAL</option>
           <option value="OTRO">OTRO</option>
         </select>
-        <button class="btn btn-sm" onclick="applyBatchCat()">Aplicar</button>
+        <button class="btn btn-sm btn-secondary" onclick="applyBatchCat()">Aplicar</button>
       </div>
     </div>
 
     <!-- Tabla interactiva de vista previa -->
-    <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px;">
+    <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px;">
       <table class="table" style="font-size: 12px; margin-bottom: 0;">
         <thead>
           <tr>
@@ -596,24 +609,27 @@
 </div>
 
 <!-- Modal Gestor de Diccionario de Marcas y Alias -->
-<div class="modal-backdrop" id="brandManagerModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(5px); z-index: 9995; justify-content: center; align-items: center;">
-  <div style="background: var(--bg-card, #1e1e2d); border: 1px solid var(--border, #2b2b40); border-radius: 14px; padding: 24px; max-width: 600px; width: 90%; color: #fff; box-shadow: 0 25px 50px rgba(0,0,0,0.6);">
-    <div style="font-size: 18px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-      🏷️ <span>Diccionario de Marcas y Alias</span>
+<div class="modal-backdrop" id="brandManagerModal" style="display: none; z-index: 9995;">
+  <div class="modal-card" style="max-width: 600px;">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>🏷️ Diccionario de Marcas y Alias</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeBrandManagerModal()">✕</button>
     </div>
     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">
       Agregá marcas personalizadas y palabras clave para que el lector de PDFs las reconozca automáticamente.
     </div>
 
     <!-- Formulario para agregar marca -->
-    <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
-      <input type="text" id="newBrandName" placeholder="Nombre (Ej: Redragon)" style="flex: 1; min-width: 140px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: #fff; font-size: 12px;">
-      <input type="text" id="newBrandPattern" placeholder="Palabra clave en PDF (Ej: redragon|k552)" style="flex: 1.5; min-width: 180px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: #fff; font-size: 12px;">
+    <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+      <input type="text" id="newBrandName" placeholder="Nombre (Ej: Redragon)" class="input" style="flex: 1; min-width: 140px;">
+      <input type="text" id="newBrandPattern" placeholder="Palabra clave PDF (Ej: redragon|k552)" class="input" style="flex: 1.5; min-width: 180px;">
       <button class="btn btn-primary btn-sm" onclick="addCustomBrand()">➕ Guardar Marca</button>
     </div>
 
     <!-- Lista de marcas guardadas -->
-    <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 20px;">
+    <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin-bottom: 20px;">
       <div id="brandListContainer" style="display: flex; flex-direction: column; gap: 6px;"></div>
     </div>
 
@@ -624,73 +640,77 @@
 </div>
 
 <!-- Sticky Order Bar (Barra Flotante de Compra) -->
-<div id="stickyOrderBar" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #181824; border: 1px solid rgba(255, 87, 34, 0.5); border-radius: 50px; padding: 8px 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.7), 0 0 20px rgba(255, 87, 34, 0.2); z-index: 9000; align-items: center; gap: 16px; font-size: 13px; color: #fff;">
+<div id="stickyOrderBar" class="sticky-order-bar" style="display: none;">
   <div style="display: flex; align-items: center; gap: 8px;">
-    <span>📦</span>
-    <strong id="stickySelCount" style="color: var(--primary);">0 productos</strong>
-    <span style="color: var(--text-3);">·</span>
-    <span id="stickySelFob" style="font-weight: 600; color: #38bdf8;">$0.00 FOB</span>
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+    <strong id="stickySelCount" style="color: var(--primary); font-family: var(--font-mono);">0 productos</strong>
+    <span style="color: var(--text-dim);">·</span>
+    <span id="stickySelFob" style="font-weight: 600; color: var(--blue); font-family: var(--font-mono);">$0.00 FOB</span>
   </div>
-  <button class="btn btn-primary btn-sm" style="border-radius: 20px; padding: 6px 16px; font-weight: 700;" onclick="validarYOarmarPedido()">📦 Armar Pedido Ahora →</button>
+  <button class="btn btn-primary btn-sm" style="border-radius: var(--radius-full); padding: 6px 18px; font-weight: 700;" onclick="validarYOarmarPedido()">📦 Armar Pedido Ahora →</button>
 </div>
 
 <!-- Full Screen Drag & Drop Overlay -->
-<div id="dropOverlay" style="display: none; position: fixed; inset: 0; background: rgba(14,14,14,0.92); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center; border: 3px dashed var(--primary); color: #fff;">
+<div id="dropOverlay" style="display: none; position: fixed; inset: 0; background: rgba(7,8,12,0.95); backdrop-filter: blur(16px); z-index: 99999; justify-content: center; align-items: center; border: 3px dashed var(--primary); color: #fff;">
   <div style="text-align: center; pointer-events: none;">
     <div style="font-size: 64px; margin-bottom: 16px;">📥</div>
-    <div style="font-size: 24px; font-weight: 800; color: var(--primary); margin-bottom: 8px;">Soltá tus listas de precios acá</div>
+    <div style="font-size: 24px; font-weight: 800; color: var(--primary); margin-bottom: 8px; font-family: var(--font-headline);">Soltá tus listas de precios acá</div>
     <div style="font-size: 14px; color: var(--text-muted);">Procesaremos automáticamente todos tus archivos PDF, CSV o Excel</div>
   </div>
+</div>
+
 <!-- Modal Zoom de Foto en Alta Resolución -->
-<div class="modal-backdrop" id="imageZoomModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeImageZoomModal()">
-  <div style="position: relative; max-width: 90vw; max-height: 90vh; text-align: center;" onclick="event.stopPropagation()">
-    <img id="imageZoomSrc" src="" style="max-width: 85vw; max-height: 65vh; object-fit: contain; border-radius: 8px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); border: 2px solid var(--border); image-rendering: -webkit-optimize-contrast;">
-    <div id="imageZoomCaption" style="font-size: 13px; color: #fff; margin-top: 10px; font-weight: 600;"></div>
-    <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap;">
-      <button class="btn btn-sm" onclick="triggerImageUpload()" style="background: var(--surface); color: #fff; border: 1px solid var(--border);">🖼️ Cambiar / Subir Foto</button>
-      <button class="btn btn-sm" onclick="triggerCleanBackground()" style="background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4);">🪄 Limpiar Fondo</button>
-      <button class="btn btn-secondary btn-sm" onclick="closeImageZoomModal()">❌ Cerrar</button>
+<div class="modal-backdrop" id="imageZoomModal" style="display: none; z-index: 99999;" onclick="closeImageZoomModal()">
+  <div class="modal-card" style="max-width: 90vw; width: auto; max-height: 90vh; text-align: center;" onclick="event.stopPropagation()">
+    <img id="imageZoomSrc" src="" style="max-width: 85vw; max-height: 65vh; object-fit: contain; border-radius: var(--radius); box-shadow: 0 25px 50px rgba(0,0,0,0.8); border: 1px solid var(--border);">
+    <div id="imageZoomCaption" style="font-size: 13px; color: #fff; margin-top: 12px; font-weight: 600;"></div>
+    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap;">
+      <button class="btn btn-secondary btn-sm" onclick="triggerImageUpload()">🖼️ Cambiar / Subir Foto</button>
+      <button class="btn btn-sm btn-accent" onclick="triggerCleanBackground()">🪄 Limpiar Fondo</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeImageZoomModal()">❌ Cerrar</button>
     </div>
     <input type="file" id="productImageFileInput" accept="image/*" style="display: none;" onchange="handleProductImageFile(event)">
   </div>
+</div>
+
 <!-- Modal Comparador Multiproveedor de Precios -->
-<div class="modal-backdrop" id="supplierCompareModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeSupplierCompareModal()">
-  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 900px; max-height: 85vh; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.7);" onclick="event.stopPropagation()">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+<div class="modal-backdrop" id="supplierCompareModal" style="display: none; z-index: 99999;" onclick="closeSupplierCompareModal()">
+  <div class="modal-card" style="width: 90%; max-width: 900px; max-height: 85vh; display: flex; flex-direction: column; gap: 16px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
       <div>
-        <div style="font-size: 18px; font-weight: 800; color: #fff;">📊 Comparador Multiproveedor de Precios</div>
+        <div class="modal-title">📊 Comparador Multiproveedor de Precios</div>
         <div style="font-size: 12px; color: var(--text-muted);">Comparación automática de productos coincidentes entre diferentes marcas y proveedores</div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="closeSupplierCompareModal()">❌ Cerrar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeSupplierCompareModal()">✕</button>
     </div>
     <div id="supplierCompareBody" style="overflow-y: auto; max-height: 60vh;"></div>
   </div>
 </div>
 
 <!-- Modal Simulador de Sensibilidad Dólar / Impuestos / Margen -->
-<div class="modal-backdrop" id="sensitivitySimulatorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeSensitivitySimulatorModal()">
-  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 850px; max-height: 85vh; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.7);" onclick="event.stopPropagation()">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+<div class="modal-backdrop" id="sensitivitySimulatorModal" style="display: none; z-index: 99999;" onclick="closeSensitivitySimulatorModal()">
+  <div class="modal-card" style="width: 90%; max-width: 850px; max-height: 85vh; display: flex; flex-direction: column; gap: 16px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
       <div>
-        <div style="font-size: 18px; font-weight: 800; color: #fff;">📈 Simulador de Sensibilidad y Escenarios</div>
+        <div class="modal-title">📈 Simulador de Sensibilidad y Escenarios</div>
         <div style="font-size: 12px; color: var(--text-muted);">Simulá variaciones en el Tipo de Cambio ($/USD), Flete y Margen Objetivo</div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="closeSensitivitySimulatorModal()">❌ Cerrar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeSensitivitySimulatorModal()">✕</button>
     </div>
 
     <!-- Sliders de Simulación -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; background: rgba(0,0,0,0.3); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border);">
       <div>
-        <label style="font-size: 12px; font-weight: 700; color: #a5b4fc; display: block; margin-bottom: 4px;">Tipo de Cambio Simulado ($/USD): <span id="simTcVal" style="color: #fff;">$1400</span></label>
+        <label style="font-size: 11px; font-weight: 700; color: #a5b4fc; display: block; margin-bottom: 6px; font-family: var(--font-mono);">Tipo de Cambio ($/USD): <span id="simTcVal" style="color: #fff;">$1400</span></label>
         <input type="range" id="simTcRange" min="800" max="2500" step="10" value="1400" style="width: 100%; accent-color: var(--primary);" oninput="runSensitivitySimulation()">
       </div>
       <div>
-        <label style="font-size: 12px; font-weight: 700; color: #38bdf8; display: block; margin-bottom: 4px;">Variación Flete/Gastos: <span id="simFleteVal" style="color: #fff;">0%</span></label>
-        <input type="range" id="simFleteRange" min="-50" max="100" step="5" value="0" style="width: 100%; accent-color: #38bdf8;" oninput="runSensitivitySimulation()">
+        <label style="font-size: 11px; font-weight: 700; color: var(--blue); display: block; margin-bottom: 6px; font-family: var(--font-mono);">Variación Flete/Gastos: <span id="simFleteVal" style="color: #fff;">0%</span></label>
+        <input type="range" id="simFleteRange" min="-50" max="100" step="5" value="0" style="width: 100%; accent-color: var(--blue);" oninput="runSensitivitySimulation()">
       </div>
       <div>
-        <label style="font-size: 12px; font-weight: 700; color: #34d399; display: block; margin-bottom: 4px;">Margen Objetivo Deseado: <span id="simMargenVal" style="color: #fff;">35%</span></label>
-        <input type="range" id="simMargenRange" min="10" max="80" step="1" value="35" style="width: 100%; accent-color: #34d399;" oninput="runSensitivitySimulation()">
+        <label style="font-size: 11px; font-weight: 700; color: var(--green-hover); display: block; margin-bottom: 6px; font-family: var(--font-mono);">Margen Objetivo Deseado: <span id="simMargenVal" style="color: #fff;">35%</span></label>
+        <input type="range" id="simMargenRange" min="10" max="80" step="1" value="35" style="width: 100%; accent-color: var(--green);" oninput="runSensitivitySimulation()">
       </div>
     </div>
 
@@ -699,37 +719,74 @@
 </div>
 
 <!-- Modal Calculadora de Punto de Equilibrio (Break-Even Engine) -->
-<div class="modal-backdrop" id="breakEvenModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center;" onclick="closeBreakEvenModal()">
-  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 750px; max-height: 85vh; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.7);" onclick="event.stopPropagation()">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+<div class="modal-backdrop" id="breakEvenModal" style="display: none; z-index: 99999;" onclick="closeBreakEvenModal()">
+  <div class="modal-card" style="width: 90%; max-width: 750px; max-height: 85vh; display: flex; flex-direction: column; gap: 16px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
       <div>
-        <div style="font-size: 18px; font-weight: 800; color: #fff;">💵 Calculadora de Punto de Equilibrio (Break-Even)</div>
+        <div class="modal-title">💵 Calculadora de Punto de Equilibrio (Break-Even)</div>
         <div style="font-size: 12px; color: var(--text-muted);">Calculá cuántas unidades necesitás vender por mes para cubrir el 100% de tus costos fijos</div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="closeBreakEvenModal()">❌ Cerrar</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeBreakEvenModal()">✕</button>
     </div>
 
     <!-- Controles de Gastos Fijos -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: rgba(0,0,0,0.3); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border);">
       <div>
-        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Alquiler / Depósito (USD):</label>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Alquiler / Depósito ($USD):</label>
         <input type="number" id="beAlquiler" value="300" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
       </div>
       <div>
-        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Sueldos / Empleados (USD):</label>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Sueldos / Empleados ($USD):</label>
         <input type="number" id="beSueldos" value="500" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
       </div>
       <div>
-        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Servicios y Sistema (USD):</label>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Servicios y Sistema ($USD):</label>
         <input type="number" id="beServicios" value="100" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
       </div>
       <div>
-        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Publicidad / Mkt (USD):</label>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Publicidad / Mkt ($USD):</label>
         <input type="number" id="bePublicidad" value="200" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runBreakEvenCalculation()">
       </div>
     </div>
 
     <div id="breakEvenResultsBody" style="overflow-y: auto; max-height: 50vh;"></div>
+  </div>
+</div>
+
+<!-- Modal Liquidación Exacta Puerta a Puerta (NCM & Regulaciones) -->
+<div class="modal-backdrop" id="doorToDoorModal" style="display: none; z-index: 99999;" onclick="closeDoorToDoorModal()">
+  <div class="modal-card" style="width: 92%; max-width: 980px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🚚 Liquidación Exacta Puerta a Puerta (NCM & Regulaciones)</div>
+        <div style="font-size: 12px; color: var(--text-muted);">
+          Cálculo exacto del costo final puesto en tu puerta, contemplando posición arancelaria NCM, certificaciones (ENACOM / S-Mark) y depósitos fiscales.
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeDoorToDoorModal()">✕</button>
+    </div>
+
+    <!-- Inputs de Parámetros Puerta a Puerta -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; background: rgba(0,0,0,0.3); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border);">
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: #a5b4fc; display: block; margin-bottom: 4px; font-family: var(--font-mono);">Depósito Fiscal / TCA ($USD):</label>
+        <input type="number" id="doorDepositoFiscal" value="150" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runDoorToDoorCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--blue); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Honorarios Despachante ($USD):</label>
+        <input type="number" id="doorDespachante" value="450" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runDoorToDoorCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--green-hover); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Flete Interno a Puerta ($USD):</label>
+        <input type="number" id="doorFleteInterno" value="80" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runDoorToDoorCalculation()">
+      </div>
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--yellow); display: block; margin-bottom: 4px; font-family: var(--font-mono);">Digitalización SIM ($USD):</label>
+        <input type="number" id="doorSimDigitalizacion" value="40" class="input" style="padding: 6px 10px; font-size: 13px;" oninput="runDoorToDoorCalculation()">
+      </div>
+    </div>
+
+    <div id="doorToDoorResultsBody" style="overflow-y: auto; max-height: 55vh;"></div>
   </div>
 </div>
 
