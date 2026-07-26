@@ -11,16 +11,19 @@ const AppStorage = {
   },
   storeInstance: null,
 
-  // Inicializar Tauri Store si está disponible
+  // Inicializar Tauri Store si está disponible (Tauri v1/v2 compatible)
   async init() {
-    if (window.__TAURI__ && window.__TAURI__.store) {
-      try {
-        this.storeInstance = await window.__TAURI__.store.createStore('.mambo-store.json');
-        await this.storeInstance.load();
-      } catch (e) {
-        console.warn('Tauri Store no disponible, usando LocalStorage fallback', e);
-        this.storeInstance = null;
+    try {
+      const storePlugin = window.__TAURI_PLUGIN_STORE__ || window.__TAURI__?.store || window.__TAURI__?.plugin?.store;
+      if (storePlugin && typeof storePlugin.createStore === 'function') {
+        this.storeInstance = await storePlugin.createStore('.mambo-store.json');
+        if (this.storeInstance && typeof this.storeInstance.load === 'function') {
+          await this.storeInstance.load();
+        }
       }
+    } catch (e) {
+      console.warn('Tauri Store no disponible, usando LocalStorage fallback:', e);
+      this.storeInstance = null;
     }
   },
 
@@ -46,6 +49,7 @@ const AppStorage = {
       try {
         await this.storeInstance.set(key, value);
         await this.storeInstance.save();
+        return;
       } catch (e) {
         console.error('Error guardando en Tauri Store:', e);
       }
@@ -53,7 +57,14 @@ const AppStorage = {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
-      console.warn('LocalStorage quota superada:', e);
+      console.warn('LocalStorage quota superada. Guardando versión compacta sin imágenes pesadas...', e);
+      try {
+        // Fallback Ponytail: Strip base64 image strings to ensure data preservation without crashing
+        const compactVal = JSON.parse(JSON.stringify(value, (k, v) => (k === 'img' && typeof v === 'string' && v.length > 500 ? '' : v)));
+        localStorage.setItem(key, JSON.stringify(compactVal));
+      } catch (err) {
+        console.error('Error al guardar datos compactos en LocalStorage:', err);
+      }
     }
   },
 

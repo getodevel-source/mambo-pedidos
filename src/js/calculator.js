@@ -1,6 +1,6 @@
 // ============================================
 //  Mambo Pedidos - Módulo de Cálculos de Costo, Logística y Rentabilidad (USD / ARS)
-//  Soporte para Cálculo de Flete por Peso (Kg), Regulaciones Courier/Importador, ROI e IVA
+//  Matriz NCM Aduanera, Liquidación Puerta a Puerta Exacta, ENACOM & Seguridad Eléctrica
 //  Desarrollado por @geto_dev
 // ============================================
 
@@ -12,23 +12,45 @@ const Calculator = {
     return !isNaN(parsed) ? parsed : defaultVal;
   },
 
+  // Matriz NCM Aduanera y Regulaciones (Argentina / MERCOSUR)
+  NCM_MATRIX: {
+    'TECLADO_CABLE': { ncm: '8471.60.52', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
+    'TECLADO_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'MOUSE_CABLE': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
+    'MOUSE_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'HEADSET_CABLE': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
+    'HEADSET_WIRELESS': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'CONTROLLER_WIRELESS': { ncm: '9504.50.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'MONITOR': { ncm: '8528.52.00', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
+    'SWITCH': { ncm: '8536.50.90', derechos: 0.14, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
+    'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] }
+  },
+
+  CERTIFICATIONS_INFO: {
+    'ENACOM': { title: '📡 Homologación ENACOM (Radiofrecuencia/BT)', costUsd: 350, description: 'Requerido para equipos inalámbricos (2.4GHz / Bluetooth 5.0+)' },
+    'SEGURIDAD_ELECTRICA_SMARK': { title: '⚡ Certificación S-Mark (IRAM / UL)', costUsd: 850, description: 'Requerido para fuentes alimentadas a red eléctrica de 220V' },
+    'LITIO_DG': { title: '🔋 Recargo Batería de Litio (IATA Dangerous Goods)', costUsd: 75, description: 'Recargo de transporte aéreo por materiales peligrosos (Li-Ion)' }
+  },
+
   getCostConfig(inputs = {}) {
     return {
       fletePct: this.parseNum(inputs.flete, 15) / 100,
-      fleteModo: inputs.fleteModo || 'porcentaje', // 'porcentaje' | 'peso'
+      fleteModo: inputs.fleteModo || 'porcentaje',
       pesoKg: this.parseNum(inputs.pesoKg, 0),
-      costoPorKg: this.parseNum(inputs.costoPorKg, 12), // USD por Kg
-      logisticaModo: inputs.logisticaModo || 'courier', // 'courier' | 'importador'
-      transporteModo: inputs.transporteModo || 'aereo', // 'aereo' | 'maritimo'
+      costoPorKg: this.parseNum(inputs.costoPorKg, 12),
+      logisticaModo: inputs.logisticaModo || 'courier',
+      transporteModo: inputs.transporteModo || 'aereo',
       seguro: this.parseNum(inputs.seguro, 2) / 100,
       derechos: this.parseNum(inputs.derechos, 16) / 100,
       tasa: this.parseNum(inputs.tasa, 3) / 100,
       perc: this.parseNum(inputs.perc, 6) / 100,
-      ivaPct: this.parseNum(inputs.ivaPct, 21) / 100, // 21% o 10.5%
+      ivaPct: this.parseNum(inputs.ivaPct, 21) / 100,
       desp: this.parseNum(inputs.desp, 500),
       courier: this.parseNum(inputs.courier, 8),
       markup: this.parseNum(inputs.markup, 2.5),
       tipoCambio: this.parseNum(inputs.tipoCambio, 1400.0),
+      incluirIva: inputs.incluirIva !== undefined ? inputs.incluirIva : false,
     };
   },
 
@@ -39,7 +61,6 @@ const Calculator = {
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
 
-    // Cálculo del flete según el modo (Porcentaje vs Peso $ / Kg)
     let flete = 0;
     if (config.fleteModo === 'peso' && config.pesoKg > 0 && config.costoPorKg > 0) {
       flete = config.pesoKg * config.costoPorKg;
@@ -56,7 +77,7 @@ const Calculator = {
     const courierCost = config.logisticaModo === 'courier' ? totalQty * config.courier : 0;
     const despCost = config.logisticaModo === 'importador' ? config.desp : 0;
 
-    const totalCosto = cif + derechos + tasa + perc + despCost + courierCost;
+    const totalCosto = cif + derechos + tasa + perc + despCost + courierCost + (config.incluirIva ? ivaUsd : 0);
     const factorCosto = totalFob > 0 ? totalCosto / totalFob : 0;
 
     const calculatedItems = items.map(item => {
@@ -97,7 +118,6 @@ const Calculator = {
     const margenGeneralPct = totalFacturacion > 0 ? Math.round((totalMargen / totalFacturacion) * 100) : 0;
     const roiGeneralPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 100) : 0;
 
-    // Evaluaciones y Advertencias de Régimen Logístico
     const warnings = [];
     const cautions = [];
 
@@ -108,7 +128,7 @@ const Calculator = {
           type: 'danger',
           code: 'COURIER_FOB_EXCEEDED',
           title: '🚨 Límite Courier Superado',
-          message: `El importe FOB total ($${totalFob.toFixed(2)} USD) excede el máximo permitido de USD 3,000 para Courier Simplificado en Argentina.`
+          message: `El importe FOB total ($${totalFob.toFixed(2)} USD) excede el máximo permitido de USD 3,000 para Courier Simplificado.`
         });
       }
       if (config.fleteModo === 'peso' && config.pesoKg > 50) {
@@ -126,7 +146,7 @@ const Calculator = {
           type: 'warning',
           code: 'COURIER_SPECIES_WARNING',
           title: '⚠️ Presunción de Fin Comercial',
-          message: `${speciesExceeded.length} productos superan las 3 unidades de la misma especie (podría requerir régimen de importación general).`
+          message: `${speciesExceeded.length} productos superan las 3 unidades de la misma especie.`
         });
       }
     } else {
@@ -163,7 +183,136 @@ const Calculator = {
     };
   },
 
-  // Estimador rápido para ítems individuales en vista de Catálogo
+  // MOTOR DE LIQUIDACIÓN EXACTA PUERTA A PUERTA (NCM & REGULACIONES)
+  calculateDoorToDoorExactCost(items = [], doorConfig = {}) {
+    const tc = this.parseNum(doorConfig.tipoCambio, 1400);
+    const pesoTotal = this.parseNum(doorConfig.pesoKg, 0);
+    const costoPorKg = this.parseNum(doorConfig.costoPorKg, 12);
+    const depositoFiscalUsd = this.parseNum(doorConfig.depositoFiscalUsd, 150);
+    const despachanteUsd = this.parseNum(doorConfig.despachanteUsd, 450);
+    const simDigitalizacionUsd = this.parseNum(doorConfig.simDigitalizacionUsd, 40);
+    const fleteInternoUsd = this.parseNum(doorConfig.fleteInternoUsd, 80);
+
+    const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
+    const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
+    const fleteTotal = pesoTotal > 0 ? pesoTotal * costoPorKg : totalFob * 0.15;
+    const seguroTotal = totalFob * 0.015;
+    const cifTotal = totalFob + fleteTotal + seguroTotal;
+
+    const certsSet = new Set();
+    const itemCalculations = items.map(item => {
+      const q = item.qty || 1;
+      const subFob = (item.fob || 0) * q;
+      const weightFrac = totalFob > 0 ? (subFob / totalFob) : (q / totalQty);
+      const itemFlete = fleteTotal * weightFrac;
+      const itemSeguro = seguroTotal * weightFrac;
+      const itemCif = subFob + itemFlete + itemSeguro;
+
+      // Determinar NCM y Aranceles exactos por categoría/variante
+      let ncmKey = 'OTRO';
+      const catUpper = (item.cat || '').toUpperCase();
+      const textAll = `${item.modelo} ${item.variante || ''} ${item.cat}`.toUpperCase();
+
+      if (catUpper.includes('TECLADO')) {
+        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'TECLADO_WIRELESS' : 'TECLADO_CABLE';
+      } else if (catUpper.includes('MOUSE') && !catUpper.includes('MOUSEPAD')) {
+        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'MOUSE_WIRELESS' : 'MOUSE_CABLE';
+      } else if (catUpper.includes('HEADSET') || catUpper.includes('AURICULAR')) {
+        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') ? 'HEADSET_WIRELESS' : 'HEADSET_CABLE';
+      } else if (catUpper.includes('CONTROLLER')) {
+        ncmKey = 'CONTROLLER_WIRELESS';
+      } else if (catUpper.includes('MONITOR')) {
+        ncmKey = 'MONITOR';
+      } else if (catUpper.includes('MOUSEPAD')) {
+        ncmKey = 'MOUSEPAD';
+      } else if (catUpper.includes('SWITCH')) {
+        ncmKey = 'SWITCH';
+      }
+
+      const ncmRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
+      ncmRule.certs.forEach(c => certsSet.add(c));
+
+      // Impuestos SIM Aduana Argentina
+      const derechosUsd = itemCif * ncmRule.derechos;
+      const tasaUsd = itemCif * ncmRule.tasa;
+      const baseImp = itemCif + derechosUsd + tasaUsd;
+      const ivaUsd = baseImp * ncmRule.iva;
+      const ivaAddUsd = baseImp * ncmRule.ivaAdd;
+      const percGanUsd = baseImp * ncmRule.percGan;
+      const iibbUsd = baseImp * ncmRule.iibb;
+      const totalTributosItemUsd = derechosUsd + tasaUsd + ivaUsd + ivaAddUsd + percGanUsd + iibbUsd;
+
+      return {
+        ...item,
+        ncm: ncmRule.ncm,
+        ncmKey,
+        itemCif,
+        derechosUsd,
+        tasaUsd,
+        ivaUsd,
+        ivaAddUsd,
+        percGanUsd,
+        iibbUsd,
+        totalTributosItemUsd,
+        certs: ncmRule.certs
+      };
+    });
+
+    // Sumar costos fijos de certificaciones activas
+    let totalCertsCostUsd = 0;
+    const certDetails = [];
+    certsSet.forEach(certKey => {
+      const info = this.CERTIFICATIONS_INFO[certKey];
+      if (info) {
+        totalCertsCostUsd += info.costUsd;
+        certDetails.push(info);
+      }
+    });
+
+    const totalGastosFijosDestinoUsd = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd + totalCertsCostUsd;
+    const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.totalTributosItemUsd, 0);
+
+    const totalPuertaUsd = cifTotal + totalTributosAduanaUsd + totalGastosFijosDestinoUsd;
+    const totalPuertaArs = totalPuertaUsd * tc;
+
+    // Asignación final de costo unitario exactamente puesto en puerta
+    const finalItems = itemCalculations.map(i => {
+      const weightFrac = totalFob > 0 ? ((i.fob * i.qty) / totalFob) : (i.qty / totalQty);
+      const itemGastosFijosProrrateados = totalGastosFijosDestinoUsd * weightFrac;
+      const itemCostoPuertaTotalUsd = i.itemCif + i.totalTributosItemUsd + itemGastosFijosProrrateados;
+      const costoPuertaUnitUsd = i.qty > 0 ? (itemCostoPuertaTotalUsd / i.qty) : 0;
+      const costoPuertaUnitArs = costoPuertaUnitUsd * tc;
+
+      return {
+        ...i,
+        costoPuertaTotalUsd: itemCostoPuertaTotalUsd,
+        costoPuertaUnitUsd,
+        costoPuertaUnitArs
+      };
+    });
+
+    return {
+      items: finalItems,
+      certificationsRequired: certDetails,
+      summary: {
+        fobTotalUsd: totalFob,
+        fleteTotalUsd: fleteTotal,
+        seguroTotalUsd: seguroTotal,
+        cifTotalUsd: cifTotal,
+        totalTributosAduanaUsd,
+        depositoFiscalUsd,
+        despachanteUsd,
+        simDigitalizacionUsd,
+        fleteInternoUsd,
+        totalCertsCostUsd,
+        totalGastosFijosDestinoUsd,
+        totalPuertaUsd,
+        totalPuertaArs,
+        tipoCambio: tc
+      }
+    };
+  },
+
   estimateItemFreightAndIva(fob, tc = 1400, fletePct = 0.15, ivaPct = 0.21) {
     const fleteEst = fob * fletePct;
     const cifEst = fob + fleteEst;

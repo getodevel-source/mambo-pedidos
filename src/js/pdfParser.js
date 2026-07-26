@@ -221,7 +221,7 @@ const PdfParser = {
 
       const isBgColor = (pxR, pxG, pxB) => {
         const dist = Math.abs(pxR - bgR) + Math.abs(pxG - bgG) + Math.abs(pxB - bgB);
-        return dist < 32 || (pxR > 240 && pxG > 240 && pxB > 240);
+        return dist < 28;
       };
 
       let head = 0;
@@ -310,7 +310,7 @@ const PdfParser = {
     priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
     const pageProducts = [];
 
-    // 4. Construir Bounding Box de Celda 2D para cada Ancla de Precio
+    // 4. Construir Bounding Box de Celda 2D determinística para cada Ancla de Precio
     for (let i = 0; i < priceAnchors.length; i++) {
       const anchor = priceAnchors[i];
 
@@ -340,8 +340,12 @@ const PdfParser = {
         cellMaxX = anchor.x + 140;
       }
 
-      // Determinar límites verticales Y de la celda (desde el precio hacia arriba)
-      const cellMinY = anchor.y - 240;
+      // Determinar límites verticales Y de la celda de forma DINÁMICA (Ponytail: sin magic numbers)
+      const prevYAnchors = priceAnchors.filter(a => a.y < anchor.y - 10);
+      const prevRowY = prevYAnchors.length > 0 ? Math.max(...prevYAnchors.map(a => a.y)) : null;
+      const rowHeight = prevRowY !== null ? Math.min(240, Math.max(40, anchor.y - prevRowY)) : 160;
+
+      const cellMinY = anchor.y - rowHeight + 5;
       const cellMaxY = anchor.y + 12;
 
       // Recolectar elementos de texto STRICTLY dentro del Bounding Box de la Celda

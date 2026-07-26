@@ -79,8 +79,8 @@ const FileImporter = {
 
   exportCSV(pedido) {
     if (!pedido || !pedido.items.length) return false;
-    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color', 'FOB unit USD', 'Cantidad'];
-    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.color || '', r.fob, r.qty]);
+    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad'];
+    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty]);
     const csv = [headers, ...rows].map(row => row.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
     this.download('\uFEFF' + csv, `${pedido.name || 'Pedido'}.csv`, 'text/csv;charset=utf-8;');
     return true;
@@ -88,8 +88,8 @@ const FileImporter = {
 
   exportXLSX(pedido) {
     if (!pedido || !pedido.items.length) return false;
-    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color', 'FOB unit USD', 'Cantidad'];
-    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.color || '', r.fob, r.qty]);
+    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad'];
+    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Pedido');
@@ -127,7 +127,7 @@ const FileImporter = {
       const itemQty = r.qty || 1;
       const subFob = (r.fob || 0) * itemQty;
       const itemWeight = (avgWeightPerUnit * itemQty).toFixed(2);
-      const unitCost = r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
+      const unitCost = r.costoU || r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
       const subCost = unitCost * itemQty;
 
       return [
@@ -136,7 +136,7 @@ const FileImporter = {
         r.cat || 'PERIFERICOS_GAMER',
         r.marca,
         r.modelo,
-        r.color || r.variante || '-',
+        r.variante || r.color || '-',
         itemQty,
         itemWeight,
         r.fob.toFixed(2),
@@ -233,7 +233,7 @@ const FileImporter = {
     const prodRows = pedido.items.map((r, idx) => {
       const q = r.qty || 1;
       const subFob = (r.fob || 0) * q;
-      const unitCost = r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
+      const unitCost = r.costoU || r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
       const subCost = unitCost * q;
       const pvpUsd = r.pvp || (unitCost * 2.5);
       const pvpArs = r.pvpArs || (pvpUsd * tc);
@@ -242,7 +242,7 @@ const FileImporter = {
       const marginPct = subFact > 0 ? ((subProfit / subFact) * 100).toFixed(1) : 0;
 
       return [
-        idx + 1, r.sku, r.cat || 'OTRO', r.marca, r.modelo, r.color || r.variante || '-',
+        idx + 1, r.sku, r.cat || 'OTRO', r.marca, r.modelo, r.variante || r.color || '-',
         q, r.fob.toFixed(2), subFob.toFixed(2),
         unitCost.toFixed(2), subCost.toFixed(2),
         pvpUsd.toFixed(2), Math.round(pvpArs), subFact.toFixed(2),
@@ -259,17 +259,19 @@ const FileImporter = {
     XLSX.utils.book_append_sheet(wb, wsProd, 'Detalle de Productos');
 
     // PESTAÑA 3: Desglose de Logística e Impuestos
+    const fleteVal = c.flete !== undefined ? c.flete : (c.fletePct ? c.fletePct * 100 : 15);
+    const despUsd = parseFloat(c.desp !== undefined ? c.desp : (c.despachante || 500));
     const logHeaders = ['CONCEPTO LOGÍSTICO / FISCAL', 'TIPO / VALOR CONFIGURADO', 'IMPORTE EST. (USD)', 'IMPORTE EST. (ARS)'];
     const logRows = [
-      ['Régimen de Importación', c.regimen || 'Courier', '-', '-'],
-      ['Modo de Transporte', c.transporte || 'Aéreo', '-', '-'],
-      ['Flete Internacional', `${c.flete || 15}% FOB / $${c.costoPorKg || 12} Kg`, (t.fob ? t.fob * ((c.flete || 15)/100) : 0).toFixed(2), (t.fob ? t.fob * ((c.flete || 15)/100) * tc : 0).toFixed(2)],
+      ['Régimen de Importación', c.logisticaModo || c.regimen || 'Courier', '-', '-'],
+      ['Modo de Transporte', c.transporteModo || c.transporte || 'Aéreo', '-', '-'],
+      ['Flete Internacional', `${fleteVal}% FOB / $${c.costoPorKg || 12} Kg`, (t.fleteUsd || (t.fob ? t.fob * (fleteVal / 100) : 0)).toFixed(2), (t.fleteArs || (t.fob ? t.fob * (fleteVal / 100) * tc : 0)).toFixed(2)],
       ['Seguro Internacional', `${c.seguro || 2}% FOB`, (t.fob ? t.fob * ((c.seguro || 2)/100) : 0).toFixed(2), (t.fob ? t.fob * ((c.seguro || 2)/100) * tc : 0).toFixed(2)],
-      ['Derechos de Importación', `${c.derechos || 16}% CIF`, (t.cif ? t.cif * ((c.derechos || 16)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.derechos || 16)/100) * tc : 0).toFixed(2)],
-      ['Tasa Estadística Aduanera', `${c.tasa || 3}% CIF`, (t.cif ? t.cif * ((c.tasa || 3)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.tasa || 3)/100) * tc : 0).toFixed(2)],
-      ['Percepción Ganancias', `${c.perc || 6}% CIF`, (t.cif ? t.cif * ((c.perc || 6)/100) : 0).toFixed(2), (t.cif ? t.cif * ((c.perc || 6)/100) * tc : 0).toFixed(2)],
+      ['Derechos de Importación', `${c.derechos || 16}% CIF`, (t.derechosUsd || 0).toFixed(2), ((t.derechosUsd || 0) * tc).toFixed(2)],
+      ['Tasa Estadística Aduanera', `${c.tasa || 3}% CIF`, (t.tasaUsd || 0).toFixed(2), ((t.tasaUsd || 0) * tc).toFixed(2)],
+      ['Percepción Ganancias', `${c.perc || 6}% CIF`, (t.percUsd || 0).toFixed(2), ((t.percUsd || 0) * tc).toFixed(2)],
       ['IVA Estimado Aprox', `${c.ivaPct || 21}%`, (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
-      ['Honorarios Despachante', `$${c.despachante || 500} ARS`, ((c.despachante || 500) / tc).toFixed(2), (c.despachante || 500).toFixed(2)],
+      ['Honorarios Despachante', `$${despUsd} USD`, despUsd.toFixed(2), (despUsd * tc).toFixed(2)],
       ['Procesamiento Courier Fijo', `$${c.courier || 8} USD / unidad`, ((c.courier || 8) * (t.qty || 0)).toFixed(2), ((c.courier || 8) * (t.qty || 0) * tc).toFixed(2)]
     ];
 

@@ -54,6 +54,7 @@ const Tests = {
     this.testHeaderPriorityRowContext();
     this.testTableHeaderNoiseFilter();
     this.testSpatialCellGridExtraction();
+    this.testDoorToDoorCustomsLiquidation();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -441,6 +442,28 @@ const Tests = {
 
     this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless Controller' && pBlack.img === 'img:black', 'Producto 1 (Black) extrajo modelo limpio y su foto de celda aislada');
     this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless Controller' && pWhite.img === 'img:white', 'Producto 2 (White) extrajo modelo limpio y su foto de celda aislada');
+  },
+
+  testDoorToDoorCustomsLiquidation() {
+    const items = [
+      { sku: 'KB-WL-01', marca: 'VGN', modelo: 'V87 Wireless Keyboard', variante: 'Black', cat: 'TECLADO', fob: 45, qty: 10 },
+      { sku: 'MS-WL-01', marca: 'VGN', modelo: 'F1 Pro Wireless Mouse', variante: 'White', cat: 'MOUSE', fob: 25, qty: 20 }
+    ];
+    const doorConfig = {
+      tipoCambio: 1400,
+      pesoKg: 15,
+      costoPorKg: 12,
+      depositoFiscalUsd: 150,
+      despachanteUsd: 450,
+      fleteInternoUsd: 80,
+      simDigitalizacionUsd: 40
+    };
+
+    const res = Calculator.calculateDoorToDoorExactCost(items, doorConfig);
+    this.assert(res && res.summary && res.summary.totalPuertaUsd > 0, 'Motor de Liquidación Puerta a Puerta calculó el costo total correctamente');
+    this.assert(res.items.some(i => i.ncm === '8471.60.53'), 'Identificó la Posición Arancelaria NCM 8471.60.53 para teclados/mouses inalámbricos');
+    this.assert(res.certificationsRequired.some(c => c.title.includes('ENACOM')), 'Detectó la necesidad de trámite de Homologación ENACOM por Radiofrecuencia/BT');
+    this.assert(res.items[0].costoPuertaUnitUsd > items[0].fob, 'El Costo Puerta Unitario contempla tributos SIM, fletes y certificaciones');
   }
 };
 
