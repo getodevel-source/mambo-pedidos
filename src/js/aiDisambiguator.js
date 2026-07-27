@@ -463,44 +463,45 @@ const AiDisambiguator = {
     const MONEDA_RUIMO = /\b(CNY|RMB|USD|EUR)\s*\$?[\d\.,]+\b/gi;
     const DECIMAL_PRECIO = /\b\$?[\d]+[\.,]\d+\b/g;
     const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
+    const HEADER_NOISE = /^(CNY|RMB|USD|EUR|PRICE|COLOR|MODEL|PICTURE|IMAGE|SPEC|REMARK|MOQ|FOB|\.|\-|\s)+$/i;
     const FALLBACK_NOISE = /^(Producto\s+Item|\.|\-)+$/i;
 
     modelo = modelo
       .replace(MONEDA_RUIMO, '')
       .replace(DECIMAL_PRECIO, '')
       .replace(CORPORATE_NOISE, '')
-      .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+      .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob|cny|eur)\b/gi, '')
       .replace(/\s+/g, ' ')
       .replace(/^[.\-\s,:]+|[.\-\s,:]+$/g, '')
       .trim();
 
-    if (!modelo || /^\$?\d+([\.,]\d+)?$/.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
+    if (!modelo || /^\$?\d+([\.,]\d+)?$/.test(modelo) || HEADER_NOISE.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
       let rescuedModel = '';
       if (rawText) {
         const cleanRaw = rawText
           .replace(MONEDA_RUIMO, '')
           .replace(DECIMAL_PRECIO, '')
           .replace(CORPORATE_NOISE, '')
-          .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+          .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob|cny|eur)\b/gi, '')
           .trim();
 
         const matchModelCode = cleanRaw.match(/\b([A-Za-z]{1,4}[-_\s]?\d{2,4}[A-Za-z]?)\b/);
-        if (matchModelCode && matchModelCode[1].length >= 3) {
+        if (matchModelCode && matchModelCode[1].length >= 3 && !HEADER_NOISE.test(matchModelCode[1])) {
           rescuedModel = matchModelCode[1].toUpperCase();
         } else {
-          const words = cleanRaw.split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w) && !/CNY|RMB/i.test(w));
+          const words = cleanRaw.split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w) && !/CNY|RMB|USD|EUR|PRICE/i.test(w));
           if (words.length) {
             rescuedModel = words.slice(0, 4).join(' ');
           }
         }
       }
 
-      if (rescuedModel && rescuedModel.length >= 3) {
+      if (rescuedModel && rescuedModel.length >= 3 && !HEADER_NOISE.test(rescuedModel)) {
         modelo = rescuedModel;
       } else {
         const brandStr = (brand && brand !== 'OTRO') ? brand : 'Periférico';
         const catStr = (cat && cat !== 'OTRO') ? cat : '';
-        const varStr = (item.variante && item.variante.length < 20) ? item.variante : '';
+        const varStr = (item.variante && item.variante.length < 20 && !HEADER_NOISE.test(item.variante)) ? item.variante : '';
         modelo = `${brandStr} ${catStr} ${varStr}`.replace(/\s+/g, ' ').trim() || `Producto ${sku}`;
       }
     }
