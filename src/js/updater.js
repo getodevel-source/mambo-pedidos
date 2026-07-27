@@ -11,6 +11,14 @@
  *   3. relaunch()      → cierra y vuelve a abrir la app actualizada
  */
 
+const AppUpdater = {
+  CURRENT_VERSION: '1.5.8',
+  REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
+  latestVersion: null,
+  latestNotes: null,
+  isChecking: false,
+  _updateHandle: null,
+
   async syncVersionFromRust() {
     try {
       const ver = await this._invoke('get_app_version', {});
@@ -27,7 +35,7 @@
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '1.5.6';
+    return this.CURRENT_VERSION || '1.5.8';
   },
 
   /**
@@ -83,7 +91,7 @@
     this.isChecking = true;
 
     await this.syncVersionFromRust();
-    const currentVer = this.getCurrentVersion();
+    const activeVer = this.getCurrentVersion();
 
     if (userInitiated) {
       toast('🔄 Buscando actualizaciones...', 'info');
@@ -99,9 +107,9 @@
         if (badge) badge.textContent = `v${updateInfo.currentVersion}`;
       }
 
-      const activeVer = this.getCurrentVersion();
+      const currentVer = this.getCurrentVersion();
 
-      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, activeVer)) {
+      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, currentVer)) {
         this.latestVersion = updateInfo.version;
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;
@@ -113,7 +121,7 @@
           toast(`🚀 ¡Nueva versión v${updateInfo.version} disponible!`, 'success');
         }
       } else if (userInitiated) {
-        toast(`✅ Estás en la versión más reciente (v${activeVer})`, 'success');
+        toast(`✅ Estás en la versión más reciente (v${currentVer})`, 'success');
       }
     } catch (tauriErr) {
       // Fallback: GitHub API para mostrar modal informativo (sin descarga automática)
@@ -126,10 +134,10 @@
 
   async _checkViaGitHubApi(userInitiated) {
     try {
+      await this.syncVersionFromRust();
       const activeVer = this.getCurrentVersion();
-      this.CURRENT_VERSION = activeVer;
 
-      const res = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest', {
+      const res = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
       });
@@ -160,6 +168,7 @@
   },
 
   isNewerVersion(latest, current) {
+    if (!latest || !current) return false;
     const lParts = latest.split('.').map(n => parseInt(n, 10) || 0);
     const cParts = current.split('.').map(n => parseInt(n, 10) || 0);
     for (let i = 0; i < Math.max(lParts.length, cParts.length); i++) {
@@ -202,9 +211,15 @@
     const verEl = document.getElementById('updateModalVersion');
     const notesEl = document.getElementById('updateModalNotes');
     const btnEl = document.getElementById('updateModalBtn');
+    const linkAnchor = document.getElementById('updateModalLinkAnchor');
 
     if (verEl) verEl.textContent = `Versión v${version} disponible (tenés la v${this.CURRENT_VERSION})`;
     if (notesEl) notesEl.innerHTML = this.formatNotes(notes);
+    if (linkAnchor) {
+      const releaseUrl = `${this.REPO_URL}/releases/tag/v${version}`;
+      linkAnchor.href = releaseUrl;
+      linkAnchor.textContent = releaseUrl;
+    }
     if (btnEl) {
       btnEl.disabled = false;
       btnEl.textContent = '⚡ Instalar Actualización';
@@ -221,6 +236,11 @@
     if (modal) modal.style.display = 'none';
   },
 
+  openInBrowser(url) {
+    const targetUrl = url || (this.latestVersion ? `${this.REPO_URL}/releases/tag/v${this.latestVersion}` : `${this.REPO_URL}/releases/latest`);
+    this.openExternal(targetUrl);
+  },
+
   /**
    * Punto de entrada del botón "Instalar Actualización".
    * Usa el plugin nativo de Tauri 2.0: descarga el .nsis.zip.sig,
@@ -230,15 +250,17 @@
   async startDirectDownload() {
     const progressWrap = document.getElementById('updateProgressWrap');
     const progressText = document.getElementById('updateProgressText');
+    const progressBarInner = document.getElementById('updateProgressBarInner');
     const btn = document.getElementById('updateModalBtn');
 
     if (progressWrap) progressWrap.style.display = 'block';
+    if (progressBarInner) progressBarInner.style.width = '15%';
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Descargando actualización...'; }
 
     try {
       if (progressText) progressText.textContent = '🔍 Obteniendo la versión más reciente...';
 
-      const release = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest', {
+      const release = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
       }).then(r => r.json());
@@ -246,9 +268,18 @@
       const exeAsset = (release.assets || []).find(a => a.name?.endsWith('.exe')) || (release.assets || []).find(a => a.name?.endsWith('.msi'));
       if (exeAsset?.browser_download_url) {
         if (progressText) progressText.textContent = '⬇️ Descargando e iniciando instalador...';
+        if (progressBarInner) progressBarInner.style.width = '50%';
         toast('⬇️ Descargando e iniciando el instalador oficial...', 'info');
 
+        let pct = 50;
+        const interval = setInterval(() => {
+          pct = Math.min(pct + 10, 95);
+          if (progressBarInner) progressBarInner.style.width = pct + '%';
+          if (pct >= 95) clearInterval(interval);
+        }, 500);
+
         await this._invoke('download_and_install_update', { url: exeAsset.browser_download_url });
+        clearInterval(interval);
         return;
       }
     } catch (err) {
@@ -256,9 +287,10 @@
     }
 
     if (progressText) progressText.textContent = '⚠️ Abriendo descarga en navegador...';
+    if (progressBarInner) progressBarInner.style.width = '100%';
     if (btn) { btn.disabled = false; btn.textContent = '🌐 Abrir descarga manual'; }
     toast('ℹ️ Abriendo página de descarga en el navegador.', 'info');
-    this._invoke('open_external_url', { url: `${this.REPO_URL}/releases/latest` });
+    this.openInBrowser();
     this.closeModal();
   },
 
@@ -269,4 +301,6 @@
 };
 
 window.AppUpdater = AppUpdater;
+if (typeof module !== 'undefined') module.exports = AppUpdater;
+
 

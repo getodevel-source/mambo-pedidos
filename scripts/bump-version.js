@@ -1,0 +1,167 @@
+const fs = require('fs');
+const path = require('path');
+
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+const FILES = {
+  packageJson: path.join(ROOT_DIR, 'package.json'),
+  cargoToml: path.join(ROOT_DIR, 'src-tauri', 'Cargo.toml'),
+  tauriConf: path.join(ROOT_DIR, 'src-tauri', 'tauri.conf.json'),
+  updaterJs: path.join(ROOT_DIR, 'src', 'js', 'updater.js'),
+  indexHtml: path.join(ROOT_DIR, 'src', 'index.html'),
+  latestJson: path.join(ROOT_DIR, 'latest.json'),
+  testsJs: path.join(ROOT_DIR, 'src', 'js', 'tests.js')
+};
+
+function getPackageVersion() {
+  const content = JSON.parse(fs.readFileSync(FILES.packageJson, 'utf8'));
+  return content.version;
+}
+
+function checkVersions() {
+  const targetVer = getPackageVersion();
+  let errors = [];
+
+  console.log(`🔍 Verificando coherencia de versión contra baseline package.json (v${targetVer})...`);
+
+  // 1. Cargo.toml
+  const cargoContent = fs.readFileSync(FILES.cargoToml, 'utf8');
+  const cargoMatch = cargoContent.match(/^version\s*=\s*"([^"]+)"/m);
+  if (!cargoMatch || cargoMatch[1] !== targetVer) {
+    errors.push(`Cargo.toml tiene versión "${cargoMatch ? cargoMatch[1] : 'desconocida'}" (esperado "${targetVer}")`);
+  }
+
+  // 2. tauri.conf.json
+  const tauriConf = JSON.parse(fs.readFileSync(FILES.tauriConf, 'utf8'));
+  if (tauriConf.version !== targetVer) {
+    errors.push(`tauri.conf.json tiene versión "${tauriConf.version}" (esperado "${targetVer}")`);
+  }
+
+  // 3. updater.js
+  const updaterContent = fs.readFileSync(FILES.updaterJs, 'utf8');
+  const updaterMatch = updaterContent.match(/CURRENT_VERSION:\s*'([^']+)'/);
+  if (!updaterMatch || updaterMatch[1] !== targetVer) {
+    errors.push(`updater.js CURRENT_VERSION es "${updaterMatch ? updaterMatch[1] : 'desconocida'}" (esperado "${targetVer}")`);
+  }
+
+  // 4. index.html
+  const htmlContent = fs.readFileSync(FILES.indexHtml, 'utf8');
+  if (!htmlContent.includes(`v${targetVer}</span>`)) {
+    errors.push(`src/index.html badge no contiene "v${targetVer}</span>"`);
+  }
+
+  // 5. latest.json
+  if (fs.existsSync(FILES.latestJson)) {
+    const latestJson = JSON.parse(fs.readFileSync(FILES.latestJson, 'utf8'));
+    if (latestJson.version !== targetVer) {
+      errors.push(`latest.json "version" es "${latestJson.version}" (esperado "${targetVer}")`);
+    }
+
+    if (latestJson.platforms) {
+      for (const [platform, info] of Object.entries(latestJson.platforms)) {
+        if (info.url) {
+          const expectedTag = `/v${targetVer}/`;
+          const expectedFilename = `_${targetVer}_`;
+          if (!info.url.includes(expectedTag) || !info.url.includes(expectedFilename)) {
+            errors.push(`latest.json platform "${platform}" URL no coincide con v${targetVer}: ${info.url}`);
+          }
+        }
+      }
+    }
+  } else {
+    errors.push(`latest.json no existe en ${FILES.latestJson}`);
+  }
+
+  // 6. tests.js
+  const testsContent = fs.readFileSync(FILES.testsJs, 'utf8');
+  if (!testsContent.includes(`AppUpdater.CURRENT_VERSION === '${targetVer}'`)) {
+    errors.push(`src/js/tests.js no valida AppUpdater.CURRENT_VERSION === '${targetVer}'`);
+  }
+
+  if (errors.length > 0) {
+    console.error(`❌ ERROR: Inconsistencia de versiones detectada (${errors.length}):`);
+    errors.forEach(e => console.error(`   - ${e}`));
+    return false;
+  }
+
+  console.log(`✅ ¡Todas las versiones y URLs están sincronizadas en v${targetVer}!`);
+  return true;
+}
+
+function bumpVersion(newVer) {
+  if (!newVer || !/^\d+\.\d+\.\d+$/.test(newVer)) {
+    console.error(`❌ ERROR: La versión debe seguir el formato SemVer X.Y.Z (ejemplo: 1.5.8). Recibido: "${newVer}"`);
+    process.exit(1);
+  }
+
+  const currentVer = getPackageVersion();
+  console.log(`🚀 Actualizando versión de v${currentVer} -> v${newVer}...`);
+
+  // 1. package.json
+  const pkg = JSON.parse(fs.readFileSync(FILES.packageJson, 'utf8'));
+  pkg.version = newVer;
+  fs.writeFileSync(FILES.packageJson, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+  console.log(`  ✓ package.json -> ${newVer}`);
+
+  // 2. Cargo.toml
+  let cargoContent = fs.readFileSync(FILES.cargoToml, 'utf8');
+  cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${newVer}"`);
+  fs.writeFileSync(FILES.cargoToml, cargoContent, 'utf8');
+  console.log(`  ✓ src-tauri/Cargo.toml -> ${newVer}`);
+
+  // 3. tauri.conf.json
+  const tauriConf = JSON.parse(fs.readFileSync(FILES.tauriConf, 'utf8'));
+  tauriConf.version = newVer;
+  fs.writeFileSync(FILES.tauriConf, JSON.stringify(tauriConf, null, 2) + '\n', 'utf8');
+  console.log(`  ✓ src-tauri/tauri.conf.json -> ${newVer}`);
+
+  // 4. updater.js
+  let updaterContent = fs.readFileSync(FILES.updaterJs, 'utf8');
+  updaterContent = updaterContent.replace(/CURRENT_VERSION:\s*'[^']+'/, `CURRENT_VERSION: '${newVer}'`);
+  updaterContent = updaterContent.replace(/getCurrentVersion\(\)\s*\{\s*return this\.CURRENT_VERSION \|\| '[^']+'/, `getCurrentVersion() {\n    return this.CURRENT_VERSION || '${newVer}'`);
+  fs.writeFileSync(FILES.updaterJs, updaterContent, 'utf8');
+  console.log(`  ✓ src/js/updater.js -> ${newVer}`);
+
+  // 5. index.html
+  let htmlContent = fs.readFileSync(FILES.indexHtml, 'utf8');
+  htmlContent = htmlContent.replace(/<span id="appVersionBadge" class="badge badge-emerald">v[^<]+<\/span>/, `<span id="appVersionBadge" class="badge badge-emerald">v${newVer}</span>`);
+  fs.writeFileSync(FILES.indexHtml, htmlContent, 'utf8');
+  console.log(`  ✓ src/index.html -> ${newVer}`);
+
+  // 6. latest.json
+  let latestJson = {};
+  if (fs.existsSync(FILES.latestJson)) {
+    latestJson = JSON.parse(fs.readFileSync(FILES.latestJson, 'utf8'));
+  }
+  latestJson.version = newVer;
+  latestJson.pub_date = new Date().toISOString();
+  if (latestJson.platforms) {
+    for (const [platform, info] of Object.entries(latestJson.platforms)) {
+      if (info.url) {
+        info.url = info.url
+          .replace(/\/v\d+\.\d+\.\d+\//g, `/v${newVer}/`)
+          .replace(/_\d+\.\d+\.\d+_/g, `_${newVer}_`);
+      }
+    }
+  }
+  fs.writeFileSync(FILES.latestJson, JSON.stringify(latestJson, null, 2) + '\n', 'utf8');
+  console.log(`  ✓ latest.json -> ${newVer} (con URLs actualizadas)`);
+
+  // 7. tests.js
+  let testsContent = fs.readFileSync(FILES.testsJs, 'utf8');
+  testsContent = testsContent.replace(/AppUpdater\.CURRENT_VERSION === '[^']+'/, `AppUpdater.CURRENT_VERSION === '${newVer}'`);
+  fs.writeFileSync(FILES.testsJs, testsContent, 'utf8');
+  console.log(`  ✓ src/js/tests.js -> ${newVer}`);
+
+  console.log(`\n🎉 ¡Versión v${newVer} propagada exitosamente a todos los artefactos!`);
+  checkVersions();
+}
+
+const args = process.argv.slice(2);
+if (args.includes('--check') || args.length === 0) {
+  const isOk = checkVersions();
+  if (!isOk) process.exit(1);
+} else {
+  const targetVer = args[0].replace(/^v/, '');
+  bumpVersion(targetVer);
+}

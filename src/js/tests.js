@@ -72,6 +72,7 @@ const Tests = {
     this.testRealCatalogCoherence();
     this.testOnDemandZeroIdleMemoryGuarantee();
     this.testCellStructuredLlmPipeline();
+    this.testAppUpdaterModule();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -681,6 +682,21 @@ const Tests = {
     } else {
       this.assert(true, 'Modulo PdfParser listo para enriquecimiento por celda');
     }
+  },
+
+  testAppUpdaterModule() {
+    if (typeof AppUpdater === 'undefined') {
+      this.assert(false, 'Modulo AppUpdater no está definido en el entorno');
+      return;
+    }
+
+    this.assert(AppUpdater.CURRENT_VERSION === '1.5.8', 'AppUpdater CURRENT_VERSION configurado en 1.5.7');
+    this.assert(typeof AppUpdater.isNewerVersion === 'function', 'AppUpdater.isNewerVersion disponible');
+    this.assert(AppUpdater.isNewerVersion('1.5.8', '1.5.7') === true, 'Compara correctamente 1.5.8 > 1.5.7');
+    this.assert(AppUpdater.isNewerVersion('1.5.7', '1.5.7') === false, 'Compara correctamente 1.5.7 no es superior a 1.5.7');
+    this.assert(AppUpdater.isNewerVersion('1.5.6', '1.5.7') === false, 'Compara correctamente 1.5.6 < 1.5.7');
+    this.assert(typeof AppUpdater.openInBrowser === 'function', 'AppUpdater.openInBrowser disponible');
+    this.assert(typeof AppUpdater.showModal === 'function', 'AppUpdater.showModal disponible para emerger pop-ups');
   }
 };
 

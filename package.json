@@ -1,6 +1,6 @@
 {
   "name": "mambo-pedidos",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "Mambo Pedidos - Gestor de catalogos y pedidos para perifericos gamer",
   "main": "src/index.html",
   "scripts": {
@@ -8,7 +8,9 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:windows": "tauri build --target x86_64-pc-windows-msvc",
-    "build:linux": "tauri build --target x86_64-unknown-linux-gnu"
+    "build:linux": "tauri build --target x86_64-unknown-linux-gnu",
+    "bump": "node scripts/bump-version.js",
+    "check:version": "node scripts/bump-version.js --check"
   },
   "keywords": [
     "mambo",
@@ -31,17 +33,3 @@
     "@tauri-apps/plugin-updater": "^2.0.0"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
