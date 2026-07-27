@@ -70,7 +70,8 @@ mambo-pedidos/
 │   ├── css/               # Estilos obsidian dark mode y tooltips
 │   └── js/
 │       ├── app.js         # Controlador principal y barra de progreso 0-100%
-│       ├── aiDisambiguator.js# Motor Neuronal ONNX WebGPU & Desglose NLP
+│       ├── textSanitizer.js# Sanitización determinística de texto y catálogos
+│       ├── localLlm.js    # Conector a modelo de lenguaje local (Ollama / LM Studio)
 │       ├── calculator.js  # Motor de cálculo financiero y logística
 │       ├── pdfParser.js   # Extractor espacial X/Y e imágenes por IA
 │       ├── fileImporter.js# Importador CSV/Excel y Packing List
@@ -97,7 +98,7 @@ mambo-pedidos/
 
 ### Ejecutar Suite de Pruebas Unitarias (39 PASS)
 ```bash
-node -e "const fs = require('fs'); global.window=global; global.document={createElement:()=>({getContext:()=>null})}; global.XLSX={utils:{aoa_to_sheet:()=>({}),book_new:()=>({SheetNames:[]}),book_append_sheet:()=>{}},writeFile:()=>{}}; const vm = require('vm'); ['validations.js', 'pdfParser.js', 'calculator.js', 'aiDisambiguator.js', 'quoteGenerator.js', 'fileImporter.js', 'tests.js'].forEach(f => vm.runInThisContext(fs.readFileSync('src/js/' + f, 'utf8'))); Tests.runAll();"
+node -e "const fs = require('fs'); global.window=global; global.document={createElement:()=>({getContext:()=>null})}; global.XLSX={utils:{aoa_to_sheet:()=>({}),book_new:()=>({SheetNames:[]}),book_append_sheet:(wb, ws, name)=>{ (wb.SheetNames = wb.SheetNames || []).push(name); }},writeFile:()=>{}}; const vm = require('vm'); ['validations.js', 'pdfParser.js', 'calculator.js', 'textSanitizer.js', 'localLlm.js', 'catalogValidator.js', 'quoteGenerator.js', 'fileImporter.js', 'updater.js', 'tests.js'].forEach(f => vm.runInThisContext(fs.readFileSync('src/js/' + f, 'utf8'))); Tests.runAll();"
 ```
 
 ---

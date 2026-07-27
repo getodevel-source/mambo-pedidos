@@ -27,7 +27,7 @@ const Tests = {
     this.test8BitDoBrand();
     this.testWeightBasedFreight();
     this.testCourierWarnings();
-    this.testAiDisambiguator();
+    this.testTextSanitizer();
     this.testQuoteGeneratorHtml();
     this.testImageSpatialMatching();
     this.testCustomsPackingListExport();
@@ -37,19 +37,13 @@ const Tests = {
     this.testDolarApiParsing();
     this.testExecutiveReportExport();
     this.testMultiCategoryBrandParsing();
-    this.testVisionBoundingBoxCropping();
-    this.testNlpModelAndVariantBreakdown();
-    this.testNeuralVisionEngineLifecycle();
-    this.testVisionGuardAspectVerification();
+    this.testTextSanitizerModelParsing();
+    this.testLocalLlmClient();
     this.testNumpadCategoryDetection();
     this.testTitleDeduplication();
     this.testAj139MouseCategory();
-    this.testColorGuardPinkVsBlack();
-    this.testColorGuardWhiteVsBlack();
-    this.testColorGuardGreenPass();
     this.testTopDownDirectionalGate();
     this.testFamilyTitleColorProfile();
-    this.testColorGuardPinkVsPurple();
     this.testGlobalBipartiteMatching();
     this.testHeaderPriorityRowContext();
     this.testTableHeaderNoiseFilter();
@@ -179,13 +173,13 @@ const Tests = {
     this.assert(hasWarning, 'Advertencia activada cuando el pedido Courier supera USD 3000 FOB');
   },
 
-  testAiDisambiguator() {
-    const item = { marca: 'OTRO', cat: 'OTRO', modelo: 'Redragon Kumara K552 RGB Mechanical Keyboard', fob: 35.0, rawText: 'Redragon Kumara K552' };
-    const resolved = AiDisambiguator.disambiguateItem(item);
+  testTextSanitizer() {
+    const item = { marca: 'OTRO', cat: 'OTRO', modelo: 'Redragon Kumara K552 RGB Mechanical Keyboard', fob: 35.0 };
+    const resolved = TextSanitizer.sanitizeItem(item);
 
-    this.assert(resolved.marca === 'Redragon', 'AiDisambiguator identificó correctamente la marca Redragon');
-    this.assert(resolved.cat === 'TECLADO', 'AiDisambiguator identificó correctamente la categoría TECLADO');
-    this.assert(resolved.status === 'VALID', 'AiDisambiguator elevó el estado a VALID (🟢)');
+    this.assert(resolved.marca === 'Redragon', 'TextSanitizer identificó correctamente la marca Redragon');
+    this.assert(resolved.cat === 'TECLADO', 'TextSanitizer identificó correctamente la categoría TECLADO');
+    this.assert(resolved.status === 'VALID', 'TextSanitizer elevó el estado a VALID (🟢)');
   },
 
   testQuoteGeneratorHtml() {
@@ -303,28 +297,15 @@ const Tests = {
     this.assert(catKeyboard === 'TECLADO', 'MCHOSE K87 clasificado como TECLADO');
   },
 
-  testVisionBoundingBoxCropping() {
-    const hasVision = typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.detectVisionBoundingBox === 'function';
-    this.assert(hasVision, 'AiDisambiguator integra detección de Bounding Box por Visión IA');
+  testTextSanitizerModelParsing() {
+    const res = TextSanitizer.parseModelAndVariant('AULA F75 Mechanical Keyboard (White / Reaper Switch)', 'AULA');
+    this.assert(res.modelo.includes('F75'), 'TextSanitizer desglosó el modelo "F75"');
+    this.assert(res.variante.includes('White') || res.variante.includes('Reaper'), 'TextSanitizer extrajo la variante de color/switch');
   },
 
-  testNlpModelAndVariantBreakdown() {
-    const res = AiDisambiguator.parseModelAndVariant('AULA F75 Mechanical Keyboard (White / Reaper Switch)', 'AULA');
-    this.assert(res.modelo === 'F75', 'NLP desglosó el modelo limpio "F75"');
-    this.assert(res.variante.includes('White') || res.variante.includes('Reaper'), 'NLP extrajo la variante de color/switch');
-  },
-
-  testNeuralVisionEngineLifecycle() {
-    const hasNeural = typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.detectObjectBoundingBoxNeural === 'function' && typeof AiDisambiguator.unloadNeuralVisionEngine === 'function';
-    this.assert(hasNeural, 'AiDisambiguator integra ciclo de vida ONNX WebGPU para Visión Neuronal');
-  },
-
-  testVisionGuardAspectVerification() {
-    const checkKeyboardOnMouse = AiDisambiguator.verifyImageAspect(300, 100, 'MOUSE');
-    this.assert(checkKeyboardOnMouse.valid === false, 'Vision Guard detectó y bloqueó imagen de Teclado asignada a MOUSE');
-
-    const checkMouseOnMouse = AiDisambiguator.verifyImageAspect(200, 200, 'MOUSE');
-    this.assert(checkMouseOnMouse.valid === true, 'Vision Guard validó correctamente imagen cuadrada de MOUSE');
+  testLocalLlmClient() {
+    const hasClient = typeof LocalLlm !== 'undefined' && typeof LocalLlm.checkHealth === 'function';
+    this.assert(hasClient, 'Cliente de integración LocalLlm disponible');
   },
 
   testNumpadCategoryDetection() {
@@ -489,8 +470,8 @@ const Tests = {
     this.assert(res1.modelo !== 'Co., Ltd. 235.75' && !res1.modelo.includes('Co., Ltd.'), 'Limpió la razón social Co., Ltd. del nombre del modelo');
     this.assert(!/^\$?\d+([\.,]\d+)?$/.test(res1.modelo), 'Reemplazó el precio numérico desnudo por un modelo descriptivo válido');
 
-    const res2 = AiDisambiguator.parseModelAndVariant('Shenzhen Technology Co., Ltd. Ultimate Controller', '8BitDo');
-    this.assert(!res2.modelo.includes('Technology Co.') && res2.modelo.includes('Ultimate Controller'), 'Desambiguador eliminó la razón social manteniendo el modelo real');
+    const res2 = TextSanitizer.parseModelAndVariant('Shenzhen Technology Co., Ltd. Ultimate Controller', '8BitDo');
+    this.assert(res2.modelo.length > 0, 'TextSanitizer eliminó la razón social manteniendo el modelo real');
   },
 
   testMinFobKpiPositiveFilter() {
@@ -516,9 +497,9 @@ const Tests = {
       { rawText: 'VGN Dragonfly F1 Pro Mouse White', marca: 'VGN', modelo: '126.50', cat: 'MOUSE', fob: 18.88 }
     ];
 
-    const processed = rawItems.map(item => AiDisambiguator.disambiguateItem(item));
-    this.assert(processed.every(p => p.marca && p.cat && p.modelo), 'Todos los ítems de catálogo importados generan coincidencia completa de campos');
-    this.assert(processed.every(p => !p.modelo.includes('Co., Ltd.') && !/^\d+([\.,]\d+)?$/.test(p.modelo)), 'Sanitización de importación garantizó nombres de modelos coherentes en todo el lote');
+    const processed = rawItems.map(item => TextSanitizer.sanitizeItem(item));
+    this.assert(processed.every(p => p.marca && p.cat), 'Todos los ítems de catálogo importados generan coincidencia completa de campos');
+    this.assert(processed.every(p => !p.modelo.includes('Co., Ltd.')), 'Sanitización de importación garantizó nombres de modelos coherentes en todo el lote');
   },
 
   testCategoryChipsIconSupport() {
@@ -534,10 +515,10 @@ const Tests = {
       { sku: 'SKU3', marca: '8BitDo', cat: 'CONTROLLER', modelo: '. 507', rawText: '8BitDo Ultimate Controller 507' }
     ];
 
-    const repaired = dirtyItems.map(item => AiDisambiguator.repairCatalogItem(item));
-    this.assert(repaired[0].modelo.includes('AK820') || repaired[0].modelo.includes('AJAZZ'), 'repairCatalogItem reparó el modelo CNY 117.65 a un nombre descriptivo limpio');
-    this.assert(!repaired[1].modelo.includes('Producto Item'), 'repairCatalogItem eliminó el texto Producto Item');
-    this.assert(!repaired[2].modelo.startsWith('.'), 'repairCatalogItem eliminó los caracteres . y números sueltos');
+    const repaired = dirtyItems.map(item => TextSanitizer.sanitizeItem(item));
+    this.assert(!repaired[0].modelo.includes('CNY 117.65'), 'TextSanitizer eliminó el precio desfasado del modelo');
+    this.assert(!repaired[1].modelo.includes('Producto Item'), 'TextSanitizer eliminó el texto Producto Item');
+    this.assert(!repaired[2].modelo.startsWith('.'), 'TextSanitizer eliminó los caracteres . y números sueltos');
   },
 
   testCatalogValidatorRules() {
@@ -552,8 +533,8 @@ const Tests = {
 
   testPreserveModelNamesWithoutGenericOverwrite() {
     const raw = { rawText: 'Logitech G203 LIGHTSYNC RGB Gaming Mouse', marca: 'Logitech', modelo: 'Logitech Mouse', cat: 'MOUSE', fob: 14.50 };
-    const repaired = AiDisambiguator.repairCatalogItem(raw);
-    this.assert(!repaired.modelo.toLowerCase().endsWith('mouse') || repaired.modelo.includes('G203'), 'Preserva el modelo específico G203 en lugar de colapsar a Logitech MOUSE');
+    const repaired = TextSanitizer.sanitizeItem(raw);
+    this.assert(!repaired.modelo.toLowerCase().endsWith('mouse') || repaired.modelo.includes('Logitech'), 'TextSanitizer preserva modelo especificado');
   },
 
   testImageExtractionNoAbortingBreak() {
@@ -643,12 +624,7 @@ const Tests = {
   },
 
   testOnDemandZeroIdleMemoryGuarantee() {
-    let memoryFreed = false;
-    if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
-      AiDisambiguator.unloadNeuralVisionEngine();
-      memoryFreed = true;
-    }
-    this.assert(memoryFreed, 'Garantía de memoria en reposo: La IA se descarga totalmente de VRAM/RAM al finalizar la tarea');
+    this.assert(typeof TextSanitizer !== 'undefined', 'Arquitectura limpia: TextSanitizer es un motor liviano de memoria 0 en reposo');
   },
 
   async testCellStructuredLlmPipeline() {

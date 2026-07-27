@@ -53,9 +53,6 @@ function hideProgress() {
     showProgress(100, '¡Carga completada al 100%!', 'Abriendo vista previa...');
     setTimeout(() => {
       overlay.style.display = 'none';
-      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
-        AiDisambiguator.unloadNeuralVisionEngine();
-      }
     }, 450);
   }
 }
@@ -495,8 +492,9 @@ async function processFiles(files) {
       }
 
       for (const rawItem of incoming) {
-        let item = AiDisambiguator.disambiguateItem(rawItem, customBrandsList);
-        item = AiDisambiguator.repairCatalogItem(item);
+        let item = (typeof TextSanitizer !== 'undefined')
+          ? TextSanitizer.sanitizeItem(rawItem, customBrandsList)
+          : rawItem;
 
         const evalRes = PdfParser.evaluateItemConfidence(item);
         item.confidence = evalRes.confidence;
@@ -535,8 +533,8 @@ function renderImportPreviewModal() {
   document.getElementById('badgeValidCount').textContent = `🟢 ${validCount} Confiables`;
   document.getElementById('badgeWarnCount').textContent = `🟡 ${warnCount} Revisar`;
   document.getElementById('badgeErrCount').textContent = `🔴 ${errCount} Incertidumbre`;
-  const aiStatus = (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.getAiEngineStatus) ? AiDisambiguator.getAiEngineStatus() : null;
-  const statusText = aiStatus ? ` | Motor IA: ${aiStatus.statusLabel}` : '';
+  const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
+  const statusText = (llmStatus && llmStatus.available) ? ` | Modelo Local (${llmStatus.model}): Conectado` : ' | Motor Local: No detectado (Ollama/LM Studio)';
   document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos.${statusText}`;
 
   let html = '';
@@ -603,20 +601,16 @@ function applyBatchCat() {
 
 async function autoCorrectPreviewWithAI() {
   if (!pendingPreviewItems || !pendingPreviewItems.length) return;
-  toast('🧠 Analizando con IA...', 'info');
+  toast('🧹 Sanitizando productos...', 'info');
   try {
-    const res = await AiDisambiguator.autoCorrectItems(pendingPreviewItems, customBrandsList);
-    pendingPreviewItems = res.items;
+    if (typeof TextSanitizer !== 'undefined') {
+      pendingPreviewItems = TextSanitizer.autoCorrectItems(pendingPreviewItems, customBrandsList);
+    }
     renderImportPreviewModal();
-    if (res.correctedCount > 0) {
-      toast(`✨ IA desambiguó y corrigió ${res.correctedCount} productos`, 'success');
-    } else {
-      toast(`ℹ️ No se requirieron correcciones adicionales`, 'info');
-    }
-  } finally {
-    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      try { await window.__TAURI_INTERNALS__.invoke('stop_local_ai_session'); } catch (e) {}
-    }
+    toast('✨ Catálogo sanitizado correctamente', 'success');
+  } catch (err) {
+    console.error('Error en sanitización:', err);
+    toast('❌ Error durante la sanitización del catálogo', 'error');
   }
 }
 
@@ -1680,14 +1674,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }, 3000);
 
-  // Init Transformers.js AI engine in background
+  // Verificar disponibilidad del servidor LLM local (Ollama/LM Studio)
   setTimeout(() => {
-    if (typeof TransformersAI !== 'undefined') {
-      TransformersAI.init((progress, statusText) => {
-        console.log('[TransformersAI]', statusText, progress + '%');
-      }).then(ready => {
-        if (ready) {
-          console.log('✅ TransformersAI ready for product classification');
+    if (typeof LocalLlm !== 'undefined') {
+      LocalLlm.checkHealth().then(available => {
+        if (available) {
+          console.log(`✅ Servidor LLM local detectado en ${LocalLlm.endpoint} (Modelo: ${LocalLlm.model})`);
+        } else {
+          console.log(`ℹ️ Servidor LLM local no activo en ${LocalLlm.endpoint}`);
         }
       });
     }

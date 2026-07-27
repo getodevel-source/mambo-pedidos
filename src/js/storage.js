@@ -89,8 +89,8 @@ const AppStorage = {
     const data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
     if (data && data.items && Array.isArray(data.items)) {
       data.items = data.items.map(item => {
-        if (typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.repairCatalogItem === 'function') {
-          return AiDisambiguator.repairCatalogItem(item);
+        if (typeof TextSanitizer !== 'undefined' && typeof TextSanitizer.sanitizeItem === 'function') {
+          return TextSanitizer.sanitizeItem(item);
         }
         return item;
       });

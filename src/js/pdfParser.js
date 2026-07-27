@@ -112,9 +112,6 @@ const PdfParser = {
       if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
         try { await window.__TAURI_INTERNALS__.invoke('stop_local_ai_session'); } catch (e) {}
       }
-      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
-        try { await AiDisambiguator.unloadNeuralVisionEngine(); } catch (e) {}
-      }
     }
   },
 
@@ -196,8 +193,8 @@ const PdfParser = {
    */
   async enrichProductsWithCellLlm(cellProducts, customBrands = [], maxConcurrency = 4) {
     if (!cellProducts || !cellProducts.length) return [];
-    if (typeof AiDisambiguator === 'undefined' || !AiDisambiguator.queryCellStructuredLlm) {
-      return cellProducts;
+    if (typeof LocalLlm === 'undefined' || !LocalLlm.isAvailable) {
+      return cellProducts.map(item => (typeof TextSanitizer !== 'undefined' ? TextSanitizer.sanitizeItem(item, customBrands) : item));
     }
 
     const enriched = cellProducts.map(item => ({ ...item }));
@@ -207,29 +204,18 @@ const PdfParser = {
       if (!rawText || rawText.length < 3) return item;
 
       try {
-        const llmResult = await AiDisambiguator.queryCellStructuredLlm(rawText, customBrands);
+        const llmResult = await LocalLlm.parseCellStructured(rawText, customBrands);
         if (llmResult) {
-          if (llmResult.marca && llmResult.marca !== 'OTRO') {
-            item.marca = llmResult.marca.trim();
-          }
-          if (llmResult.modelo && !/^(TECLADO|MOUSE|HEADSET|AURICULAR|CONTROLLER|MOUSEPAD|SWITCH|OTRO)$/i.test(llmResult.modelo.trim())) {
-            item.modelo = llmResult.modelo.trim();
-          }
-          if (llmResult.cat && llmResult.cat !== 'OTRO') {
-            item.cat = llmResult.cat.trim();
-          }
-          if (llmResult.variante) {
-            item.variante = llmResult.variante.trim();
-          }
+          if (llmResult.marca && llmResult.marca !== 'OTRO') item.marca = llmResult.marca.trim();
+          if (llmResult.modelo) item.modelo = llmResult.modelo.trim();
+          if (llmResult.cat && llmResult.cat !== 'OTRO') item.cat = llmResult.cat.trim();
+          if (llmResult.variante) item.variante = llmResult.variante.trim();
         }
       } catch (e) {
-        console.warn('Fallback en celda por error en IA local:', e);
+        console.warn('Fallback en celda por error en LocalLlm:', e);
       }
 
-      if (typeof AiDisambiguator.repairCatalogItem === 'function') {
-        return AiDisambiguator.repairCatalogItem(item);
-      }
-      return item;
+      return typeof TextSanitizer !== 'undefined' ? TextSanitizer.sanitizeItem(item, customBrands) : item;
     };
 
     for (let i = 0; i < enriched.length; i += maxConcurrency) {
@@ -286,8 +272,8 @@ const PdfParser = {
         isGroundedPrice
       };
 
-      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.disambiguateItem) {
-        item = AiDisambiguator.disambiguateItem(item, customBrands);
+      if (typeof TextSanitizer !== 'undefined' && TextSanitizer.sanitizeItem) {
+        item = TextSanitizer.sanitizeItem(item, customBrands);
       }
 
       const evalRes = this.evaluateItemConfidence(item);
@@ -406,17 +392,8 @@ const PdfParser = {
                 }
 
                 if (visiblePixels >= 10) {
-                  let finalCanvas = canvas;
-                  if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.cropProductWithVision) {
-                    finalCanvas = await AiDisambiguator.cropProductWithVision(canvas, ctx);
-                  }
-                  const finalCtx = finalCanvas.getContext('2d');
-                  let colorProfile = null;
-                  if (finalCtx && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.extractCanvasColorProfile) {
-                    colorProfile = AiDisambiguator.extractCanvasColorProfile(finalCtx, finalCanvas.width, finalCanvas.height);
-                  }
-                  const dataUrl = finalCanvas.toDataURL('image/png');
-                  pageImages.push({ pageNum, y, x, width: finalCanvas.width, height: finalCanvas.height, dataUrl, colorProfile });
+                  const dataUrl = canvas.toDataURL('image/png');
+                  pageImages.push({ pageNum, y, x, width: canvas.width, height: canvas.height, dataUrl });
                 }
               }
             }
@@ -674,18 +651,8 @@ const PdfParser = {
             const distY = anchor.y - img.y;
             let penalty = 0;
 
-            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-              const aspect = AiDisambiguator.verifyImageAspect(img.width, img.height, cat);
-              if (!aspect.valid) penalty += 20000;
-            }
-
-            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
-              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, sanitized.modelo + ' ' + sanitized.variante);
-              if (!colorCheck.match) penalty += 40000;
-            }
-
             const dist = Math.hypot(distX * 1.5, Math.max(0, distY));
-            return { img, score: dist + penalty, penalty };
+            return { img, score: dist, penalty: 0 };
           });
 
           scored.sort((a, b) => a.score - b.score);
@@ -973,8 +940,8 @@ const PdfParser = {
     }
     text = uniqueWords.join(' ');
 
-    if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.parseModelAndVariant) {
-      return AiDisambiguator.parseModelAndVariant(text, brand);
+    if (typeof TextSanitizer !== 'undefined' && TextSanitizer.parseModelAndVariant) {
+      return TextSanitizer.parseModelAndVariant(text, brand);
     }
 
     const parts = text.split(/\s+-\s+|\s*\(\s*/);
@@ -1241,16 +1208,6 @@ const PdfParser = {
           let penalty = 0;
           if (img.y > p.y + 10) penalty += 50000;
           if (distX > 160) penalty += 30000;
-
-          if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-            const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, p.cat);
-            if (!aspectCheck.valid) penalty += 20000;
-          }
-
-          if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
-            const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
-            if (!colorCheck.match) penalty += 40000;
-          }
 
           const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
           rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty });

@@ -43,8 +43,8 @@ const projectJsFiles = [
   'calculator.js',
   'storage.js',
   'pdfParser.js',
-  'transformersAi.js',
-  'aiDisambiguator.js',
+  'textSanitizer.js',
+  'localLlm.js',
   'catalogValidator.js',
   'fileImporter.js',
   'tests.js'
@@ -95,10 +95,7 @@ async function auditRealCatalogFolder() {
       const detectedBrand = PdfParser.detectBrandFromContent(fullText, []) || PdfParser.detectBrandFromFilename(fileName, []);
       const finalized = PdfParser.finalizeCatalogProducts(allProducts, detectedBrand, 0, []);
 
-      const processed = finalized.map(p => {
-        const d = AiDisambiguator.disambiguateItem(p, []);
-        return AiDisambiguator.repairCatalogItem(d);
-      });
+      const processed = finalized.map(p => TextSanitizer.sanitizeItem(p, []));
 
       // Auditar con CatalogValidator producto por producto contra las 6 reglas
       const audit = CatalogValidator.validateCatalog(processed);
