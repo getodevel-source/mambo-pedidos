@@ -203,7 +203,7 @@ const Calculator = {
     const itemCalculations = items.map(item => {
       const q = item.qty || 1;
       const subFob = (item.fob || 0) * q;
-      const weightFrac = totalFob > 0 ? (subFob / totalFob) : (q / totalQty);
+      const weightFrac = totalFob > 0 ? (subFob / totalFob) : (totalQty > 0 ? q / totalQty : 0);
       const itemFlete = fleteTotal * weightFrac;
       const itemSeguro = seguroTotal * weightFrac;
       const itemCif = subFob + itemFlete + itemSeguro;
@@ -277,7 +277,7 @@ const Calculator = {
 
     // Asignación final de costo unitario exactamente puesto en puerta
     const finalItems = itemCalculations.map(i => {
-      const weightFrac = totalFob > 0 ? ((i.fob * i.qty) / totalFob) : (i.qty / totalQty);
+      const weightFrac = totalFob > 0 ? ((i.fob * i.qty) / totalFob) : (totalQty > 0 ? i.qty / totalQty : 0);
       const itemGastosFijosProrrateados = totalGastosFijosDestinoUsd * weightFrac;
       const itemCostoPuertaTotalUsd = i.itemCif + i.totalTributosItemUsd + itemGastosFijosProrrateados;
       const costoPuertaUnitUsd = i.qty > 0 ? (itemCostoPuertaTotalUsd / i.qty) : 0;

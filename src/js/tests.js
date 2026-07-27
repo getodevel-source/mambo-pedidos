@@ -66,6 +66,7 @@ const Tests = {
     this.testImageExtractionNoAbortingBreak();
     this.testKpiMinFobDecimalFormatting();
     this.testEscapeKeyModalDismissal();
+    this.testZeroTotalQtyDoorToDoorLiquidation();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -572,6 +573,11 @@ const Tests = {
     const handler = (key) => { if (key === 'Escape') closed = true; };
     handler('Escape');
     this.assert(closed === true, 'Manejador de tecla Escape cierra ventanas modales activas');
+  },
+
+  testZeroTotalQtyDoorToDoorLiquidation() {
+    const res = Calculator.calculateDoorToDoorExactCost([{ sku: 'S1', fob: 0, qty: 0, cat: 'TECLADO', modelo: 'Test' }]);
+    this.assert(!isNaN(res.items[0].costoPuertaUnitUsd), 'Liquidación puerta a puerta maneja cantidades e importes FOB cero sin producir NaN');
   }
 };
 
