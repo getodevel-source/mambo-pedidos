@@ -60,6 +60,7 @@ const Tests = {
     this.testDefaultSvgImageFallback();
     this.testCatalogImportFieldCoherence();
     this.testCategoryChipsIconSupport();
+    this.testRepairCatalogItem();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -512,6 +513,19 @@ const Tests = {
     const categories = ['TECLADO', 'MOUSE', 'HEADSET', 'CONTROLLER', 'MOUSEPAD'];
     const validMap = categories.every(cat => ['TECLADO', 'MOUSE', 'HEADSET', 'CONTROLLER', 'MOUSEPAD'].includes(cat));
     this.assert(validMap, 'Todas las categorías estándar disponen de mapeo a iconos SVG de Lucide');
+  },
+
+  testRepairCatalogItem() {
+    const dirtyItems = [
+      { sku: 'SKU1', marca: 'AJAZZ', cat: 'TECLADO', modelo: 'CNY 117.65', rawText: 'AJAZZ AK820 Mechanical Keyboard CNY 117.65' },
+      { sku: 'SKU2', marca: 'Attack Shark', cat: 'MOUSE', modelo: 'Producto Item 193.76', rawText: 'Attack Shark R1 Pro Max Wireless Mouse 193.76' },
+      { sku: 'SKU3', marca: '8BitDo', cat: 'CONTROLLER', modelo: '. 507', rawText: '8BitDo Ultimate Controller 507' }
+    ];
+
+    const repaired = dirtyItems.map(item => AiDisambiguator.repairCatalogItem(item));
+    this.assert(repaired[0].modelo.includes('AK820') || repaired[0].modelo.includes('AJAZZ'), 'repairCatalogItem reparó el modelo CNY 117.65 a un nombre descriptivo limpio');
+    this.assert(!repaired[1].modelo.includes('Producto Item'), 'repairCatalogItem eliminó el texto Producto Item');
+    this.assert(!repaired[2].modelo.startsWith('.'), 'repairCatalogItem eliminó los caracteres . y números sueltos');
   }
 };
 

@@ -86,7 +86,16 @@ const AppStorage = {
   },
 
   async loadCatalog() {
-    return await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
+    const data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
+    if (data && data.items && Array.isArray(data.items)) {
+      data.items = data.items.map(item => {
+        if (typeof AiDisambiguator !== 'undefined' && typeof AiDisambiguator.repairCatalogItem === 'function') {
+          return AiDisambiguator.repairCatalogItem(item);
+        }
+        return item;
+      });
+    }
+    return data;
   },
 
   async saveHistorial(historialArray) {

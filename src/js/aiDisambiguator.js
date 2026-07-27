@@ -452,6 +452,65 @@ const AiDisambiguator = {
    * Separa cadenas sueltas tipo "F75 Mechanical Keyboard Gasket Structure (White / Purple Switch)"
    * en { modelo: "F75", variante: "White / Purple Switch" }
    */
+  repairCatalogItem(item) {
+    if (!item) return item;
+    let modelo = (item.modelo || '').trim();
+    const rawText = item.rawText || '';
+    const brand = item.marca || 'OTRO';
+    const cat = item.cat || 'OTRO';
+    const sku = item.sku || '';
+
+    const MONEDA_RUIMO = /\b(CNY|RMB|USD|EUR)\s*\$?[\d\.,]+\b/gi;
+    const DECIMAL_PRECIO = /\b\$?[\d]+[\.,]\d+\b/g;
+    const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
+    const FALLBACK_NOISE = /^(Producto\s+Item|\.|\-)+$/i;
+
+    modelo = modelo
+      .replace(MONEDA_RUIMO, '')
+      .replace(DECIMAL_PRECIO, '')
+      .replace(CORPORATE_NOISE, '')
+      .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[.\-\s,:]+|[.\-\s,:]+$/g, '')
+      .trim();
+
+    if (!modelo || /^\$?\d+([\.,]\d+)?$/.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
+      let rescuedModel = '';
+      if (rawText) {
+        const cleanRaw = rawText
+          .replace(MONEDA_RUIMO, '')
+          .replace(DECIMAL_PRECIO, '')
+          .replace(CORPORATE_NOISE, '')
+          .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+          .trim();
+
+        const matchModelCode = cleanRaw.match(/\b([A-Za-z]{1,4}[-_\s]?\d{2,4}[A-Za-z]?)\b/);
+        if (matchModelCode && matchModelCode[1].length >= 3) {
+          rescuedModel = matchModelCode[1].toUpperCase();
+        } else {
+          const words = cleanRaw.split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w) && !/CNY|RMB/i.test(w));
+          if (words.length) {
+            rescuedModel = words.slice(0, 4).join(' ');
+          }
+        }
+      }
+
+      if (rescuedModel && rescuedModel.length >= 3) {
+        modelo = rescuedModel;
+      } else {
+        const brandStr = (brand && brand !== 'OTRO') ? brand : 'Periférico';
+        const catStr = (cat && cat !== 'OTRO') ? cat : '';
+        const varStr = (item.variante && item.variante.length < 20) ? item.variante : '';
+        modelo = `${brandStr} ${catStr} ${varStr}`.replace(/\s+/g, ' ').trim() || `Producto ${sku}`;
+      }
+    }
+
+    return {
+      ...item,
+      modelo
+    };
+  },
+
   parseModelAndVariant(rawText, brand = '') {
     if (!rawText) return { modelo: '', variante: '' };
 

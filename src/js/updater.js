@@ -12,12 +12,21 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '1.3.2',
+  CURRENT_VERSION: '1.4.2',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
   isChecking: false,
   _updateHandle: null, // Guardamos el objeto update de Tauri para reusar en install
+
+  getCurrentVersion() {
+    const badge = document.getElementById('appVersionBadge');
+    if (badge && badge.textContent) {
+      const v = badge.textContent.trim().replace(/^v/i, '');
+      if (v && v.length >= 3 && v !== '1.3.2') return v;
+    }
+    return this.CURRENT_VERSION || '1.4.2';
+  },
 
   /**
    * Resuelve la función invoke de Tauri independientemente de la versión del webview bundle.
@@ -71,6 +80,9 @@ const AppUpdater = {
     if (this.isChecking) return;
     this.isChecking = true;
 
+    const currentVer = this.getCurrentVersion();
+    this.CURRENT_VERSION = currentVer;
+
     if (userInitiated) {
       toast('🔄 Buscando actualizaciones...', 'info');
     }
@@ -85,7 +97,9 @@ const AppUpdater = {
         if (badge) badge.textContent = `v${updateInfo.currentVersion}`;
       }
 
-      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, this.CURRENT_VERSION)) {
+      const activeVer = this.getCurrentVersion();
+
+      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, activeVer)) {
         this.latestVersion = updateInfo.version;
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;
@@ -97,7 +111,7 @@ const AppUpdater = {
           toast(`🚀 ¡Nueva versión v${updateInfo.version} disponible!`, 'success');
         }
       } else if (userInitiated) {
-        toast(`✅ Estás en la versión más reciente (v${this.CURRENT_VERSION})`, 'success');
+        toast(`✅ Estás en la versión más reciente (v${activeVer})`, 'success');
       }
     } catch (tauriErr) {
       // Fallback: GitHub API para mostrar modal informativo (sin descarga automática)
@@ -110,6 +124,9 @@ const AppUpdater = {
 
   async _checkViaGitHubApi(userInitiated) {
     try {
+      const activeVer = this.getCurrentVersion();
+      this.CURRENT_VERSION = activeVer;
+
       const res = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest', {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
@@ -119,7 +136,7 @@ const AppUpdater = {
       const release = await res.json();
       const latestVersion = release.tag_name?.replace(/^v/, '') || '';
 
-      if (latestVersion && this.isNewerVersion(latestVersion, this.CURRENT_VERSION)) {
+      if (latestVersion && this.isNewerVersion(latestVersion, activeVer)) {
         this.latestVersion = latestVersion;
         this.latestNotes = release.body || 'Correcciones y mejoras generales.';
 
@@ -130,12 +147,12 @@ const AppUpdater = {
           toast(`🚀 ¡Nueva versión v${latestVersion} disponible!`, 'success');
         }
       } else if (userInitiated) {
-        toast(`✅ Estás en la versión más reciente (v${this.CURRENT_VERSION})`, 'success');
+        toast(`✅ Estás en la versión más reciente (v${activeVer})`, 'success');
       }
     } catch (err) {
       console.error('GitHub API fallback error:', err);
       if (userInitiated) {
-        toast(`ℹ️ Sin conexión para verificar actualizaciones (v${this.CURRENT_VERSION})`, 'info');
+        toast(`ℹ️ Sin conexión para verificar actualizaciones (v${this.getCurrentVersion()})`, 'info');
       }
     }
   },
