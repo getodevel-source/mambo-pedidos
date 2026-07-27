@@ -246,6 +246,11 @@ async fn stop_local_ai_session() -> Result<serde_json::Value, String> {
     }))
 }
 
+#[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -263,7 +268,8 @@ pub fn run() {
             check_local_ai_status,
             query_local_ai,
             start_local_ai_session,
-            stop_local_ai_session
+            stop_local_ai_session,
+            get_app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

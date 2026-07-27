@@ -11,21 +11,23 @@
  *   3. relaunch()      → cierra y vuelve a abrir la app actualizada
  */
 
-const AppUpdater = {
-  CURRENT_VERSION: '1.4.6',
-  REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
-  latestVersion: null,
-  latestNotes: null,
-  isChecking: false,
-  _updateHandle: null, // Guardamos el objeto update de Tauri para reusar en install
+  async syncVersionFromRust() {
+    try {
+      const ver = await this._invoke('get_app_version', {});
+      if (ver && typeof ver === 'string' && ver.length >= 3) {
+        this.CURRENT_VERSION = ver;
+        const badge = document.getElementById('appVersionBadge');
+        if (badge) {
+          badge.textContent = `v${ver}`;
+        }
+        return ver;
+      }
+    } catch (e) {}
+    return this.CURRENT_VERSION;
+  },
 
   getCurrentVersion() {
-    const badge = document.getElementById('appVersionBadge');
-    if (badge && badge.textContent) {
-      const v = badge.textContent.trim().replace(/^v/i, '');
-      if (v && v.length >= 3 && v !== '1.3.2') return v;
-    }
-    return this.CURRENT_VERSION || '1.4.5';
+    return this.CURRENT_VERSION || '1.5.6';
   },
 
   /**
@@ -80,8 +82,8 @@ const AppUpdater = {
     if (this.isChecking) return;
     this.isChecking = true;
 
+    await this.syncVersionFromRust();
     const currentVer = this.getCurrentVersion();
-    this.CURRENT_VERSION = currentVer;
 
     if (userInitiated) {
       toast('🔄 Buscando actualizaciones...', 'info');
