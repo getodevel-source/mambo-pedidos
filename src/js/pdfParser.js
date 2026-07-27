@@ -437,7 +437,7 @@ const PdfParser = {
           });
 
           scored.sort((a, b) => a.score - b.score);
-          if (scored[0] && scored[0].penalty < 5000) {
+          if (scored[0]) {
             matchedImg = scored[0].img.dataUrl;
           }
         }
@@ -509,7 +509,7 @@ const PdfParser = {
     variante = uniqueVarWords.join(' ');
 
     const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
-    if (modelo.length <= 18 && (COLOR_WORDS.test(modelo) || /^[a-z\s\-]+$/i.test(modelo))) {
+    if (modelo.length <= 18 && COLOR_WORDS.test(modelo.trim())) {
       const familyBase = existingProducts
         .filter(p => p.marca === brand)
         .slice(-3)
@@ -685,79 +685,7 @@ const PdfParser = {
     }
 
     // 2. ASIGNACIÓN GLOBAL BIPARTITA DE IMÁGENES POR PÁGINA (Previene robo de fotos e índices desfasados)
-    if (allImages && allImages.length && products.length) {
-      const pageNumbers = [...new Set(products.map(p => p.pageNum))];
-
-      for (const pNum of pageNumbers) {
-        const pageProds = products.filter(p => p.pageNum === pNum);
-        const pageImgs = allImages.filter(img => img.pageNum === pNum);
-        if (!pageProds.length || !pageImgs.length) continue;
-
-        // Construir matriz de costos global [N_prods x M_imgs]
-        const costMatrix = [];
-        for (let i = 0; i < pageProds.length; i++) {
-          const p = pageProds[i];
-          const fullTitleText = p.modelo + ' ' + p.variante;
-          const rowCost = [];
-
-          for (let j = 0; j < pageImgs.length; j++) {
-            const img = pageImgs[j];
-            const distX = Math.abs(img.x - p.x);
-            const distYRaw = p.y - img.y; // Distancia desde la foto hacia la etiqueta abajo
-
-            let penalty = 0;
-
-            // Bloqueos estrictos (Hard Penalties)
-            if (img.y > p.y + 10) penalty += 50000;  // Foto por debajo de la etiqueta (Imposible)
-            if (distX > 160) penalty += 30000;       // Columna diferente (Imposible)
-
-            // Vision Guard Aspect Ratio
-            if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
-              const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, p.cat);
-              if (!aspectCheck.valid) penalty += 20000;
-            }
-
-            // Color Guard Chromatic Verification
-            if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
-              const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
-              if (!colorCheck.match) penalty += 40000; // Penalización masiva por descalce cromático (ej: Pink vs Purple)
-            }
-
-            const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
-            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty });
-          }
-          costMatrix.push(rowCost);
-        }
-
-        // Algoritmo de Asignación Bipartita Mínima Iterativa
-        const assignedProds = new Set();
-        const assignedImgs = new Set();
-
-        while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
-          let minPair = null;
-
-          for (let i = 0; i < pageProds.length; i++) {
-            if (assignedProds.has(i)) continue;
-            for (let j = 0; j < pageImgs.length; j++) {
-              if (assignedImgs.has(j)) continue;
-              const pair = costMatrix[i][j];
-              if (!minPair || pair.totalScore < minPair.totalScore) {
-                minPair = pair;
-              }
-            }
-          }
-
-          if (!minPair || minPair.totalScore >= 5000) break; // Umbral de confianza estricto
-
-          const winnerProd = pageProds[minPair.prodIdx];
-          const winnerImg = pageImgs[minPair.imgIdx];
-
-          winnerProd.img = winnerImg.dataUrl;
-          assignedProds.add(minPair.prodIdx);
-          assignedImgs.add(minPair.imgIdx);
-        }
-      }
-    }
+    this.matchImagesToProductsGlobal(products, allImages);
 
     // 3. Evaluar confianza final para cada producto
     for (const p of products) {
@@ -1036,7 +964,82 @@ const PdfParser = {
 
   guessCategory(modelo, variante) {
     return this.detectCategory((modelo || '') + ' ' + (variante || ''), '');
+  },
+
+  matchImagesToProductsGlobal(products, allImages) {
+    if (!allImages || !allImages.length || !products || !products.length) return;
+    const pageNumbers = [...new Set(products.map(p => p.pageNum))];
+
+    for (const pNum of pageNumbers) {
+      const pageProds = products.filter(p => p.pageNum === pNum);
+      const pageImgs = allImages.filter(img => img.pageNum === pNum);
+      if (!pageProds.length || !pageImgs.length) continue;
+
+      const costMatrix = [];
+      for (let i = 0; i < pageProds.length; i++) {
+        const p = pageProds[i];
+        const fullTitleText = (p.modelo || '') + ' ' + (p.variante || '');
+        const rowCost = [];
+
+        for (let j = 0; j < pageImgs.length; j++) {
+          const img = pageImgs[j];
+          const distX = Math.abs(img.x - p.x);
+          const distYRaw = p.y - img.y;
+
+          let penalty = 0;
+          if (img.y > p.y + 10) penalty += 50000;
+          if (distX > 160) penalty += 30000;
+
+          if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageAspect) {
+            const aspectCheck = AiDisambiguator.verifyImageAspect(img.width, img.height, p.cat);
+            if (!aspectCheck.valid) penalty += 20000;
+          }
+
+          if (img.colorProfile && typeof AiDisambiguator !== 'undefined' && AiDisambiguator.verifyImageColorMatch) {
+            const colorCheck = AiDisambiguator.verifyImageColorMatch(img.colorProfile, fullTitleText);
+            if (!colorCheck.match) penalty += 40000;
+          }
+
+          const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
+          rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty });
+        }
+        costMatrix.push(rowCost);
+      }
+
+      const assignedProds = new Set();
+      const assignedImgs = new Set();
+
+      while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
+        let minPair = null;
+
+        for (let i = 0; i < pageProds.length; i++) {
+          if (assignedProds.has(i)) continue;
+          for (let j = 0; j < pageImgs.length; j++) {
+            if (assignedImgs.has(j)) continue;
+            const pair = costMatrix[i][j];
+            if (!minPair || pair.totalScore < minPair.totalScore) {
+              minPair = pair;
+            }
+          }
+        }
+
+        if (!minPair) break;
+        if (minPair.distX > 250 || minPair.distYRaw > 350 || minPair.distYRaw < -80) {
+          assignedProds.add(minPair.prodIdx);
+          continue;
+        }
+
+        const winnerProd = pageProds[minPair.prodIdx];
+        const winnerImg = pageImgs[minPair.imgIdx];
+
+        winnerProd.img = winnerImg.dataUrl;
+        assignedProds.add(minPair.prodIdx);
+        assignedImgs.add(minPair.imgIdx);
+      }
+    }
   }
 };
 
-window.PdfParser = PdfParser;
+if (typeof window !== 'undefined') window.PdfParser = PdfParser;
+if (typeof module !== 'undefined') module.exports = PdfParser;
+

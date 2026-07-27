@@ -294,4 +294,6 @@ const FileImporter = {
   }
 };
 
-window.FileImporter = FileImporter;
+if (typeof window !== 'undefined') window.FileImporter = FileImporter;
+if (typeof module !== 'undefined') module.exports = FileImporter;
+

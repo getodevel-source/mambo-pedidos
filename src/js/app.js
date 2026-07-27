@@ -236,9 +236,9 @@ function renderCatalog() {
   const minFob = positiveFob.length ? Math.min(...positiveFob) : 0;
   document.getElementById('catKpiTotal').textContent = catalog.length;
   document.getElementById('catKpiMarcas').textContent = [...new Set(catalog.map(r => r.marca))].length + ' marcas';
-  document.getElementById('catKpiMin').textContent = '$' + minFob.toFixed(0);
+  document.getElementById('catKpiMin').textContent = '$' + (minFob >= 10 ? minFob.toFixed(0) : minFob.toFixed(2));
   document.getElementById('catKpiMax').textContent = '$' + (allFob.length ? Math.max(...allFob) : 0).toFixed(0);
-  document.getElementById('catKpiAvg').textContent = '$' + (allFob.length ? (allFob.reduce((a, b) => a + b, 0) / allFob.length) : 0).toFixed(2);
+  document.getElementById('catKpiAvg').textContent = '$' + (positiveFob.length ? (positiveFob.reduce((a, b) => a + b, 0) / positiveFob.length) : 0).toFixed(2);
 
   const selItems = Object.entries(selection);
   const selQty = selItems.reduce((s, [k, v]) => s + v, 0);
@@ -248,7 +248,7 @@ function renderCatalog() {
   }, 0);
   document.getElementById('catKpiSel').textContent = selQty + ' u';
   document.getElementById('catKpiSelFob').textContent = '$' + selFob.toFixed(2) + ' FOB';
-  document.getElementById('catalogSubtitle').textContent = filtered.length + ' de ' + catalog.length + ' productos · ' + [...new Set(catalog.map(r => r.marca))].length + ' marcas';
+  document.getElementById('catalogSubtitle').textContent = filtered.length + ' de ' + catalog.length + ' productos · ' + new Set(filtered.map(r => r.marca)).size + ' marcas';
 
   // Actualizar Sticky Order Bar
   const stickyBar = document.getElementById('stickyOrderBar');
@@ -1697,3 +1697,18 @@ function showDropOverlay() {
   document.body.appendChild(o);
 }
 function hideDropOverlay() { const e = document.getElementById('dropOverlay'); if (e) e.remove(); }
+
+// Global Escape Key Listener for Modals
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (typeof closeImportPreviewModal === 'function') closeImportPreviewModal();
+    if (typeof closeBrandManagerModal === 'function') closeBrandManagerModal();
+    if (typeof closeImageZoomModal === 'function') closeImageZoomModal();
+    if (typeof closeSupplierCompareModal === 'function') closeSupplierCompareModal();
+    if (typeof closeSensitivitySimulatorModal === 'function') closeSensitivitySimulatorModal();
+    if (typeof closeBreakEvenModal === 'function') closeBreakEvenModal();
+    if (typeof closeDoorToDoorModal === 'function') closeDoorToDoorModal();
+    if (window.AppUpdater && typeof window.AppUpdater.closeModal === 'function') window.AppUpdater.closeModal();
+  }
+});
+

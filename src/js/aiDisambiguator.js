@@ -559,8 +559,9 @@ const AiDisambiguator = {
       .replace(/^[.\-\s,:]+|[.\-\s,:]+$/g, '')
       .trim();
 
-    // Si el modelo quedó reducido a residuos decimales tipo ".98", ".26 .26", o números pura
-    if (!modelo || /^\s*\.\d+[\s\.\d]*$/.test(modelo) || /^\$?\d+([\.,]\d+)?$/.test(modelo) || HEADER_NOISE.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
+    // Si el modelo quedó reducido a residuos decimales tipo ".98", ".26 .26", o nombres genéricos tipo "Logitech TECLADO"
+    const isGenericModel = /^[A-Za-z0-9\s\-]+\s+(TECLADO|MOUSE|HEADSET|AURICULAR|CONTROLLER|MOUSEPAD|SWITCH|OTRO)$/i.test(modelo);
+    if (!modelo || isGenericModel || /^\s*\.\d+[\s\.\d]*$/.test(modelo) || /^\$?\d+([\.,]\d+)?$/.test(modelo) || HEADER_NOISE.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
       let rescuedModel = '';
       if (rawText) {
         const cleanRaw = rawText
@@ -790,4 +791,6 @@ const AiDisambiguator = {
   }
 };
 
-window.AiDisambiguator = AiDisambiguator;
+if (typeof window !== 'undefined') window.AiDisambiguator = AiDisambiguator;
+if (typeof module !== 'undefined') module.exports = AiDisambiguator;
+

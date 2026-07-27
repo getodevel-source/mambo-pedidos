@@ -326,4 +326,6 @@ const Calculator = {
   }
 };
 
-window.Calculator = Calculator;
+if (typeof window !== 'undefined') window.Calculator = Calculator;
+if (typeof module !== 'undefined') module.exports = Calculator;
+

@@ -206,4 +206,6 @@ const Validations = {
   }
 };
 
-window.Validations = Validations;
+if (typeof window !== 'undefined') window.Validations = Validations;
+if (typeof module !== 'undefined') module.exports = Validations;
+

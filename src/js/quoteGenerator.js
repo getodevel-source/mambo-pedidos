@@ -185,4 +185,6 @@ const QuoteGenerator = {
   }
 };
 
-window.QuoteGenerator = QuoteGenerator;
+if (typeof window !== 'undefined') window.QuoteGenerator = QuoteGenerator;
+if (typeof module !== 'undefined') module.exports = QuoteGenerator;
+

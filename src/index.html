@@ -90,7 +90,7 @@
   <div style="margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
       <span>Versión</span>
-      <span id="appVersionBadge" class="badge badge-emerald">v1.4.5</span>
+      <span id="appVersionBadge" class="badge badge-emerald">v1.4.6</span>
     </div>
     <div style="font-size: 10px;">
       Desarrollado por <a href="https://instagram.com/geto_dev" onclick="AppUpdater.openExternal('https://instagram.com/geto_dev'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 700;">@geto_dev</a> ↗
@@ -505,8 +505,8 @@
 <div class="toast" id="toast"></div>
 
 <!-- Update Modal -->
-<div class="modal-backdrop" id="updateModal" style="display: none;">
-  <div class="modal-card" style="max-width: 520px;">
+<div class="modal-backdrop" id="updateModal" style="display: none;" onclick="AppUpdater.closeModal()">
+  <div class="modal-card" style="max-width: 520px;" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title">
         <span>🚀 Nueva Versión de Mambo Pedidos</span>
@@ -548,8 +548,8 @@
 </div>
 
 <!-- Modal Vista Previa de Importación (Semáforo de Diagnóstico) -->
-<div class="modal-backdrop" id="importPreviewModal" style="display: none; z-index: 9990;">
-  <div class="modal-card" style="max-width: 1080px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+<div class="modal-backdrop" id="importPreviewModal" style="display: none; z-index: 9990;" onclick="closeImportPreviewModal()">
+  <div class="modal-card" style="max-width: 1080px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div>
         <div class="modal-title">
@@ -563,6 +563,7 @@
         <span class="badge badge-emerald" id="badgeValidCount">🟢 0 Confiables</span>
         <span class="badge badge-amber" id="badgeWarnCount">🟡 0 Revisar</span>
         <span class="badge badge-rose" id="badgeErrCount">🔴 0 Incertidumbre</span>
+        <button class="btn btn-ghost btn-sm" onclick="closeImportPreviewModal()" style="margin-left: 8px;">✕</button>
       </div>
     </div>
 
@@ -631,8 +632,8 @@
 </div>
 
 <!-- Modal Gestor de Diccionario de Marcas y Alias -->
-<div class="modal-backdrop" id="brandManagerModal" style="display: none; z-index: 9995;">
-  <div class="modal-card" style="max-width: 600px;">
+<div class="modal-backdrop" id="brandManagerModal" style="display: none; z-index: 9995;" onclick="closeBrandManagerModal()">
+  <div class="modal-card" style="max-width: 600px;" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title">
         <span>🏷️ Diccionario de Marcas y Alias</span>

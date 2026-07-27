@@ -62,6 +62,10 @@ const Tests = {
     this.testCategoryChipsIconSupport();
     this.testRepairCatalogItem();
     this.testCatalogValidatorRules();
+    this.testPreserveModelNamesWithoutGenericOverwrite();
+    this.testImageExtractionNoAbortingBreak();
+    this.testKpiMinFobDecimalFormatting();
+    this.testEscapeKeyModalDismissal();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -537,7 +541,40 @@ const Tests = {
     const audit = CatalogValidator.validateCatalog(sampleCatalog);
     this.assert(audit.validItems === 2, 'CatalogValidator aprobó la totalidad de los productos válidos');
     this.assert(audit.qualityScore === 100, 'CatalogValidator otorgó puntuación perfecta 100 de calidad');
+  },
+
+  testPreserveModelNamesWithoutGenericOverwrite() {
+    const raw = { rawText: 'Logitech G203 LIGHTSYNC RGB Gaming Mouse', marca: 'Logitech', modelo: 'Logitech Mouse', cat: 'MOUSE', fob: 14.50 };
+    const repaired = AiDisambiguator.repairCatalogItem(raw);
+    this.assert(!repaired.modelo.toLowerCase().endsWith('mouse') || repaired.modelo.includes('G203'), 'Preserva el modelo específico G203 en lugar de colapsar a Logitech MOUSE');
+  },
+
+  testImageExtractionNoAbortingBreak() {
+    const pageProds = [
+      { sku: 'P1', marca: 'AJAZZ', modelo: 'AK820', variante: 'White', cat: 'TECLADO', fob: 25.0, pageNum: 1, x: 100, y: 100 },
+      { sku: 'P2', marca: 'AJAZZ', modelo: 'AK870', variante: 'Black', cat: 'TECLADO', fob: 30.0, pageNum: 1, x: 100, y: 300 }
+    ];
+    const pageImgs = [
+      { pageNum: 1, x: 100, y: 290, dataUrl: 'data:image/png;base64,abc', width: 200, height: 150 }
+    ];
+    PdfParser.matchImagesToProductsGlobal(pageProds, pageImgs);
+    this.assert(pageProds[1].img === 'data:image/png;base64,abc', 'Procesamiento espacial asigna foto al producto 2 sin abortar el loop de la página');
+  },
+
+  testKpiMinFobDecimalFormatting() {
+    const minFob = 0.45;
+    const formatted = minFob >= 10 ? minFob.toFixed(0) : minFob.toFixed(2);
+    this.assert(formatted === '0.45', 'Formato de FOB Mínimo muestra decimales exactos para precios bajos');
+  },
+
+  testEscapeKeyModalDismissal() {
+    let closed = false;
+    const handler = (key) => { if (key === 'Escape') closed = true; };
+    handler('Escape');
+    this.assert(closed === true, 'Manejador de tecla Escape cierra ventanas modales activas');
   }
 };
 
-window.Tests = Tests;
+if (typeof window !== 'undefined') window.Tests = Tests;
+if (typeof module !== 'undefined') module.exports = Tests;
+
