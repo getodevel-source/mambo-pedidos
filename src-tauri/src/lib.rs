@@ -126,17 +126,19 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        if is_msi {
-            std::process::Command::new("msiexec")
-                .args(["/i", temp_path.to_str().unwrap(), "/passive", "/norestart"])
-                .spawn()
-                .map_err(|e| e.to_string())?;
+        let path_str = temp_path.to_str().unwrap_or("").to_string();
+        let ps_script = if is_msi {
+            format!("Start-Sleep -Milliseconds 800; Start-Process msiexec.exe -ArgumentList '/i \"{}\" /qb /norestart' -Verb RunAs", path_str)
         } else {
-            std::process::Command::new(&temp_path)
-                .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/REINSTALL", "/NOUNINSTALL"])
-                .spawn()
-                .map_err(|e| e.to_string())?;
-        }
+            format!("Start-Sleep -Milliseconds 800; Start-Process -FilePath \"{}\" -ArgumentList '/SP- /SILENT /SUPPRESSMSGBOXES' -Verb RunAs", path_str)
+        };
+
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
         std::process::exit(0);
     }
 
