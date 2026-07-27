@@ -585,11 +585,48 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   gap: 12px;
   flex-wrap: wrap;
   background: rgba(20, 24, 38, 0.7);
+}
+
+/* Segmented Control para Tabla / Galería */
+.segmented-control {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(8, 10, 16, 0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px;
+  gap: 2px;
+}
+
+.segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.segmented-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.segmented-btn.active {
+  color: #ffffff;
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(255, 87, 34, 0.35);
 }
 
 .table-scroll {

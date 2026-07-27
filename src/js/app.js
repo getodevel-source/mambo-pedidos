@@ -232,11 +232,13 @@ function renderCatalog() {
   const pageItems = filtered.slice(startIndex, startIndex + pageSize);
 
   const allFob = catalog.map(r => r.fob);
+  const positiveFob = allFob.filter(f => f > 0);
+  const minFob = positiveFob.length ? Math.min(...positiveFob) : 0;
   document.getElementById('catKpiTotal').textContent = catalog.length;
   document.getElementById('catKpiMarcas').textContent = [...new Set(catalog.map(r => r.marca))].length + ' marcas';
-  document.getElementById('catKpiMin').textContent = '$' + Math.min(...allFob).toFixed(0);
-  document.getElementById('catKpiMax').textContent = '$' + Math.max(...allFob).toFixed(0);
-  document.getElementById('catKpiAvg').textContent = '$' + (allFob.reduce((a, b) => a + b, 0) / allFob.length).toFixed(2);
+  document.getElementById('catKpiMin').textContent = '$' + minFob.toFixed(0);
+  document.getElementById('catKpiMax').textContent = '$' + (allFob.length ? Math.max(...allFob) : 0).toFixed(0);
+  document.getElementById('catKpiAvg').textContent = '$' + (allFob.length ? (allFob.reduce((a, b) => a + b, 0) / allFob.length) : 0).toFixed(2);
 
   const selItems = Object.entries(selection);
   const selQty = selItems.reduce((s, [k, v]) => s + v, 0);
@@ -262,13 +264,14 @@ function renderCatalog() {
     }
   }
 
+  const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" fill="#12131C"/><circle cx="8.5" cy="8.5" r="1.5" fill="#334155"/><polyline points="21 15 16 10 5 21" stroke="#334155"/></svg>');
+
   let html = '';
   pageItems.forEach(r => {
     const qty = selection[r.sku] || 0;
     const isSel = qty > 0;
     const skuJs = escJs(r.sku);
-    const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569" font-size="36">🖼️</text></svg>');
-    const imgHtml = r.img ? `<img src="${esc(r.img)}" onerror="this.onerror=null; this.src='${DEFAULT_SVG_IMG}';" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
+    const imgHtml = r.img ? `<img src="${esc(r.img)}" onerror="this.onerror=null; this.src='${DEFAULT_SVG_IMG}';" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; cursor: zoom-in; background: rgba(0,0,0,0.4); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<img src="${DEFAULT_SVG_IMG}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; opacity: 0.4;">`;
     html += '<tr' + (isSel ? ' style="background: rgba(255,90,31,0.05);"' : '') + '>';
     html += '<td class="checkbox"><input type="checkbox" ' + (isSel ? 'checked' : '') + ' onchange="toggleItem(\'' + skuJs + '\', this.checked)"></td>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
@@ -290,7 +293,6 @@ function renderCatalog() {
   const gridEl = document.getElementById('catalogGrid');
   if (catalogViewMode === 'grid') {
     let gridHtml = '';
-    const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#181824"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569" font-size="36">🖼️</text></svg>');
     pageItems.forEach(r => {
       const qty = selection[r.sku] || 0;
       const isSel = qty > 0;
@@ -312,7 +314,7 @@ function renderCatalog() {
       gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">FOB</span><strong style="color: #38bdf8;">$${r.fob.toFixed(2)}</strong></div>`;
       gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">PVP Est.</span><strong style="color: #34d399;">$${pvp}</strong></div>`;
       gridHtml += `</div>`;
-      gridHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-pt: 4px;">`;
+      gridHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 4px;">`;
       gridHtml += `<button class="btn btn-sm" onclick="adjustQty('${skuJs}', -1)" style="padding: 4px 10px; font-weight: 800;">-</button>`;
       gridHtml += `<span style="font-weight: 800; font-size: 14px; color: ${isSel ? 'var(--primary)' : 'var(--text-muted)'};">${qty} u</span>`;
       gridHtml += `<button class="btn btn-sm btn-primary" onclick="adjustQty('${skuJs}', 1)" style="padding: 4px 10px; font-weight: 800;">+</button>`;
@@ -904,13 +906,13 @@ function setCatalogViewMode(mode) {
   const gridWrap = document.getElementById('catalogGrid');
 
   if (mode === 'grid') {
-    if (btnTable) { btnTable.style.background = 'transparent'; btnTable.style.color = 'var(--text-muted)'; }
-    if (btnGrid) { btnGrid.style.background = 'var(--primary)'; btnGrid.style.color = '#fff'; }
+    if (btnTable) { btnTable.classList.remove('active'); btnTable.style.background = ''; btnTable.style.color = ''; }
+    if (btnGrid) { btnGrid.classList.add('active'); btnGrid.style.background = ''; btnGrid.style.color = ''; }
     if (tableWrap) tableWrap.style.display = 'none';
     if (gridWrap) gridWrap.style.display = 'grid';
   } else {
-    if (btnTable) { btnTable.style.background = 'var(--primary)'; btnTable.style.color = '#fff'; }
-    if (btnGrid) { btnGrid.style.background = 'transparent'; btnGrid.style.color = 'var(--text-muted)'; }
+    if (btnTable) { btnTable.classList.add('active'); btnTable.style.background = ''; btnTable.style.color = ''; }
+    if (btnGrid) { btnGrid.classList.remove('active'); btnGrid.style.background = ''; btnGrid.style.color = ''; }
     if (tableWrap) tableWrap.style.display = 'block';
     if (gridWrap) gridWrap.style.display = 'none';
   }

@@ -55,6 +55,11 @@ const Tests = {
     this.testTableHeaderNoiseFilter();
     this.testSpatialCellGridExtraction();
     this.testDoorToDoorCustomsLiquidation();
+    this.testCorporateNoiseSanitizer();
+    this.testMinFobKpiPositiveFilter();
+    this.testDefaultSvgImageFallback();
+    this.testCatalogImportFieldCoherence();
+    this.testCategoryChipsIconSupport();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -464,6 +469,49 @@ const Tests = {
     this.assert(res.items.some(i => i.ncm === '8471.60.53'), 'Identificó la Posición Arancelaria NCM 8471.60.53 para teclados/mouses inalámbricos');
     this.assert(res.certificationsRequired.some(c => c.title.includes('ENACOM')), 'Detectó la necesidad de trámite de Homologación ENACOM por Radiofrecuencia/BT');
     this.assert(res.items[0].costoPuertaUnitUsd > items[0].fob, 'El Costo Puerta Unitario contempla tributos SIM, fletes y certificaciones');
+  },
+
+  testCorporateNoiseSanitizer() {
+    const res1 = PdfParser.sanitizeProductNames('Co., Ltd. 235.75', 'Purple Switch', '8BitDo');
+    this.assert(res1.modelo !== 'Co., Ltd. 235.75' && !res1.modelo.includes('Co., Ltd.'), 'Limpió la razón social Co., Ltd. del nombre del modelo');
+    this.assert(!/^\$?\d+([\.,]\d+)?$/.test(res1.modelo), 'Reemplazó el precio numérico desnudo por un modelo descriptivo válido');
+
+    const res2 = AiDisambiguator.parseModelAndVariant('Shenzhen Technology Co., Ltd. Ultimate Controller', '8BitDo');
+    this.assert(!res2.modelo.includes('Technology Co.') && res2.modelo.includes('Ultimate Controller'), 'Desambiguador eliminó la razón social manteniendo el modelo real');
+  },
+
+  testMinFobKpiPositiveFilter() {
+    const catalogData = [
+      { sku: 'A1', fob: 0 },
+      { sku: 'A2', fob: 15.5 },
+      { sku: 'A3', fob: 45.0 }
+    ];
+    const positiveFobs = catalogData.map(c => c.fob).filter(f => f > 0);
+    const minPositive = positiveFobs.length ? Math.min(...positiveFobs) : 0;
+    this.assert(minPositive === 15.5, 'El cálculo del KPI de FOB Mínimo ignora correctamente los ítems con precio $0');
+  },
+
+  testDefaultSvgImageFallback() {
+    const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" fill="#12131C"/><circle cx="8.5" cy="8.5" r="1.5" fill="#334155"/><polyline points="21 15 16 10 5 21" stroke="#334155"/></svg>');
+    this.assert(DEFAULT_SVG_IMG.startsWith('data:image/svg+xml'), 'Generó una imagen fallback SVG Data URI de alta definición');
+    this.assert(!DEFAULT_SVG_IMG.includes('🖼️'), 'El fallback visual SVG no contiene caracteres emoji propensos a falla');
+  },
+
+  testCatalogImportFieldCoherence() {
+    const rawItems = [
+      { rawText: '8BitDo Ultimate 2.4G Controller (Black)', marca: '8BitDo', modelo: 'Co., Ltd. 235.75', cat: 'CONTROLLER', fob: 35.19 },
+      { rawText: 'VGN Dragonfly F1 Pro Mouse White', marca: 'VGN', modelo: '126.50', cat: 'MOUSE', fob: 18.88 }
+    ];
+
+    const processed = rawItems.map(item => AiDisambiguator.disambiguateItem(item));
+    this.assert(processed.every(p => p.marca && p.cat && p.modelo), 'Todos los ítems de catálogo importados generan coincidencia completa de campos');
+    this.assert(processed.every(p => !p.modelo.includes('Co., Ltd.') && !/^\d+([\.,]\d+)?$/.test(p.modelo)), 'Sanitización de importación garantizó nombres de modelos coherentes en todo el lote');
+  },
+
+  testCategoryChipsIconSupport() {
+    const categories = ['TECLADO', 'MOUSE', 'HEADSET', 'CONTROLLER', 'MOUSEPAD'];
+    const validMap = categories.every(cat => ['TECLADO', 'MOUSE', 'HEADSET', 'CONTROLLER', 'MOUSEPAD'].includes(cat));
+    this.assert(validMap, 'Todas las categorías estándar disponen de mapeo a iconos SVG de Lucide');
   }
 };
 

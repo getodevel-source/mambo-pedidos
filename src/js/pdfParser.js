@@ -465,6 +465,10 @@ const PdfParser = {
     let modelo = (rawModelo || '').trim();
     let variante = (rawVariante || '').trim();
 
+    // 1. Limpieza de razones sociales corporativas y texto institucional
+    const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
+    modelo = modelo.replace(CORPORATE_NOISE, '').trim();
+
     if (brand && brand !== 'OTRO') {
       const reBrand = new RegExp('^' + brand + '\\s+', 'i');
       modelo = modelo.replace(reBrand, '').trim();
@@ -475,6 +479,17 @@ const PdfParser = {
       .replace(/\s+/g, ' ')
       .replace(/^[\-\s,:]+|[\-\s,:]+$/g, '')
       .trim();
+
+    // 2. Si el modelo resultante es puramente numérico/decimal (ej: "235.75" o "$120"), no dejar el precio como modelo
+    if (/^\$?\d+([\.,]\d+)?$/.test(modelo) || /^\d+$/.test(modelo)) {
+      if (variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
+        modelo = variante;
+        variante = '';
+      } else {
+        const brandLabel = (brand && brand !== 'OTRO') ? brand : 'Producto';
+        modelo = `${brandLabel} Item`;
+      }
+    }
 
     variante = variante
       .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
@@ -515,7 +530,7 @@ const PdfParser = {
       }
     }
 
-    return { modelo: modelo || rawModelo, variante };
+    return { modelo: modelo || (brand !== 'OTRO' ? `${brand} Item` : 'Producto'), variante };
   },
 
   finalizeCatalogProducts(allProducts, brandFallback, baseLength = 0, customBrands = []) {

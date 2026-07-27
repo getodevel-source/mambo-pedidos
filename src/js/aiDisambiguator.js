@@ -457,6 +457,10 @@ const AiDisambiguator = {
 
     let text = String(rawText).trim();
 
+    // Limpieza de razones sociales corporativas
+    const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
+    text = text.replace(CORPORATE_NOISE, '').trim();
+
     if (brand && brand !== 'OTRO') {
       const reBrand = new RegExp('^' + brand + '\\s+', 'i');
       text = text.replace(reBrand, '').trim();
@@ -489,13 +493,24 @@ const AiDisambiguator = {
       }
     }
 
+    // Si el modelo es puramente numérico/decimal (ej: "235.75"), no permitir que un precio quede como modelo
+    model = (model || '').replace(CORPORATE_NOISE, '').trim();
+    if (/^\$?\d+([\.,]\d+)?$/.test(model) || /^\d+$/.test(model)) {
+      if (variant && !/^\$?\d+([\.,]\d+)?$/.test(variant)) {
+        model = variant;
+        variant = '';
+      } else {
+        model = (brand && brand !== 'OTRO') ? `${brand} Item` : '';
+      }
+    }
+
     if (variant) {
       variant = variant.replace(/\b(teclado|keyboard|mouse|headset|auricular|controller|joystick|mousepad|mat)\b/gi, '').trim();
       variant = variant.replace(/^[\s\-\/,]+|[\s\-\/,]+$/g, '');
     }
 
     return {
-      modelo: model || text,
+      modelo: model || (brand && brand !== 'OTRO' ? `${brand} Item` : 'Producto'),
       variante: variant || ''
     };
   },
@@ -544,13 +559,21 @@ const AiDisambiguator = {
 
     // 3. Limpieza inteligente del nombre de modelo y separación NLP de variante
     let cleanedModel = item.modelo || '';
+    const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
+    cleanedModel = cleanedModel.replace(CORPORATE_NOISE, '').trim();
+
     if (detectedBrand !== 'OTRO') {
       const reBrand = new RegExp('^' + detectedBrand + '\\s+', 'i');
       cleanedModel = cleanedModel.replace(reBrand, '').trim();
     }
 
     const nlpRes = this.parseModelAndVariant(cleanedModel || item.modelo, detectedBrand);
-    const finalModel = nlpRes.modelo || cleanedModel || item.modelo;
+    let finalModel = nlpRes.modelo || cleanedModel || item.modelo;
+    finalModel = finalModel.replace(CORPORATE_NOISE, '').trim();
+    if (/^\$?\d+([\.,]\d+)?$/.test(finalModel) || /^\d+$/.test(finalModel)) {
+      finalModel = (detectedBrand && detectedBrand !== 'OTRO') ? `${detectedBrand} Item` : 'Producto';
+    }
+
     const finalVariant = item.variante || nlpRes.variante || '';
 
     const updated = {
