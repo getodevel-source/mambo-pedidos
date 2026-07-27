@@ -181,23 +181,43 @@ async fn query_local_ai(
     endpoint: Option<String>,
     model: Option<String>,
     prompt: String,
-    image_base64: Option<String>
+    image_base64: Option<String>,
+    system: Option<String>,
+    format: Option<serde_json::Value>,
+    options: Option<serde_json::Value>,
+    timeout_secs: Option<u64>
 ) -> Result<serde_json::Value, String> {
     let base_url = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
     let url = format!("{}/api/generate", base_url.trim_end_matches('/'));
-    let selected_model = model.unwrap_or_else(|| "qwen2.5-vl:3b".to_string());
+    let selected_model = model.unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
 
+    let timeout_val = timeout_secs.unwrap_or(120);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(timeout_val))
         .build()
         .map_err(|e| e.to_string())?;
 
     let mut body = serde_json::json!({
         "model": selected_model,
         "prompt": prompt,
-        "stream": false,
-        "format": "json"
+        "stream": false
     });
+
+    if let Some(sys) = system {
+        if !sys.trim().is_empty() {
+            body["system"] = serde_json::json!(sys);
+        }
+    }
+
+    if let Some(fmt) = format {
+        body["format"] = fmt;
+    } else {
+        body["format"] = serde_json::json!("json");
+    }
+
+    if let Some(opts) = options {
+        body["options"] = opts;
+    }
 
     if let Some(img) = image_base64 {
         if !img.trim().is_empty() {

@@ -481,7 +481,7 @@ const AiDisambiguator = {
   },
 
   // Consulta a la IA nativa del WebView (window.ai / Gemini Nano) con fallback a Ollama local
-  async queryWebViewAi(rawText) {
+  async queryWebViewAi(rawText, timeoutMs = 30000) {
     // 1. Probar window.ai (Chrome/Chromium Built-in WebAI en WebView)
     try {
       if (window.ai && window.ai.languageModel) {
@@ -499,18 +499,19 @@ const AiDisambiguator = {
       console.warn('window.ai WebAI no activo en WebView:', e);
     }
 
-    // 2. Fallback: Ollama local en puerto 11434
+    // 2. Fallback: Ollama local en puerto 11434 con timeout amplio para modelos locales de alta capacidad
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 900);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch('http://localhost:11434/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          model: 'llama3',
+          model: 'qwen2.5:7b-instruct',
           prompt: `Classify product into JSON {"cat":"...", "marca":"..."}: "${rawText}"`,
-          stream: false
+          stream: false,
+          format: 'json'
         })
       });
       clearTimeout(timeoutId);
@@ -520,6 +521,94 @@ const AiDisambiguator = {
         if (match) return JSON.parse(match[0]);
       }
     } catch (e) {}
+
+    return null;
+  },
+
+  /**
+   * Consulta estructurada de alta precisión a la IA local para extraer la semántica de una celda de producto.
+   * Utiliza prompts Few-Shot y JSON Schema estricto con timeout extendido para modelos locales de alta capacidad.
+   */
+  async queryCellStructuredLlm(cellText, customBrands = [], timeoutMs = 45000) {
+    if (!cellText || !cellText.trim()) return null;
+
+    const systemPrompt = `Sos un experto estructurador de catálogos de periféricos gaming importados.
+Dada una celda de texto de un catálogo, extraé la información del producto en JSON estricto.
+REGLAS CRÍTICAS:
+1. "marca": Marca exacta del fabricante (ej: "AJAZZ", "Attack Shark", "8BitDo", "ATK", "AULA", "VGN", "Dared", "Darmoshark", "Machenike", "Royal Kludge", "EPOMAKER"). Si no se deduce, usá "OTRO".
+2. "modelo": Modelo exacto y específico del producto (ej: "AK820 Pro", "X3 Pro", "Ultimate C 2.4G", "F75", "VXE R1 SE"). PROHIBIDO poner nombres genéricos como "TECLADO", "MOUSE", "CONTROLLER" o "Shark" a secas.
+3. "cat": Categoría exacta elegida entre: "TECLADO", "MOUSE", "HEADSET", "AURICULAR", "CONTROLLER", "MOUSEPAD", "SWITCH", "MONITOR", "OTRO".
+4. "variante": Color, tipo de switch, o tipo de conectividad (ej: "White / Gift Switch", "Pink / Tri-mode", "Black").`;
+
+    const fewShotPrompt = `Ejemplos de extracción:
+Entrada: "AJAZZ AK820 Pro Mechanical Keyboard Gasket Structure Gift Switch $48.30"
+Salida: {"marca":"AJAZZ", "modelo":"AK820 Pro", "cat":"TECLADO", "variante":"Gift Switch"}
+
+Entrada: "Attack Shark X3 Pro PAW3395 Lightweight Wireless Mouse Pink"
+Salida: {"marca":"Attack Shark", "modelo":"X3 Pro", "cat":"MOUSE", "variante":"Wireless Pink"}
+
+Entrada: "8BitDo Ultimate C 2.4G Wireless Controller Field Green"
+Salida: {"marca":"8BitDo", "modelo":"Ultimate C 2.4G", "cat":"CONTROLLER", "variante":"Field Green"}
+
+Entrada: "${cellText.replace(/"/g, "'")}"
+Salida:`;
+
+    const jsonSchema = {
+      type: "object",
+      properties: {
+        marca: { type: "string" },
+        modelo: { type: "string" },
+        cat: { type: "string" },
+        variante: { type: "string" },
+        sku: { type: "string" }
+      },
+      required: ["marca", "modelo", "cat"]
+    };
+
+    // 1. Probar vía Tauri Command si está disponible (Rust reqwest)
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try {
+        const res = await window.__TAURI_INTERNALS__.invoke('query_local_ai', {
+          prompt: fewShotPrompt,
+          system: systemPrompt,
+          format: jsonSchema,
+          model: 'qwen2.5:7b-instruct',
+          timeoutSecs: Math.round(timeoutMs / 1000)
+        });
+        if (res && res.raw_response) {
+          const match = res.raw_response.match(/\{[\s\S]*?\}/);
+          if (match) return JSON.parse(match[0]);
+        }
+      } catch (e) {
+        console.warn('Invocación Tauri query_local_ai para celda falló, probando fetch directo:', e);
+      }
+    }
+
+    // 2. Direct fetch to Ollama API
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'qwen2.5:7b-instruct',
+          system: systemPrompt,
+          prompt: fewShotPrompt,
+          format: jsonSchema,
+          stream: false
+        })
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const match = data.response?.match(/\{[\s\S]*?\}/);
+        if (match) return JSON.parse(match[0]);
+      }
+    } catch (e) {
+      console.warn('Error en queryCellStructuredLlm direct fetch:', e);
+    }
 
     return null;
   },

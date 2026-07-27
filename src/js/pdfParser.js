@@ -87,26 +87,15 @@ const PdfParser = {
         const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
         allImages.push(...pageImages);
 
-        // 2. Renderizar página a Canvas HD Data URL para el Vision LLM
-        const pageDataUrl = await this.renderPdfPageToCanvasDataUrl(page, 1.5);
+        // 2. Extracción Espacial 2D determinística de celdas por anclas de precio y layout
+        let pageCellItems = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, '', customBrands, allProducts);
 
-        // 3. Consultar al Vision LLM Local vía Tauri Bridge u Ollama
-        let pageVlmItems = [];
-        let isPageFallback = false;
-        try {
-          pageVlmItems = await this.queryVisionLlmForPage(pageDataUrl, pageRawText, pageNum);
-        } catch (e) {
-          console.warn(`Vision AI falló en página ${pageNum}, usando fallback espacial:`, e);
-          isPageFallback = true;
-          if (typeof toast === 'function') {
-            toast(`⚠️ IA Local no disponible en pág. ${pageNum}. Procesando con parser espacial de respaldo.`, 'warning');
-          }
-          pageVlmItems = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, '', customBrands, allProducts);
-        }
+        // 3. Enriquecimiento Semántico Estructurado por Celda vía IA Local (Paralelo / Multithreaded)
+        pageCellItems = await this.enrichProductsWithCellLlm(pageCellItems, customBrands);
 
         // 4. CAPA CRÍTICA DE GROUNDING (ANTI-ALUCINACIÓN):
         // Verificación determinística de que cada FOB y SKU extraído por la IA existe en pageRawText
-        const groundedProducts = this.groundAndVerifyExtractedProducts(pageVlmItems, pageRawText, pageNum, customBrands);
+        const groundedProducts = this.groundAndVerifyExtractedProducts(pageCellItems, pageRawText, pageNum, customBrands);
         allProducts.push(...groundedProducts);
       }
 
@@ -199,6 +188,59 @@ const PdfParser = {
     }
 
     throw new Error('Sin respuesta válida de Vision LLM');
+  },
+
+  /**
+   * Enriquece productos extraídos espacialmente consultando al LLM Local por celda en paralelo.
+   * Utiliza pool de concurrencia para exprimir el hardware local disponible.
+   */
+  async enrichProductsWithCellLlm(cellProducts, customBrands = [], maxConcurrency = 4) {
+    if (!cellProducts || !cellProducts.length) return [];
+    if (typeof AiDisambiguator === 'undefined' || !AiDisambiguator.queryCellStructuredLlm) {
+      return cellProducts;
+    }
+
+    const enriched = cellProducts.map(item => ({ ...item }));
+
+    const processCell = async (item) => {
+      const rawText = item.cellRawText || `${item.marca || ''} ${item.modelo || ''} ${item.variante || ''}`.trim();
+      if (!rawText || rawText.length < 3) return item;
+
+      try {
+        const llmResult = await AiDisambiguator.queryCellStructuredLlm(rawText, customBrands);
+        if (llmResult) {
+          if (llmResult.marca && llmResult.marca !== 'OTRO') {
+            item.marca = llmResult.marca.trim();
+          }
+          if (llmResult.modelo && !/^(TECLADO|MOUSE|HEADSET|AURICULAR|CONTROLLER|MOUSEPAD|SWITCH|OTRO)$/i.test(llmResult.modelo.trim())) {
+            item.modelo = llmResult.modelo.trim();
+          }
+          if (llmResult.cat && llmResult.cat !== 'OTRO') {
+            item.cat = llmResult.cat.trim();
+          }
+          if (llmResult.variante) {
+            item.variante = llmResult.variante.trim();
+          }
+        }
+      } catch (e) {
+        console.warn('Fallback en celda por error en IA local:', e);
+      }
+
+      if (typeof AiDisambiguator.repairCatalogItem === 'function') {
+        return AiDisambiguator.repairCatalogItem(item);
+      }
+      return item;
+    };
+
+    for (let i = 0; i < enriched.length; i += maxConcurrency) {
+      const chunk = enriched.slice(i, i + maxConcurrency);
+      const results = await Promise.all(chunk.map(item => processCell(item)));
+      for (let j = 0; j < results.length; j++) {
+        enriched[i + j] = results[j];
+      }
+    }
+
+    return enriched;
   },
 
   /**
