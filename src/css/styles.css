@@ -585,11 +585,19 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   gap: 12px;
   flex-wrap: wrap;
   background: rgba(20, 24, 38, 0.7);
+}
+
+.table-toolbar-left,
+.table-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* Segmented Control para Tabla / Galería */

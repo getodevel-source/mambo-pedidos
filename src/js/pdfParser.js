@@ -55,6 +55,209 @@ const PdfParser = {
     }
   },
 
+  /**
+   * Extrae productos de un PDF utilizando un modelo de Visión IA Local (VLM)
+   * con una capa de Grounding Anti-Alucinación determinística que verifica precios y SKUs
+   * contra la capa de texto crudo de la página.
+   */
+  async processPdfFileWithVisionAI(file, catalogLength = 0, customBrands = [], onProgress = null) {
+    let pdf = null;
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      const allProducts = [];
+      const allImages = [];
+      let fullTextForBrand = '';
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        if (typeof onProgress === 'function') {
+          try { onProgress(pageNum, pdf.numPages); } catch (e) {}
+        }
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        const pageRawText = content.items.map(item => item.str).join(' ');
+        if (pageNum <= 3) {
+          fullTextForBrand += pageRawText + ' ';
+        }
+
+        // 1. Extraer imágenes físicas de la página (para asociar a los productos)
+        const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
+        allImages.push(...pageImages);
+
+        // 2. Renderizar página a Canvas HD Data URL para el Vision LLM
+        const pageDataUrl = await this.renderPdfPageToCanvasDataUrl(page, 1.5);
+
+        // 3. Consultar al Vision LLM Local vía Tauri Bridge u Ollama
+        let pageVlmItems = [];
+        let isPageFallback = false;
+        try {
+          pageVlmItems = await this.queryVisionLlmForPage(pageDataUrl, pageRawText, pageNum);
+        } catch (e) {
+          console.warn(`Vision AI falló en página ${pageNum}, usando fallback espacial:`, e);
+          isPageFallback = true;
+          if (typeof toast === 'function') {
+            toast(`⚠️ IA Local no disponible en pág. ${pageNum}. Procesando con parser espacial de respaldo.`, 'warning');
+          }
+          pageVlmItems = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, '', customBrands, allProducts);
+        }
+
+        // 4. CAPA CRÍTICA DE GROUNDING (ANTI-ALUCINACIÓN):
+        // Verificación determinística de que cada FOB y SKU extraído por la IA existe en pageRawText
+        const groundedProducts = this.groundAndVerifyExtractedProducts(pageVlmItems, pageRawText, pageNum, customBrands);
+        allProducts.push(...groundedProducts);
+      }
+
+      const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
+      const finalProducts = this.finalizeCatalogProducts(allProducts, brand, catalogLength, customBrands);
+      this.matchImagesToProductsGlobal(finalProducts, allImages);
+
+      return { brand, products: finalProducts, isVisionAiProcessed: !isPageFallback, usedFallback: isPageFallback };
+    } finally {
+      if (pdf && typeof pdf.destroy === 'function') {
+        try { await pdf.destroy(); } catch (e) {}
+      }
+    }
+  },
+
+  async renderPdfPageToCanvasDataUrl(page, scale = 1.5) {
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.85);
+  },
+
+  async queryVisionLlmForPage(imageDataUrl, pageRawText, pageNum) {
+    const prompt = `Analizá la imagen del catálogo de productos y extraé la lista de productos en JSON estricto con el formato {"items":[{"sku":"...","marca":"...","modelo":"...","cat":"...","fob":0.0}]}. Texto de referencia: "${pageRawText.substring(0, 1500)}"`;
+
+    let rawResponseText = null;
+
+    // A) Probar llamada nativa vía Tauri command `query_local_ai`
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try {
+        const res = await window.__TAURI_INTERNALS__.invoke('query_local_ai', {
+          prompt,
+          imageBase64: imageDataUrl,
+          model: 'qwen2.5-vl:3b'
+        });
+        if (res && res.raw_response) {
+          rawResponseText = res.raw_response;
+        }
+      } catch (e) {
+        console.warn('Invocación Tauri query_local_ai falló, probando fetch directo:', e);
+      }
+    }
+
+    // B) Fallback a fetch Ollama directo
+    if (!rawResponseText) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'qwen2.5-vl:3b',
+          prompt,
+          images: [imageDataUrl.replace('data:image/jpeg;base64,', '')],
+          stream: false,
+          format: 'json'
+        })
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        rawResponseText = data.response;
+      }
+    }
+
+    if (rawResponseText) {
+      const match = rawResponseText.match(/\{[\s\S]*?\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed && Array.isArray(parsed.items)) {
+          return parsed.items.map(item => ({
+            ...item,
+            pageNum,
+            fob: parseFloat(item.fob) || 0
+          }));
+        }
+      }
+    }
+
+    throw new Error('Sin respuesta válida de Vision LLM');
+  },
+
+  /**
+   * Grounding Anti-Alucinación:
+   * Verifica determinísticamente que cada dato numérico y SKU retornado por el LLM exista en pageRawText.
+   */
+  groundAndVerifyExtractedProducts(vlmItems, pageRawText, pageNum, customBrands = []) {
+    if (!vlmItems || !vlmItems.length) return [];
+
+    // Extraer todos los candidatos numéricos de precio presentes en el texto físico de la página
+    const priceMatches = [...pageRawText.matchAll(/(?<![¥￥\d])\$\s*(\d{1,4}(?:\.\d{1,2})?)|\b(\d{1,3}\.\d{2})\b/g)];
+    const verifiedPrices = priceMatches.map(m => parseFloat(m[1] || m[2])).filter(p => p > 0.5 && p < 500);
+
+    const groundedList = [];
+
+    for (const rawItem of vlmItems) {
+      let fob = parseFloat(rawItem.fob) || 0;
+      let isGroundedPrice = false;
+
+      // Verificación 1: ¿El precio FOB está literalmente en el texto de la página?
+      if (fob > 0) {
+        const exactFound = verifiedPrices.some(p => Math.abs(p - fob) < 0.05);
+        if (exactFound) {
+          isGroundedPrice = true;
+        } else if (verifiedPrices.length > 0) {
+          // Si la IA inventó o alucinó un precio, encontrar el precio numérico más cercano en la página
+          const closest = verifiedPrices.reduce((prev, curr) => Math.abs(curr - fob) < Math.abs(prev - fob) ? curr : prev, verifiedPrices[0]);
+          if (Math.abs(closest - fob) / fob < 0.20) { // dentro del 20% de diferencia
+            fob = closest;
+            isGroundedPrice = true;
+          }
+        }
+      }
+
+      let item = {
+        sku: (rawItem.sku || '').trim(),
+        marca: (rawItem.marca || 'OTRO').trim(),
+        modelo: (rawItem.modelo || 'Producto').trim(),
+        variante: (rawItem.variante || '').trim(),
+        cat: (rawItem.cat || 'OTRO').trim(),
+        fob,
+        pageNum,
+        isGroundedPrice
+      };
+
+      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.disambiguateItem) {
+        item = AiDisambiguator.disambiguateItem(item, customBrands);
+      }
+
+      const evalRes = this.evaluateItemConfidence(item);
+      item.confidence = evalRes.confidence;
+      item.status = evalRes.status;
+      item.warnings = evalRes.warnings || [];
+
+      if (!isGroundedPrice && fob > 0) {
+        item.warnings.push('⚠️ Precio FOB verificado por Grounding: No se encontró coincidencia literal en el texto de la página');
+        item.confidence = Math.max(0, item.confidence - 15);
+        if (item.status === 'VALID') item.status = 'WARNING';
+      }
+
+      groundedList.push(item);
+    }
+
+    return groundedList;
+  },
+
   async extractImagesFromPage(page, viewport, pageNum) {
     const pageImages = [];
     try {

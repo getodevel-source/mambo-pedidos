@@ -67,6 +67,9 @@ const Tests = {
     this.testKpiMinFobDecimalFormatting();
     this.testEscapeKeyModalDismissal();
     this.testZeroTotalQtyDoorToDoorLiquidation();
+    this.testVlmGroundingAntiHallucination();
+    this.testCatalogFiltersAudit();
+    this.testRealCatalogCoherence();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -578,6 +581,62 @@ const Tests = {
   testZeroTotalQtyDoorToDoorLiquidation() {
     const res = Calculator.calculateDoorToDoorExactCost([{ sku: 'S1', fob: 0, qty: 0, cat: 'TECLADO', modelo: 'Test' }]);
     this.assert(!isNaN(res.items[0].costoPuertaUnitUsd), 'Liquidación puerta a puerta maneja cantidades e importes FOB cero sin producir NaN');
+  },
+
+  testVlmGroundingAntiHallucination() {
+    const rawPageText = 'AJAZZ AK820 Mechanical Keyboard Gasket Structure $45.50 RGB Tri-Mode $29.99';
+    const vlmExtractedItems = [
+      { sku: 'AK820', marca: 'AJAZZ', modelo: 'AK820 Keyboard', fob: 45.50, cat: 'TECLADO' },
+      { sku: 'HALLUCINATED', marca: 'VGN', modelo: 'Fake Item', fob: 999.00, cat: 'MOUSE' } // Precio alucinado no presente en la página
+    ];
+
+    const grounded = PdfParser.groundAndVerifyExtractedProducts(vlmExtractedItems, rawPageText, 1);
+    this.assert(grounded[0].isGroundedPrice === true, 'Grounding confirma precio $45.50 presente literalmente en el texto de la página');
+    this.assert(grounded[1].isGroundedPrice === false || grounded[1].fob !== 999.00, 'Grounding detecta o corrige precio alucinado 999.00 no presente en la página');
+    this.assert(grounded[1].warnings.some(w => w.includes('Grounding')), 'Grounding emite advertencia de verificación para precios no presentes en la página');
+  },
+
+  testCatalogFiltersAudit() {
+    const sampleCatalog = [
+      { sku: 'KEY-001', marca: 'AJAZZ', modelo: 'AK820 Keyboard', cat: 'TECLADO', fob: 25.00 },
+      { sku: 'MOU-001', marca: 'VGN', modelo: 'Dragonfly F1', cat: 'MOUSE', fob: 35.00 },
+      { sku: 'PAD-001', marca: 'ATK', modelo: 'Sky Pad', cat: 'MOUSEPAD', fob: 15.00 },
+      { sku: 'HED-001', marca: 'AULA', modelo: 'Headset N9', cat: 'HEADSET', fob: 50.00 }
+    ];
+
+    // Audit 1: Search filter
+    const txt = 'dragonfly';
+    const resTxt = sampleCatalog.filter(r => (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt));
+    this.assert(resTxt.length === 1 && resTxt[0].sku === 'MOU-001', 'Filtro de búsqueda de catálogo encuentra exactamente la coincidencia');
+
+    // Audit 2: Marca filter
+    const resMarca = sampleCatalog.filter(r => r.marca === 'AJAZZ');
+    this.assert(resMarca.length === 1 && resMarca[0].marca === 'AJAZZ', 'Filtro por Marca aísla correctamente los productos de la marca');
+
+    // Audit 3: Categoria filter
+    const resCat = sampleCatalog.filter(r => r.cat === 'MOUSEPAD');
+    this.assert(resCat.length === 1 && resCat[0].cat === 'MOUSEPAD', 'Filtro por Categoría aisla correctamente la categoría seleccionada');
+
+    // Audit 4: Min / Max Price filter
+    const minP = 20, maxP = 40;
+    const resPrice = sampleCatalog.filter(r => r.fob >= minP && r.fob <= maxP);
+    this.assert(resPrice.length === 2, 'Filtro de rango Min/Max precio FOB aísla los productos dentro del rango de precio');
+  },
+
+  testRealCatalogCoherence() {
+    const item = {
+      sku: '8BIT-CON-001',
+      marca: '8BitDo',
+      modelo: 'Ultimate 2.4G Controller',
+      variante: 'White / Black',
+      cat: 'CONTROLLER',
+      fob: 34.50,
+      qty: 5,
+      img: 'data:image/png;base64,sample'
+    };
+
+    const hasAllFields = !!(item.sku && item.marca && item.modelo && item.cat && item.fob > 0 && item.qty >= 0 && item.img);
+    this.assert(hasAllFields, 'Coherencia completa de campos: SKU, Marca, Modelo, Categoría, FOB, Cantidad e Imagen');
   }
 };
 

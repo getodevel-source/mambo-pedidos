@@ -144,6 +144,88 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn check_local_ai_status(endpoint: Option<String>) -> Result<serde_json::Value, String> {
+    let base_url = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(1500))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match client.get(&url).send().await {
+        Ok(res) if res.status().is_success() => {
+            let json: serde_json::Value = res.json().await.unwrap_or_default();
+            let models = json.get("models").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let model_names: Vec<String> = models.iter()
+                .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .collect();
+
+            Ok(serde_json::json!({
+                "online": true,
+                "endpoint": base_url,
+                "models": model_names
+            }))
+        }
+        _ => Ok(serde_json::json!({
+            "online": false,
+            "endpoint": base_url,
+            "models": []
+        }))
+    }
+}
+
+#[tauri::command]
+async fn query_local_ai(
+    endpoint: Option<String>,
+    model: Option<String>,
+    prompt: String,
+    image_base64: Option<String>
+) -> Result<serde_json::Value, String> {
+    let base_url = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = format!("{}/api/generate", base_url.trim_end_matches('/'));
+    let selected_model = model.unwrap_or_else(|| "qwen2.5-vl:3b".to_string());
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut body = serde_json::json!({
+        "model": selected_model,
+        "prompt": prompt,
+        "stream": false,
+        "format": "json"
+    });
+
+    if let Some(img) = image_base64 {
+        if !img.trim().is_empty() {
+            let clean_img = img.replace("data:image/png;base64,", "").replace("data:image/jpeg;base64,", "");
+            body["images"] = serde_json::json!([clean_img]);
+        }
+    }
+
+    let response = client.post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Error de red al conectar con IA local: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Ollama API devolvió HTTP {}", response.status()));
+    }
+
+    let res_data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let raw_text = res_data.get("response").and_then(|v| v.as_str()).unwrap_or("");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "model": selected_model,
+        "raw_response": raw_text
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -157,7 +239,9 @@ pub fn run() {
             validate_order,
             get_app_data_dir,
             open_external_url,
-            download_and_install_update
+            download_and_install_update,
+            check_local_ai_status,
+            query_local_ai
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
