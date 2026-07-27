@@ -455,16 +455,22 @@ const AiDisambiguator = {
   repairCatalogItem(item) {
     if (!item) return item;
     let modelo = (item.modelo || '').trim();
+    let variante = (item.variante || '').trim();
     const rawText = item.rawText || '';
     const brand = item.marca || 'OTRO';
     const cat = item.cat || 'OTRO';
     const sku = item.sku || '';
 
     const MONEDA_RUIMO = /\b(CNY|RMB|USD|EUR)\s*\$?[\d\.,]+\b/gi;
-    const DECIMAL_PRECIO = /\b\$?[\d]+[\.,]\d+\b/g;
+    const DECIMAL_PRECIO = /\b\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?\b|\b\$?\d+[\.,]\d+\b/g;
     const CORPORATE_NOISE = /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi;
     const HEADER_NOISE = /^(CNY|RMB|USD|EUR|PRICE|COLOR|MODEL|PICTURE|IMAGE|SPEC|REMARK|MOQ|FOB|\.|\-|\s)+$/i;
     const FALLBACK_NOISE = /^(Producto\s+Item|\.|\-)+$/i;
+
+    // Si variante es un precio numérico o moneda suelta (ej: "235.75" o "CNY 120" o "1,082.98")
+    if (/^\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?$/.test(variante) || /^\$?\d+([\.,]\d+)?$/.test(variante) || HEADER_NOISE.test(variante) || /^[\d\.,\s]+$/.test(variante)) {
+      variante = '';
+    }
 
     modelo = modelo
       .replace(MONEDA_RUIMO, '')
@@ -475,7 +481,8 @@ const AiDisambiguator = {
       .replace(/^[.\-\s,:]+|[.\-\s,:]+$/g, '')
       .trim();
 
-    if (!modelo || /^\$?\d+([\.,]\d+)?$/.test(modelo) || HEADER_NOISE.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
+    // Si el modelo quedó reducido a residuos decimales tipo ".98", ".26 .26", o números pura
+    if (!modelo || /^\s*\.\d+[\s\.\d]*$/.test(modelo) || /^\$?\d+([\.,]\d+)?$/.test(modelo) || HEADER_NOISE.test(modelo) || FALLBACK_NOISE.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
       let rescuedModel = '';
       if (rawText) {
         const cleanRaw = rawText
@@ -483,32 +490,40 @@ const AiDisambiguator = {
           .replace(DECIMAL_PRECIO, '')
           .replace(CORPORATE_NOISE, '')
           .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob|cny|eur)\b/gi, '')
+          .replace(/^\s*\.\d+[\s\.\d]*/g, '')
           .trim();
 
-        const matchModelCode = cleanRaw.match(/\b([A-Za-z]{1,4}[-_\s]?\d{2,4}[A-Za-z]?)\b/);
-        if (matchModelCode && matchModelCode[1].length >= 3 && !HEADER_NOISE.test(matchModelCode[1])) {
-          rescuedModel = matchModelCode[1].toUpperCase();
+        // Buscar nombres o códigos de modelo reconocidos (ej: BlackWidow, Huntsman, Viper, DeathAdder, G502, G PRO, Superlight, Ultimate, SN30, Pro 2, AK820, F75, R5, X3, V87)
+        const matchSpecific = cleanRaw.match(/\b(BlackWidow[A-Za-z0-9\s\-]*|Huntsman[A-Za-z0-9\s\-]*|Viper[A-Za-z0-9\s\-]*|DeathAdder[A-Za-z0-9\s\-]*|G\s*502|G\s*PRO|Superlight|Ultimate[A-Za-z0-9\s\-]*|SN\d+[A-Za-z0-9\s\-]*|Pro\s*\d+|Lite\s*\d+|Zero\s*\d+|AK\d+|F\d+|R\d+\s*Pro|X\d+|V\d+|MAD\d+|AJ\d+|K\d+)\b/i);
+        if (matchSpecific && matchSpecific[1].length >= 3 && !HEADER_NOISE.test(matchSpecific[1])) {
+          rescuedModel = matchSpecific[1].trim();
         } else {
-          const words = cleanRaw.split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w) && !/CNY|RMB|USD|EUR|PRICE/i.test(w));
-          if (words.length) {
-            rescuedModel = words.slice(0, 4).join(' ');
+          const matchModelCode = cleanRaw.match(/\b([A-Za-z]{1,4}[-_\s]?\d{2,4}[A-Za-z]?)\b/);
+          if (matchModelCode && matchModelCode[1].length >= 3 && !HEADER_NOISE.test(matchModelCode[1])) {
+            rescuedModel = matchModelCode[1].toUpperCase();
+          } else {
+            const words = cleanRaw.split(/\s+/).filter(w => w.length > 2 && !/^\d+$/.test(w) && !/^\.\d+$/.test(w) && !/CNY|RMB|USD|EUR|PRICE/i.test(w));
+            if (words.length) {
+              rescuedModel = words.slice(0, 4).join(' ');
+            }
           }
         }
       }
 
-      if (rescuedModel && rescuedModel.length >= 3 && !HEADER_NOISE.test(rescuedModel)) {
+      if (rescuedModel && rescuedModel.length >= 3 && !HEADER_NOISE.test(rescuedModel) && !/^\.\d+/.test(rescuedModel)) {
         modelo = rescuedModel;
       } else {
         const brandStr = (brand && brand !== 'OTRO') ? brand : 'Periférico';
         const catStr = (cat && cat !== 'OTRO') ? cat : '';
-        const varStr = (item.variante && item.variante.length < 20 && !HEADER_NOISE.test(item.variante)) ? item.variante : '';
+        const varStr = (variante && variante.length < 20 && !HEADER_NOISE.test(variante)) ? variante : '';
         modelo = `${brandStr} ${catStr} ${varStr}`.replace(/\s+/g, ' ').trim() || `Producto ${sku}`;
       }
     }
 
     return {
       ...item,
-      modelo
+      modelo,
+      variante
     };
   },
 

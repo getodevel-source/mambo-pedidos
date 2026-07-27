@@ -494,15 +494,17 @@ async function processFiles(files) {
         showProgress(basePct + stepPct, `Procesando ${f.name}`, `Archivo ${i + 1} de ${totalFiles}`);
       }
 
-      for (const item of incoming) {
-        if (!item.status) {
-          const evalRes = PdfParser.evaluateItemConfidence(item);
-          item.confidence = evalRes.confidence;
-          item.status = evalRes.status;
-          item.warnings = evalRes.warnings;
-        }
+      for (const rawItem of incoming) {
+        let item = AiDisambiguator.disambiguateItem(rawItem, customBrandsList);
+        item = AiDisambiguator.repairCatalogItem(item);
+
+        const evalRes = PdfParser.evaluateItemConfidence(item);
+        item.confidence = evalRes.confidence;
+        item.status = evalRes.status;
+        item.warnings = evalRes.warnings;
         item.sourceFile = f.name;
         item._selected = true;
+
         pendingPreviewItems.push(item);
       }
     } catch (err) {
