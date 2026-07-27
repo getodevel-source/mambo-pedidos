@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 global.window = global;
+global.window.TransformersAI = null;
 global.document = {
   createElement: () => ({
     setAttribute: () => {},
@@ -44,6 +45,7 @@ const projectJsFiles = [
   'pdfParser.js',
   'transformersAi.js',
   'aiDisambiguator.js',
+  'catalogValidator.js',
   'fileImporter.js',
   'tests.js'
 ];
@@ -98,22 +100,12 @@ async function auditRealCatalogFolder() {
         return AiDisambiguator.repairCatalogItem(d);
       });
 
-      // Auditar productos extraídos de este archivo
+      // Auditar con CatalogValidator producto por producto contra las 6 reglas
+      const audit = CatalogValidator.validateCatalog(processed);
       const fileErrors = [];
-      processed.forEach((p, idx) => {
-        const m = p.modelo || '';
-        const v = p.variante || '';
-        if (!m || m.includes('CNY') || m.includes('RMB') || m.toLowerCase().includes('producto item') || m.includes('Co., Ltd.') || /^\$?\d+([\.,]\d+)?$/.test(m) || m.startsWith('.')) {
-          fileErrors.push(`[Fila ${idx+1}] Modelo ruidoso/corrupto: "${m}" (Raw: "${(p.rawText || '').substring(0, 40)}")`);
-        }
-        if (v && (/^\$?\d+([\.,]\d+)?$/.test(v) || /^[\d\.,\s]+$/.test(v))) {
-          fileErrors.push(`[Fila ${idx+1}] Variante es un precio numérico: "${v}" (Modelo: "${m}")`);
-        }
-        if (p.marca === 'OTRO' && detectedBrand !== 'OTRO') {
-          fileErrors.push(`[Fila ${idx+1}] Marca no asignada: "OTRO" (Esperada: "${detectedBrand}")`);
-        }
-        if (p.fob <= 0) {
-          fileErrors.push(`[Fila ${idx+1}] FOB inválido: $${p.fob}`);
+      audit.results.forEach(res => {
+        if (!res.isValid) {
+          fileErrors.push(`[SKU #${res.index + 1} - ${res.modelo}] Violaciones: ${res.violations.join(' | ')}`);
         }
       });
 

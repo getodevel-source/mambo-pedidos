@@ -244,16 +244,94 @@ const AiDisambiguator = {
 
   categoryPatterns: [
     { cat: 'NUMPAD', patterns: [/numpad/i, /numeric keypad/i, /keypad/i, /np20/i, /ak33 numpad/i] },
-    { cat: 'TECLADO', patterns: [/keyboard/i, /teclado/i, /mechanical/i, /switches keyboard/i, /keys/i, /75%/i, /68%/i, /80%/i, /full-aluminum/i, /gasket/i] },
-    { cat: 'MOUSE', patterns: [/mouse/i, /mice/i, /raton/i, /paw\d{4}/i, /8khz/i, /tri-mode mouse/i, /optical mouse/i, /aj139\w*/i, /aj159\w*/i, /aj199\w*/i, /ax5\w*/i, /r1 ultra/i, /x3 max/i] },
-    { cat: 'HEADSET', patterns: [/headset/i, /headphone/i, /auricular gaming/i, /wireless headset/i, /7\.1/i] },
-    { cat: 'AURICULAR', patterns: [/earphone/i, /earbuds/i, /in-ear/i, /iem/i, /hifi earphones/i] },
-    { cat: 'CONTROLLER', patterns: [/controller/i, /gamepad/i, /joystick/i, /mando/i, /hall effect joystick/i] },
-    { cat: 'MOUSEPAD', patterns: [/mousepad/i, /mouse pad/i, /mat\b/i, /alfombrilla/i] },
-    { cat: 'SWITCH', patterns: [/switch\b/i, /switches\b/i, /interruptor/i, /linear switch/i, /tactile switch/i] },
+    { cat: 'TECLADO', patterns: [/keyboard/i, /teclado/i, /mechanical/i, /switches keyboard/i, /keys\b/i, /75%/i, /68%/i, /80%/i, /full-aluminum/i, /gasket/i, /\bak\d{2,3}/i, /\bf75\b/i, /\bf99\b/i, /\bf108\b/i, /\bf87\b/i, /\bau75\b/i, /\brk\d{2}/i, /\br65\b/i, /\br75\b/i, /\br87\b/i, /\bblackwidow/i, /\bhuntsman/i, /\bg915/i, /\bg715/i, /\batk\s*68/i, /\batk\s*75/i, /\brs6\b/i, /\brs7\b/i, /\bhe6\b/i, /\bhe2\b/i, /\bmars75/i, /\bmars68/i, /\bace\s*68/i, /\bk87\b/i, /\bk99\b/i, /\bmix\s*87/i, /\bfe75\b/i, /\bfe87\b/i] },
+    { cat: 'MOUSE', patterns: [/mouse/i, /mice/i, /raton/i, /paw\d{4}/i, /8khz/i, /tri-mode mouse/i, /optical mouse/i, /\baj139/i, /\baj159/i, /\baj199/i, /\baj099/i, /\bax5/i, /\ba5\b/i, /\br1\s*(pro|max|ultra)?/i, /\br5\s*(ultra|pro)?/i, /\br6\b/i, /\bx3\s*(pro|max|4k)?/i, /\bx6\b/i, /\bx8\b/i, /\bx11\b/i, /\bsuperlight/i, /\bg502/i, /\bg203/i, /\bg305/i, /\bdeathadder/i, /\bviper/i, /\bbasilisk/i, /\bcobra/i, /\bx1\s*ultimate/i, /\ba9\s*ultra/i, /\bf1\s*pro/i, /\bsc580/i, /\bsc680/i] },
+    { cat: 'HEADSET', patterns: [/headset/i, /headphone/i, /auricular gaming/i, /wireless headset/i, /7\.1/i, /\bg435/i, /\bg733/i, /\bblackshark/i, /\bkraken/i, /\bbarracuda/i, /\bl50\s*pro/i, /\bv9\s*turbo/i, /\bx9\s*53mm/i, /\bneptune\s*n9/i] },
+    { cat: 'AURICULAR', patterns: [/earphone/i, /earbuds/i, /in-ear/i, /iem/i, /hifi earphones/i, /\bkz\b/i, /\bzst/i, /\bzsn/i, /\bzs10/i, /\bedx/i, /\bzex/i, /\bpr1\b/i, /\bpr2\b/i, /\bas16/i, /\bcastor/i, /\bzvx/i, /\bkrila/i, /\blinglong/i] },
+    { cat: 'CONTROLLER', patterns: [/controller/i, /gamepad/i, /joystick/i, /mando/i, /hall effect joystick/i, /8bitdo/i, /\bsn30/i, /\bpro\s*2\s*controller/i, /\bultimate\s*(2\.4g|c)?/i, /\bzero\s*2/i, /\blite\s*2/i, /\bvader/i, /\bapex\s*4/i, /\bdirewolf/i, /\bg7\s*se/i, /\bt4\s*kaleid/i] },
+    { cat: 'MOUSEPAD', patterns: [/mousepad/i, /mouse pad/i, /mat\b/i, /alfombrilla/i, /sky\s*large/i, /99g\s*carbon/i, /anime\s*mouse\s*pad/i] },
+    { cat: 'SWITCH', patterns: [/switch\b/i, /switches\b/i, /interruptor/i, /linear switch/i, /tactile switch/i, /haimu/i, /seasalt/i, /flamingo/i, /pc\s*pa\s*1\.33/i] },
     { cat: 'CAMARA', patterns: [/camera/i, /camara/i, /film\b/i, /instant camera/i] },
     { cat: 'CUIDADO_PERSONAL', patterns: [/shaver/i, /trimmer/i, /clipper/i, /toothbrush/i, /afeitadora/i] }
   ],
+
+  detectCategory(rawText = '', model = '', brand = '') {
+    const text = `${rawText} ${model} ${brand}`.trim();
+
+    for (const rule of this.categoryPatterns) {
+      if (rule.patterns.some(p => p.test(text))) {
+        return rule.cat;
+      }
+    }
+
+    const cleanModel = model.toUpperCase();
+    const cleanBrand = brand.toUpperCase();
+
+    // Inferencia por Prefijos de Fabricante Gamer
+    if (cleanBrand === 'AJAZZ' || /\bajazz\b/i.test(text)) {
+      if (/AK\d|MK\d|AC\d|NAKP|K\d/i.test(cleanModel)) return 'TECLADO';
+      if (/AJ\d|AX\d/i.test(cleanModel)) return 'MOUSE';
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'ATTACK SHARK' || /\battack\s*shark\b/i.test(text)) {
+      if (/K\d|M\d/i.test(cleanModel)) return 'TECLADO';
+      if (/L\d/i.test(cleanModel)) return 'HEADSET';
+      return 'MOUSE';
+    }
+
+    if (cleanBrand === 'AULA' || /\baula\b/i.test(text)) {
+      if (/S\d{3}|G91|HP\d/i.test(cleanModel)) return 'HEADSET';
+      if (/SC\d|S50|SC560/i.test(cleanModel)) return 'MOUSE';
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'ATK' || cleanBrand === 'VXE' || /\batk\b|\bvxe\b/i.test(text)) {
+      if (/ATK\s*\d|RS\d|V\d/i.test(cleanModel)) return 'TECLADO';
+      if (/SKY|99G|ANIME/i.test(cleanModel)) return 'MOUSEPAD';
+      if (/N9|NEPTUNE/i.test(cleanModel)) return 'HEADSET';
+      return 'MOUSE';
+    }
+
+    if (cleanBrand === 'LOGITECH' || /\blogitech\b/i.test(text)) {
+      if (/G\d{3}|SUPERLIGHT|MX|PEBBLE|M\d{3}/i.test(cleanModel)) return 'MOUSE';
+      if (/G915|G715|K\d{3}|PRO/i.test(cleanModel)) return 'TECLADO';
+      if (/G435|G733|ZONE/i.test(cleanModel)) return 'HEADSET';
+      return 'MOUSE';
+    }
+
+    if (cleanBrand === 'RAZER' || /\brazer\b/i.test(text)) {
+      if (/BLACKWIDOW|HUNTSMAN|ORNATA|DEATHSTALKER/i.test(cleanModel)) return 'TECLADO';
+      if (/DEATHADDER|VIPER|BASILISK|COBRA|NAGA/i.test(cleanModel)) return 'MOUSE';
+      if (/KRAKEN|BLACKSHARK|BARRACUDA|HAMMERHEAD/i.test(cleanModel)) return 'HEADSET';
+      return 'MOUSE';
+    }
+
+    if (cleanBrand === 'MCHOSE' || /\bmchose\b/i.test(text)) {
+      if (/K\d|ACE|MIX|JET|G\d/i.test(cleanModel)) return 'TECLADO';
+      if (/AX\d|A\d|L\d/i.test(cleanModel)) return 'MOUSE';
+      if (/V\d|X\d/i.test(cleanModel)) return 'HEADSET';
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'ROYAL KLUDGE' || /\broyal\s*kludge\b|\brk\b/i.test(text)) {
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'MADLIONS' || /\bmadlions\b/i.test(text)) {
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'IROK' || cleanBrand === 'MARS' || /\birok\b|\bmars\b|\biyx\b/i.test(text)) {
+      return 'TECLADO';
+    }
+
+    if (cleanBrand === 'KZ' || /\bkz\b/i.test(text)) {
+      return 'AURICULAR';
+    }
+
+    return 'OTRO';
+  },
 
   /**
    * Vision Guard: Verifica si el Aspect Ratio de una imagen concuerda con la categoría.
@@ -623,12 +701,10 @@ const AiDisambiguator = {
 
     // 2. Intentar resolver Categoría si es 'OTRO'
     if (detectedCat === 'OTRO' || !detectedCat) {
-      for (const entry of this.categoryPatterns) {
-        if (entry.patterns.some(p => p.test(text))) {
-          detectedCat = entry.cat;
-          fixed = true;
-          break;
-        }
+      const resolved = this.detectCategory(text, item.modelo, detectedBrand);
+      if (resolved !== 'OTRO') {
+        detectedCat = resolved;
+        fixed = true;
       }
     }
 

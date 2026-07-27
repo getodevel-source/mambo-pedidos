@@ -61,6 +61,7 @@ const Tests = {
     this.testCatalogImportFieldCoherence();
     this.testCategoryChipsIconSupport();
     this.testRepairCatalogItem();
+    this.testCatalogValidatorRules();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -526,6 +527,16 @@ const Tests = {
     this.assert(repaired[0].modelo.includes('AK820') || repaired[0].modelo.includes('AJAZZ'), 'repairCatalogItem reparó el modelo CNY 117.65 a un nombre descriptivo limpio');
     this.assert(!repaired[1].modelo.includes('Producto Item'), 'repairCatalogItem eliminó el texto Producto Item');
     this.assert(!repaired[2].modelo.startsWith('.'), 'repairCatalogItem eliminó los caracteres . y números sueltos');
+  },
+
+  testCatalogValidatorRules() {
+    const sampleCatalog = [
+      { sku: 'MOU-001', marca: 'VGN', modelo: 'Dragonfly F1 Pro', variante: 'White', cat: 'MOUSE', fob: 29.99 },
+      { sku: 'KEY-002', marca: 'AULA', modelo: 'F75 Gasket Keyboard', variante: 'Sea Salt', cat: 'TECLADO', fob: 45.50 }
+    ];
+    const audit = CatalogValidator.validateCatalog(sampleCatalog);
+    this.assert(audit.validItems === 2, 'CatalogValidator aprobó la totalidad de los productos válidos');
+    this.assert(audit.qualityScore === 100, 'CatalogValidator otorgó puntuación perfecta 100 de calidad');
   }
 };
 
