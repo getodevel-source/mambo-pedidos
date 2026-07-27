@@ -228,65 +228,14 @@ const AppUpdater = {
   async startDirectDownload() {
     const progressWrap = document.getElementById('updateProgressWrap');
     const progressText = document.getElementById('updateProgressText');
-    const progressBar = document.getElementById('updateProgressBarInner');
     const btn = document.getElementById('updateModalBtn');
 
     if (progressWrap) progressWrap.style.display = 'block';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Instalando actualización...'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Descargando actualización...'; }
 
-    // Estrategia 1: Plugin nativo Tauri 2.0 — delta update real (in-place, firmado)
     try {
-      if (progressText) progressText.textContent = '🔍 Verificando actualización firmada...';
+      if (progressText) progressText.textContent = '🔍 Obteniendo la versión más reciente...';
 
-      // Re-check para obtener el handle si no lo tenemos
-      let updateHandle = this._updateHandle;
-      if (!updateHandle) {
-        updateHandle = await this._tauriCheck();
-      }
-
-      if (updateHandle?.available) {
-        let downloaded = 0;
-        let contentLength = 0;
-
-        await updateHandle.downloadAndInstall((event) => {
-          switch (event.event) {
-            case 'Started':
-              contentLength = event.data.contentLength || 0;
-              if (progressText) progressText.textContent = '⬇️ Descargando actualización firmada...';
-              break;
-            case 'Progress':
-              downloaded += event.data.chunkLength || 0;
-              if (contentLength > 0) {
-                const pct = Math.round((downloaded / contentLength) * 100);
-                if (progressBar) progressBar.style.width = `${pct}%`;
-                if (progressText) progressText.textContent = `⬇️ Descargando... ${pct}% (${(downloaded / (1024 * 1024)).toFixed(1)} MB de ${(contentLength / (1024 * 1024)).toFixed(1)} MB)`;
-              } else {
-                if (progressText) progressText.textContent = `⬇️ Descargando... (${(downloaded / (1024 * 1024)).toFixed(1)} MB)`;
-              }
-              break;
-            case 'Finished':
-              if (progressBar) progressBar.style.width = '100%';
-              if (progressText) progressText.textContent = '✅ Actualización aplicada. Reiniciando Mambo Pedidos...';
-              break;
-          }
-        });
-
-        toast('⚡ Mambo Pedidos actualizado. Reiniciando...', 'success');
-
-        // Relaunch — app se cierra y reabre con la nueva versión
-        await this._invoke('plugin:process|relaunch', {}).catch(() => {
-          // fallback si el plugin process no está disponible
-          window.__TAURI__?.process?.relaunch?.();
-        });
-        return;
-      }
-    } catch (nativeErr) {
-      console.warn('Tauri native in-place updater error:', nativeErr?.message || nativeErr);
-    }
-
-    // Estrategia 2: Rust IPC — descarga el .exe e instala en silencio
-    // (fallback para versiones antiguas donde createUpdaterArtifacts aún no generó latest.json)
-    try {
       const release = await fetch('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest', {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
@@ -294,16 +243,16 @@ const AppUpdater = {
 
       const exeAsset = (release.assets || []).find(a => a.name?.endsWith('.exe')) || (release.assets || []).find(a => a.name?.endsWith('.msi'));
       if (exeAsset?.browser_download_url) {
-        if (progressText) progressText.textContent = '⏳ Descargando instalador nativo...';
+        if (progressText) progressText.textContent = '⬇️ Descargando e iniciando instalador...';
+        toast('⬇️ Descargando e iniciando el instalador oficial...', 'info');
 
         await this._invoke('download_and_install_update', { url: exeAsset.browser_download_url });
         return;
       }
-    } catch (ipcErr) {
-      console.warn('Rust IPC fallback error:', ipcErr?.message || ipcErr);
+    } catch (err) {
+      console.warn('Update download error:', err);
     }
 
-    // Estrategia 3: Abrir la página de release en el navegador (último recurso)
     if (progressText) progressText.textContent = '⚠️ Abriendo descarga en navegador...';
     if (btn) { btn.disabled = false; btn.textContent = '🌐 Abrir descarga manual'; }
     toast('ℹ️ Abriendo página de descarga en el navegador.', 'info');
