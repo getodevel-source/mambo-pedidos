@@ -292,9 +292,9 @@ const AppUpdater = {
         cache: 'no-store'
       }).then(r => r.json());
 
-      const exeAsset = (release.assets || []).find(a => a.name?.endsWith('.exe') || a.name?.endsWith('.msi'));
+      const exeAsset = (release.assets || []).find(a => a.name?.endsWith('.exe')) || (release.assets || []).find(a => a.name?.endsWith('.msi'));
       if (exeAsset?.browser_download_url) {
-        if (progressText) progressText.textContent = '⏳ Descargando instalador nativo (sin CORS)...';
+        if (progressText) progressText.textContent = '⏳ Descargando instalador nativo...';
 
         await this._invoke('download_and_install_update', { url: exeAsset.browser_download_url });
         return;

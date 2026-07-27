@@ -128,9 +128,9 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
     {
         let path_str = temp_path.to_str().unwrap_or("").to_string();
         let ps_script = if is_msi {
-            format!("Start-Sleep -Milliseconds 800; Start-Process msiexec.exe -ArgumentList '/i \"{}\" /qb /norestart' -Verb RunAs", path_str)
+            format!("Start-Sleep -Seconds 1; Stop-Process -Name 'mambo-pedidos' -Force -ErrorAction SilentlyContinue; Start-Process msiexec.exe -ArgumentList '/i \"{}\" /qb' -Verb RunAs", path_str)
         } else {
-            format!("Start-Sleep -Milliseconds 800; Start-Process -FilePath \"{}\" -ArgumentList '/SP- /SILENT /SUPPRESSMSGBOXES' -Verb RunAs", path_str)
+            format!("Start-Sleep -Seconds 1; Stop-Process -Name 'mambo-pedidos' -Force -ErrorAction SilentlyContinue; Start-Process -FilePath \"{}\" -ArgumentList '/S' -Verb RunAs", path_str)
         };
 
         std::process::Command::new("powershell")
@@ -138,7 +138,7 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
 
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        std::thread::sleep(std::time::Duration::from_millis(300));
         std::process::exit(0);
     }
 
