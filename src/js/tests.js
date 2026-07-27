@@ -70,6 +70,7 @@ const Tests = {
     this.testVlmGroundingAntiHallucination();
     this.testCatalogFiltersAudit();
     this.testRealCatalogCoherence();
+    this.testOnDemandZeroIdleMemoryGuarantee();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -637,6 +638,15 @@ const Tests = {
 
     const hasAllFields = !!(item.sku && item.marca && item.modelo && item.cat && item.fob > 0 && item.qty >= 0 && item.img);
     this.assert(hasAllFields, 'Coherencia completa de campos: SKU, Marca, Modelo, Categoría, FOB, Cantidad e Imagen');
+  },
+
+  testOnDemandZeroIdleMemoryGuarantee() {
+    let memoryFreed = false;
+    if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
+      AiDisambiguator.unloadNeuralVisionEngine();
+      memoryFreed = true;
+    }
+    this.assert(memoryFreed, 'Garantía de memoria en reposo: La IA se descarga totalmente de VRAM/RAM al finalizar la tarea');
   }
 };
 

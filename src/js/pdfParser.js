@@ -119,6 +119,13 @@ const PdfParser = {
       if (pdf && typeof pdf.destroy === 'function') {
         try { await pdf.destroy(); } catch (e) {}
       }
+      // Liberación TOTAL e inmediata de VRAM/RAM de la IA local al finalizar la carga
+      if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+        try { await window.__TAURI_INTERNALS__.invoke('stop_local_ai_session'); } catch (e) {}
+      }
+      if (typeof AiDisambiguator !== 'undefined' && AiDisambiguator.unloadNeuralVisionEngine) {
+        try { await AiDisambiguator.unloadNeuralVisionEngine(); } catch (e) {}
+      }
     }
   },
 

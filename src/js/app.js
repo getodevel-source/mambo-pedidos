@@ -604,13 +604,19 @@ function applyBatchCat() {
 async function autoCorrectPreviewWithAI() {
   if (!pendingPreviewItems || !pendingPreviewItems.length) return;
   toast('🧠 Analizando con IA...', 'info');
-  const res = await AiDisambiguator.autoCorrectItems(pendingPreviewItems, customBrandsList);
-  pendingPreviewItems = res.items;
-  renderImportPreviewModal();
-  if (res.correctedCount > 0) {
-    toast(`✨ IA desambiguó y corrigió ${res.correctedCount} productos`, 'success');
-  } else {
-    toast(`ℹ️ No se requirieron correcciones adicionales`, 'info');
+  try {
+    const res = await AiDisambiguator.autoCorrectItems(pendingPreviewItems, customBrandsList);
+    pendingPreviewItems = res.items;
+    renderImportPreviewModal();
+    if (res.correctedCount > 0) {
+      toast(`✨ IA desambiguó y corrigió ${res.correctedCount} productos`, 'success');
+    } else {
+      toast(`ℹ️ No se requirieron correcciones adicionales`, 'info');
+    }
+  } finally {
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try { await window.__TAURI_INTERNALS__.invoke('stop_local_ai_session'); } catch (e) {}
+    }
   }
 }
 
