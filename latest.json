@@ -1,27 +1,27 @@
 {
-  "version": "1.5.8",
+  "version": "1.5.9",
   "notes": "Instaladores nativos de Mambo Pedidos para Windows (.exe / .msi), Linux (.AppImage / .deb) y macOS. El actualizador automático in-place descarga solo el parche firmado sin desinstalar.",
-  "pub_date": "2026-07-27T21:12:44.725Z",
+  "pub_date": "2026-07-28T05:49:58.915Z",
   "platforms": {
     "linux-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWhOZEVBQmZxdVdEWVYrdXROUHV4MXZTckp0SDlSdG0rK3NnKzM1dXNIVmxTdG96ZEhJZHBVZjlvMy9wQldNcW9qaXMwanNsUENlRlh5R3V1OUVKRVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5BcHBJbWFnZQp4cW84aDh1MnV5YVpMdVBDRzF4VC9wd0l5RmhJbkhFOTRsVW5UUjhCM1Mzd2R5TFo5cjR4bFJFQnhtRTFNM1BaYk9CVGZ2UmRRQzFudnBxcVhqWXNDdz09Cg==",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.8/Mambo.Pedidos_1.5.8_amd64.AppImage"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.9/Mambo.Pedidos_1.5.9_amd64.AppImage"
     },
     "linux-x86_64-appimage": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWhOZEVBQmZxdVdEWVYrdXROUHV4MXZTckp0SDlSdG0rK3NnKzM1dXNIVmxTdG96ZEhJZHBVZjlvMy9wQldNcW9qaXMwanNsUENlRlh5R3V1OUVKRVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5BcHBJbWFnZQp4cW84aDh1MnV5YVpMdVBDRzF4VC9wd0l5RmhJbkhFOTRsVW5UUjhCM1Mzd2R5TFo5cjR4bFJFQnhtRTFNM1BaYk9CVGZ2UmRRQzFudnBxcVhqWXNDdz09Cg==",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.8/Mambo.Pedidos_1.5.8_amd64.AppImage"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.9/Mambo.Pedidos_1.5.9_amd64.AppImage"
     },
     "linux-x86_64-deb": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWgySmRoMVMwYjQvZ05tOEFkTHRmMEpIemRkSzFTeFJod1lxLzhIU0lsc2U0Q2F3TTAybUYzdFFMQXFJejNKOG1JcW9mOTNHS05qTlB1c1Q4RTFVUFFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5kZWIKSGJTTkk2VnNsSGRQMVRwbGswNjFxdE1CTTRIVEpZM2VWWFM0OEpTK2dvWkFlWnM3NmFJRXloV3M2bDFHL3ZydkVaUWpvVFRURHpjdkUxeXZUYzBQQWc9PQo=",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.8/Mambo.Pedidos_1.5.8_amd64.deb"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.9/Mambo.Pedidos_1.5.9_amd64.deb"
     },
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQW80MGVrTHl4ZkI1SXBPWE4vTXJtZHBqbStZUHhOWWpJZUxGRUYzclV0OG51S2JkdzhjbnU5S3hnTS9MVVRwOE0vdGppaDNzMkU3S2duRFlPZU9vMUFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2OTUzCWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl94NjQtc2V0dXAuZXhlClNjWitUdWl5cERVU3lVcUdBWEFPNjY3amx1M0V4OU8vTjNkVUtHeEFsY0V0QitnQ1JmT3ZGSUI0dENDVXU4dGR1TVljd2VOVHp5YWk3S3VZYVFFaEF3PT0K",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.8/Mambo.Pedidos_1.5.8_x64-setup.exe"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.9/Mambo.Pedidos_1.5.9_x64-setup.exe"
     },
     "windows-x86_64-nsis": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQW80MGVrTHl4ZkI1SXBPWE4vTXJtZHBqbStZUHhOWWpJZUxGRUYzclV0OG51S2JkdzhjbnU5S3hnTS9MVVRwOE0vdGppaDNzMkU3S2duRFlPZU9vMUFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2OTUzCWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl94NjQtc2V0dXAuZXhlClNjWitUdWl5cERVU3lVcUdBWEFPNjY3amx1M0V4OU8vTjNkVUtHeEFsY0V0QitnQ1JmT3ZGSUI0dENDVXU4dGR1TVljd2VOVHp5YWk3S3VZYVFFaEF3PT0K",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.8/Mambo.Pedidos_1.5.8_x64-setup.exe"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.5.9/Mambo.Pedidos_1.5.9_x64-setup.exe"
     }
   }
 }
