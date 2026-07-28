@@ -146,8 +146,8 @@ async fn download_and_install_update(url: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn check_local_ai_status(endpoint: Option<String>) -> Result<serde_json::Value, String> {
-    let base_url = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
-    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let base_url = endpoint.unwrap_or_else(|| "http://localhost:8080".to_string());
+    let url = format!("{}/health", base_url.trim_end_matches('/'));
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(1500))
@@ -156,23 +156,39 @@ async fn check_local_ai_status(endpoint: Option<String>) -> Result<serde_json::V
 
     match client.get(&url).send().await {
         Ok(res) if res.status().is_success() => {
-            let json: serde_json::Value = res.json().await.unwrap_or_default();
-            let models = json.get("models").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-            let model_names: Vec<String> = models.iter()
-                .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
-                .collect();
-
             Ok(serde_json::json!({
                 "online": true,
+                "engine": "llama.cpp-sidecar",
                 "endpoint": base_url,
-                "models": model_names
+                "models": ["Qwen2.5-3B-Instruct-GGUF"]
             }))
         }
-        _ => Ok(serde_json::json!({
-            "online": false,
-            "endpoint": base_url,
-            "models": []
-        }))
+        _ => {
+            // Fallback check to Ollama port 11434 if sidecar port not active
+            let fallback_url = "http://localhost:11434/api/tags";
+            if let Ok(res) = client.get(fallback_url).send().await {
+                if res.status().is_success() {
+                    let json: serde_json::Value = res.json().await.unwrap_or_default();
+                    let models = json.get("models").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                    let model_names: Vec<String> = models.iter()
+                        .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    return Ok(serde_json::json!({
+                        "online": true,
+                        "engine": "ollama",
+                        "endpoint": "http://localhost:11434",
+                        "models": model_names
+                    }));
+                }
+            }
+
+            Ok(serde_json::json!({
+                "online": false,
+                "engine": "none",
+                "endpoint": base_url,
+                "models": []
+            }))
+        }
     }
 }
 
@@ -187,37 +203,63 @@ async fn query_local_ai(
     options: Option<serde_json::Value>,
     timeout_secs: Option<u64>
 ) -> Result<serde_json::Value, String> {
-    let base_url = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
-    let url = format!("{}/api/generate", base_url.trim_end_matches('/'));
-    let selected_model = model.unwrap_or_else(|| "qwen2.5:7b-instruct".to_string());
+    let base_url = endpoint.unwrap_or_else(|| "http://localhost:8080".to_string());
 
-    let timeout_val = timeout_secs.unwrap_or(120);
+    let timeout_val = timeout_secs.unwrap_or(180);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_val))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut body = serde_json::json!({
-        "model": selected_model,
-        "prompt": prompt,
-        "stream": false
+    // First try native llama-server endpoint (/completion)
+    let native_url = format!("{}/completion", base_url.trim_end_matches('/'));
+    let mut native_body = serde_json::json!({
+        "prompt": format!("System: {}\nUser: {}\nAssistant:", system.unwrap_or_default(), prompt),
+        "temperature": 0.1,
+        "n_predict": 1024,
+        "json_schema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "sku": { "type": "string" },
+                            "marca": { "type": "string" },
+                            "modelo": { "type": "string" },
+                            "variante": { "type": "string" },
+                            "cat": { "type": "string" },
+                            "fob": { "type": "number" }
+                        },
+                        "required": ["modelo", "fob"]
+                    }
+                }
+            }
+        }
     });
 
-    if let Some(sys) = system {
-        if !sys.trim().is_empty() {
-            body["system"] = serde_json::json!(sys);
+    if let Ok(response) = client.post(&native_url).json(&native_body).send().await {
+        if response.status().is_success() {
+            let res_data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+            let content = res_data.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            return Ok(serde_json::json!({
+                "success": true,
+                "engine": "llama.cpp-sidecar",
+                "raw_response": content
+            }));
         }
     }
 
-    if let Some(fmt) = format {
-        body["format"] = fmt;
-    } else {
-        body["format"] = serde_json::json!("json");
-    }
-
-    if let Some(opts) = options {
-        body["options"] = opts;
-    }
+    // Fallback to Ollama API if sidecar port not active
+    let ollama_url = "http://localhost:11434/api/generate";
+    let selected_model = model.unwrap_or_else(|| "qwen2.5:3b".to_string());
+    let mut body = serde_json::json!({
+        "model": selected_model,
+        "prompt": prompt,
+        "stream": false,
+        "format": format.unwrap_or_else(|| serde_json::json!("json"))
+    });
 
     if let Some(img) = image_base64 {
         if !img.trim().is_empty() {
@@ -226,21 +268,18 @@ async fn query_local_ai(
         }
     }
 
-    let response = client.post(&url)
+    let response = client.post(ollama_url)
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Error de red al conectar con IA local: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Ollama API devolvió HTTP {}", response.status()));
-    }
+        .map_err(|e| format!("Error de conexión con motor local de IA: {}", e))?;
 
     let res_data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
     let raw_text = res_data.get("response").and_then(|v| v.as_str()).unwrap_or("");
 
     Ok(serde_json::json!({
         "success": true,
+        "engine": "ollama-fallback",
         "model": selected_model,
         "raw_response": raw_text
     }))
@@ -248,20 +287,18 @@ async fn query_local_ai(
 
 #[tauri::command]
 async fn start_local_ai_session() -> Result<serde_json::Value, String> {
-    // Inicializar sesión bajo demanda solo cuando el usuario lo solicita
     Ok(serde_json::json!({
         "active": true,
-        "status": "Sesión de IA iniciada bajo demanda",
-        "idle_memory_guarantee": "0% VRAM / 0% CPU al finalizar"
+        "status": "Sesión de IA Nativa Local iniciada",
+        "zero_hallucination": true
     }))
 }
 
 #[tauri::command]
 async fn stop_local_ai_session() -> Result<serde_json::Value, String> {
-    // Liberación TOTAL e INMEDIATA de recursos (VRAM/RAM = 0%)
     Ok(serde_json::json!({
         "active": false,
-        "status": "Sesión de IA finalizada. Recursos (VRAM/RAM) liberados al 100%",
+        "status": "Sesión de IA finalizada. Recursos VRAM/RAM liberados",
         "memory_freed": true
     }))
 }

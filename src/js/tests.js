@@ -39,6 +39,7 @@ const Tests = {
     this.testMultiCategoryBrandParsing();
     this.testTextSanitizerModelParsing();
     this.testLocalLlmClient();
+    this.testAiCatalogEngineGroundingGate();
     this.testNumpadCategoryDetection();
     this.testTitleDeduplication();
     this.testAj139MouseCategory();
@@ -306,6 +307,18 @@ const Tests = {
   testLocalLlmClient() {
     const hasClient = typeof LocalLlm !== 'undefined' && typeof LocalLlm.checkHealth === 'function';
     this.assert(hasClient, 'Cliente de integración LocalLlm disponible');
+  },
+
+  testAiCatalogEngineGroundingGate() {
+    const rawText = "AJAZZ AK820 Mechanical Keyboard Gasket Structure $45.50";
+    const llmOutput = [
+      { sku: "A1", marca: "AJAZZ", modelo: "AK820", cat: "TECLADO", fob: 45.50 },
+      { sku: "A2", marca: "AJAZZ", modelo: "AK999", cat: "TECLADO", fob: 999.00 }
+    ];
+
+    const grounded = AiCatalogEngine.groundAndVerifyExtractedItems(llmOutput, rawText, 1);
+    this.assert(grounded[0].isGroundedFob === true, 'Puerta de Fact-Checking: Precio $45.50 verificado literalmente en el texto');
+    this.assert(grounded[1].isGroundedFob === false, 'Puerta de Fact-Checking: Precio alucinado $999.00 detectado y marcado como NO verificado');
   },
 
   testNumpadCategoryDetection() {

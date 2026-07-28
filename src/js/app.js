@@ -475,21 +475,12 @@ async function processFiles(files) {
     showProgress(basePct, `Cargando ${f.name}...`, `Archivo ${i + 1} de ${totalFiles}`);
 
     try {
-      let incoming = [];
-      if (f.name.toLowerCase().endsWith('.pdf')) {
-        const res = await PdfParser.processPdfFile(f, catalog.length, customBrandsList, (page, totalPages) => {
-          const filePct = (page / totalPages) * stepPct;
-          const currentPct = Math.round(basePct + filePct);
-          showProgress(currentPct, `Analizando ${f.name}`, `Página ${page} de ${totalPages} · ${currentPct}%`);
-        });
-        incoming = res.products;
-      } else if (f.name.toLowerCase().endsWith('.csv')) {
-        incoming = await FileImporter.processCsvFile(f, catalog);
-        showProgress(basePct + stepPct, `Procesando ${f.name}`, `Archivo ${i + 1} de ${totalFiles}`);
-      } else {
-        incoming = await FileImporter.processExcelFile(f, catalog);
-        showProgress(basePct + stepPct, `Procesando ${f.name}`, `Archivo ${i + 1} de ${totalFiles}`);
-      }
+      const res = await AiCatalogEngine.processCatalogFile(f, customBrandsList, (current, total) => {
+        const filePct = (current / total) * stepPct;
+        const currentPct = Math.round(basePct + filePct);
+        showProgress(currentPct, `🤖 Procesando ${f.name} por IA Local`, `Bloque/Página ${current} de ${total} · ${currentPct}%`);
+      });
+      const incoming = res.products || [];
 
       for (const rawItem of incoming) {
         let item = (typeof TextSanitizer !== 'undefined')

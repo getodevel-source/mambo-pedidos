@@ -98,7 +98,7 @@ mambo-pedidos/
 
 ### Ejecutar Suite de Pruebas Unitarias (39 PASS)
 ```bash
-node -e "const fs = require('fs'); global.window=global; global.document={createElement:()=>({getContext:()=>null})}; global.XLSX={utils:{aoa_to_sheet:()=>({}),book_new:()=>({SheetNames:[]}),book_append_sheet:(wb, ws, name)=>{ (wb.SheetNames = wb.SheetNames || []).push(name); }},writeFile:()=>{}}; const vm = require('vm'); ['validations.js', 'pdfParser.js', 'calculator.js', 'textSanitizer.js', 'localLlm.js', 'catalogValidator.js', 'quoteGenerator.js', 'fileImporter.js', 'updater.js', 'tests.js'].forEach(f => vm.runInThisContext(fs.readFileSync('src/js/' + f, 'utf8'))); Tests.runAll();"
+node -e "const fs = require('fs'); global.window=global; global.document={createElement:()=>({getContext:()=>null})}; global.XLSX={utils:{aoa_to_sheet:()=>({}),book_new:()=>({SheetNames:[]}),book_append_sheet:(wb, ws, name)=>{ (wb.SheetNames = wb.SheetNames || []).push(name); }},writeFile:()=>{}}; const vm = require('vm'); ['validations.js', 'pdfParser.js', 'calculator.js', 'textSanitizer.js', 'localLlm.js', 'aiCatalogEngine.js', 'catalogValidator.js', 'quoteGenerator.js', 'fileImporter.js', 'updater.js', 'tests.js'].forEach(f => vm.runInThisContext(fs.readFileSync('src/js/' + f, 'utf8'))); Tests.runAll();"
 ```
 
 ---
