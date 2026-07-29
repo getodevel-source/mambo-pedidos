@@ -1,6 +1,6 @@
 /**
  * Mambo Pedidos - Motor Determinístico de Sanitización y Limpieza de Catálogos (TextSanitizer)
- *
+ * 
  * Sanitizador puro y ultra rápido de datos de productos.
  * Remueve ruido corporativo, palabras de encabezado, contaminación de precios y caracteres inválidos.
  * Cero dependencias externas. Cero simulación de IA. 100% confiable y ejecutable en runtime.
@@ -61,17 +61,17 @@ const TextSanitizer = {
     let fob = parseFloat(item.fob) || 0;
 
     // 1. Limpieza de Modelo
-    modelo = modelo.replace(this.CORPORATE_NOISE_REGEX, '');
-    modelo = modelo.replace(this.MONEY_NOISE_REGEX, '');
-    modelo = modelo.replace(/^[.\s-]+/, '');
+    modelo = this.removeCorporateNoise(modelo);
+    modelo = this.removeMoneyNoise(modelo);
+    modelo = modelo.replace(/^[\.\s-]+/, '');
 
-    if (this.HEADER_NOISE_REGEX.test(modelo) || modelo.toLowerCase().startsWith('producto item')) {
+    if (this.isHeaderNoise(modelo) || modelo.toLowerCase().startsWith('producto item')) {
       modelo = '';
     }
 
     // 2. Limpieza de Variante / Color
     if (variante) {
-      if (this.PRICE_DECIMAL_REGEX.test(variante) || /^[\d\.,\s]+$/.test(variante) || this.HEADER_NOISE_REGEX.test(variante)) {
+      if (this.PRICE_DECIMAL_REGEX.test(variante) || /^[\d\.,\s]+$/.test(variante) || this.isHeaderNoise(variante)) {
         variante = '';
       } else {
         variante = variante.replace(/\s+/g, ' ').trim();
@@ -81,6 +81,7 @@ const TextSanitizer = {
     // 3. Detección / Normalización de Marca
     const allBrands = [...this.KNOWN_BRANDS, ...customBrands.map(b => b.toUpperCase())];
     const upperModelo = modelo.toUpperCase();
+    
     if (!marca || marca === 'OTRO') {
       const foundBrand = allBrands.find(b => upperModelo.includes(b));
       if (foundBrand) {
@@ -110,6 +111,27 @@ const TextSanitizer = {
       fob,
       status: (modelo && fob > 0) ? 'VALID' : 'INVALID'
     };
+  },
+
+  /**
+   * Remueve ruido corporativo de un texto
+   */
+  removeCorporateNoise(text) {
+    return text.replace(this.CORPORATE_NOISE_REGEX, '');
+  },
+
+  /**
+   * Remueve referencias de dinero de un texto
+   */
+  removeMoneyNoise(text) {
+    return text.replace(this.MONEY_NOISE_REGEX, '');
+  },
+
+  /**
+   * Verifica si un texto es ruido de encabezado
+   */
+  isHeaderNoise(text) {
+    return this.HEADER_NOISE_REGEX.test(text);
   },
 
   /**
