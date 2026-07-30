@@ -1,27 +1,27 @@
 {
-  "version": "1.6.0",
-  "notes": "Motor de importación espacial: Table Row Engine con detección automática de layout, validación visual de imágenes (color dominante + aspect ratio), 99.8% de cobertura en categorías, limpieza de modelos y variantes.",
+  "version": "1.7.0",
+  "notes": "Motor de validación cruzada de 4 capas con semáforo de confianza (GREEN/YELLOW/RED). Rediseño completo del preview de importación: grid de cards visuales con imágenes, tabs de semáforo, búsqueda en vivo y animaciones premium. Mejoras en matching de imágenes (centerY, compresión, validación de ocupación).",
   "pub_date": "2026-07-30T00:00:00.000Z",
   "platforms": {
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWhOZEVBQmZxdVdEWVYrdXROUHV4MXZTckp0SDlSdG0rK3NnKzM1dXNIVmxTdG96ZEhJZHBVZjlvMy9wQldNcW9qaXMwanNsUENlRlh5R3V1OUVKRVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5BcHBJbWFnZQp4cW84aDh1MnV5YVpMdVBDRzF4VC9wd0l5RmhJbkhFOTRsVW5UUjhCM1Mzd2R5TFo5cjR4bFJFQnhtRTFNM1BaYk9CVGZ2UmRRQzFudnBxcVhqWXNDdz09Cg==",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.6.0/Mambo.Pedidos_1.6.0_amd64.AppImage"
+      "signature": "PLACEHOLDER_LINUX_SIG",
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.AppImage"
     },
     "linux-x86_64-appimage": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWhOZEVBQmZxdVdEWVYrdXROUHV4MXZTckp0SDlSdG0rK3NnKzM1dXNIVmxTdG96ZEhJZHBVZjlvMy9wQldNcW9qaXMwanNsUENlRlh5R3V1OUVKRVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5BcHBJbWFnZQp4cW84aDh1MnV5YVpMdVBDRzF4VC9wd0l5RmhJbkhFOTRsVW5UUjhCM1Mzd2R5TFo5cjR4bFJFQnhtRTFNM1BaYk9CVGZ2UmRRQzFudnBxcVhqWXNDdz09Cg==",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.6.0/Mambo.Pedidos_1.6.0_amd64.AppImage"
+      "signature": "PLACEHOLDER_LINUX_SIG",
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.AppImage"
     },
     "linux-x86_64-deb": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTK240UlFxQm9vQWgySmRoMVMwYjQvZ05tOEFkTHRmMEpIemRkSzFTeFJod1lxLzhIU0lsc2U0Q2F3TTAybUYzdFFMQXFJejNKOG1JcW9mOTNHS05qTlB1c1Q4RTFVUFFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MTM2ODE1CWZpbGU6TWFtYm8gUGVkaWRvc18xLjUuNl9hbWQ2NC5kZWIKSGJTTkk2VnNsSGRQMVRwbGswNjFxdE1CTTRIVEpZM2VWWFM0OEpTK2dvWkFlWnM3NmFJRXloV3M2bDFHL3ZydkVaUWpvVFRURHpjdkUxeXZUYzBQQWc9PQo=",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.6.0/Mambo.Pedidos_1.6.0_amd64.deb"
+      "signature": "PLACEHOLDER_LINUX_SIG",
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.deb"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNzZaN0FtMkpvS1NDMGFuRlR3YmJOMmlaRlMxNHN6ZTg5Y3dwL0t1TTVHdEZ5VWRuRTZXbi9vNlV2NDBaYVdvQjdSdmQ5RTdmS1Z2ZGg3M3lEQ2N1amplZTgrS3dmS3c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NDE3MzU2CWZpbGU6TWFtYm8gUGVkaWRvc18xLjYuMF94NjQtc2V0dXAuZXhlCnJ3QlVjeDlnSHJqbWNzSHVKajllMmRISW5OWjBZVERNMVVHRno1YlM3RUlrSExqSm1rQUZWNENtbkV5Zk9QS2FkMWxmcUtCclJJVlM5d2ZxcTNqQkFBPT0K",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.6.0/Mambo.Pedidos_1.6.0_x64-setup.exe"
+      "signature": "PLACEHOLDER_WINDOWS_SIG",
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_x64-setup.exe"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNzZaN0FtMkpvS1NDMGFuRlR3YmJOMmlaRlMxNHN6ZTg5Y3dwL0t1TTVHdEZ5VWRuRTZXbi9vNlV2NDBaYVdvQjdSdmQ5RTdmS1Z2ZGg3M3lEQ2N1amplZTgrS3dmS3c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NDE3MzU2CWZpbGU6TWFtYm8gUGVkaWRvc18xLjYuMF94NjQtc2V0dXAuZXhlCnJ3QlVjeDlnSHJqbWNzSHVKajllMmRISW5OWjBZVERNMVVHRno1YlM3RUlrSExqSm1rQUZWNENtbkV5Zk9QS2FkMWxmcUtCclJJVlM5d2ZxcTNqQkFBPT0K",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.6.0/Mambo.Pedidos_1.6.0_x64-setup.exe"
+      "signature": "PLACEHOLDER_WINDOWS_SIG",
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_x64-setup.exe"
     }
   }
 }
