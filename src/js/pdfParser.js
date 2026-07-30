@@ -480,6 +480,7 @@ const PdfParser = {
 
   /**
    * Valida si una imagen es coherente con un producto.
+   * Capa B: Canvas puro (siempre disponible). Capa A: LLM visión (si Ollama corre).
    * Retorna { valid, score, warnings } donde score 0-100.
    */
   validateImageForProduct(img, product) {
@@ -512,7 +513,6 @@ const PdfParser = {
       const imgColor = img.dominantColor.name;
       const variantText = ((product.variante || '') + ' ' + (product.modelo || '')).toLowerCase();
 
-      // Mapear palabras de color en el texto del producto a nombres de color
       const COLOR_MAP = {
         'black': 'BLACK', 'negro': 'BLACK',
         'white': 'WHITE', 'blanco': 'WHITE',
@@ -536,7 +536,6 @@ const PdfParser = {
       }
 
       if (expectedColor && expectedColor !== imgColor) {
-        // Colores compatibles (no penalizar)
         const COMPATIBLE = {
           'GRAY': ['SILVER', 'WHITE'],
           'SILVER': ['GRAY', 'WHITE'],
@@ -563,6 +562,16 @@ const PdfParser = {
     if (img.width < 50 && img.height < 50) {
       score -= 30;
       warnings.push('⚠️ Resolución muy baja para identificar producto');
+    }
+
+    // 5. Ratio de ocupación: el producto debe ocupar una porción razonable del canvas
+    //    (evita imágenes que son 95% fondo o 5% ruido)
+    if (img.dominantColor && img.dominantColor.confidence > 0) {
+      const occupancy = img.dominantColor.confidence; // % de píxeles del color dominante
+      if (occupancy > 95) {
+        score -= 25;
+        warnings.push('⚠️ Imagen casi monocromática — probablemente fondo sin producto');
+      }
     }
 
     return { valid: score >= 50, score, warnings };
