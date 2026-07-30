@@ -534,86 +534,151 @@ async function processFiles(files) {
   setTimeout(hideProgress, 400);
 }
 
+// ── Estado del preview ──
+let previewFilter = 'ALL';
+let previewSearch = '';
+
+function setPreviewFilter(filter, el) {
+  previewFilter = filter;
+  document.querySelectorAll('.pv-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderImportPreviewModal(window._previewValidation);
+}
+
+function setPreviewSearch(val) {
+  previewSearch = (val || '').toLowerCase().trim();
+  renderImportPreviewModal(window._previewValidation);
+}
+
 function renderImportPreviewModal(validation) {
   const modal = document.getElementById('importPreviewModal');
   const body = document.getElementById('importPreviewBody');
   if (!modal || !body) return;
 
-  // Usar resultados de validación si existen, sino fallback
+  window._previewValidation = validation;
+
   const greenCount = validation ? validation.stats.green : pendingPreviewItems.filter(i => i.status === 'GREEN').length;
   const yellowCount = validation ? validation.stats.yellow : pendingPreviewItems.filter(i => i.status === 'YELLOW').length;
   const redCount = validation ? validation.stats.red : pendingPreviewItems.filter(i => i.status === 'RED').length;
 
-  document.getElementById('badgeValidCount').textContent = `🟢 ${greenCount} Confirmados`;
-  document.getElementById('badgeWarnCount').textContent = `🟡 ${yellowCount} Revisar`;
-  document.getElementById('badgeErrCount').textContent = `🔴 ${redCount} Rechazados`;
+  document.getElementById('badgeValidCount').textContent = greenCount;
+  document.getElementById('badgeWarnCount').textContent = yellowCount;
+  document.getElementById('badgeErrCount').textContent = redCount;
+  document.getElementById('pvCountAll').textContent = pendingPreviewItems.length;
+
   const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
-  const statusText = (llmStatus && llmStatus.available) ? ` | IA Local: Activa` : '';
-  document.getElementById('importPreviewSummary').textContent = `${pendingPreviewItems.length} productos detectados · ${greenCount} confirmados · ${redCount} rechazados.${statusText}`;
+  const statusText = (llmStatus && llmStatus.available) ? ' · IA Local activa' : '';
+  document.getElementById('importPreviewSummary').textContent =
+    `${pendingPreviewItems.length} productos detectados · ${greenCount} listos para importar${statusText}`;
 
-  // Renderizado lazy: primeras 100 filas, el resto al scrollear
-  const CHUNK = 100;
+  // Filtrar por tab + búsqueda
+  const filtered = pendingPreviewItems
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item }) => {
+      if (previewFilter !== 'ALL' && item.status !== previewFilter) return false;
+      if (previewSearch) {
+        const hay = `${item.modelo} ${item.marca} ${item.variante} ${item.sku}`.toLowerCase();
+        if (!hay.includes(previewSearch)) return false;
+      }
+      return true;
+    });
+
+  // Actualizar botón de confirmar
+  const selCount = pendingPreviewItems.filter(i => i._selected).length;
+  const confirmBtn = document.getElementById('pvConfirmBtn');
+  if (confirmBtn) confirmBtn.textContent = `✅ Importar ${selCount} seleccionados`;
+
+  const CATS = ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'];
+
+  function buildCard({ item, idx }) {
+    const status = item.status || 'GREEN';
+    const reason = (item.warnings && item.warnings.length) ? item.warnings[0] : '';
+    const imgHtml = item.img
+      ? `<img class="pv-card-img" src="${item.img}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const placeholder = `<div class="pv-card-img pv-card-img-empty" style="${item.img ? 'display:none' : ''}">📦</div>`;
+
+    const reasonBanner = (status === 'RED' && reason)
+      ? `<div class="pv-reason">⛔ ${esc(reason)}</div>`
+      : (status === 'YELLOW' && reason)
+        ? `<div class="pv-reason pv-reason-warn">⚠️ ${esc(reason)}</div>`
+        : '';
+
+    return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
+      `<label class="pv-card-check"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${idx}]._selected=this.checked;updateConfirmCount()"></label>` +
+      `<button class="pv-card-del" onclick="removePreviewItem(${idx})" title="Quitar">✕</button>` +
+      `<div class="pv-card-media">${imgHtml}${placeholder}</div>` +
+      `<div class="pv-card-body">` +
+        `<div class="pv-card-brand">${esc(item.marca || 'OTRO')}</div>` +
+        `<input class="pv-card-model" value="${esc(item.modelo)}" onchange="pendingPreviewItems[${idx}].modelo=this.value" title="Modelo (clic para editar)">` +
+        `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" onchange="pendingPreviewItems[${idx}].variante=this.value">` +
+        `<div class="pv-card-meta">` +
+          `<select class="pv-card-cat" onchange="pendingPreviewItems[${idx}].cat=this.value">` +
+            CATS.map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
+          `</select>` +
+          `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" onchange="pendingPreviewItems[${idx}].fob=parseFloat(this.value)||0"></div>` +
+        `</div>` +
+        reasonBanner +
+      `</div>` +
+    `</article>`;
+  }
+
+  // Renderizado lazy por chunks
+  const CHUNK = 60;
   let rendered = 0;
+  body.innerHTML = '';
 
-  function buildRow(item, i) {
-    let statusBadge = '🟢';
-    if (item.status === 'YELLOW') statusBadge = '🟡';
-    if (item.status === 'RED') statusBadge = '🔴';
-    const warnTooltip = (item.warnings && item.warnings.length) ? item.warnings.join(' · ') : 'Confirmado';
-    const rowBg = item.status === 'RED' ? 'background:rgba(239,68,68,0.12);' : (item.status === 'YELLOW' ? 'background:rgba(234,179,8,0.06);' : '');
-
-    return `<tr style="${rowBg}">` +
-      `<td style="text-align:center"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${i}]._selected=this.checked"></td>` +
-      `<td style="text-align:center;font-size:14px" title="${esc(warnTooltip)}">${statusBadge}</td>` +
-      `<td><input type="text" value="${esc(item.sku)}" style="width:100%;border:none;background:transparent;font-family:monospace;font-size:11px;color:#aaa" onchange="pendingPreviewItems[${i}].sku=this.value"></td>` +
-      `<td><input type="text" value="${esc(item.marca)}" class="pv-input" onchange="pendingPreviewItems[${i}].marca=this.value"></td>` +
-      `<td><input type="text" value="${esc(item.modelo)}" class="pv-input" onchange="pendingPreviewItems[${i}].modelo=this.value"></td>` +
-      `<td><input type="text" value="${esc(item.variante || '')}" class="pv-input pv-input-dim" onchange="pendingPreviewItems[${i}].variante=this.value"></td>` +
-      `<td><select class="pv-select" onchange="pendingPreviewItems[${i}].cat=this.value">` +
-        ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'].map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
-      `</select></td>` +
-      `<td class="num"><input type="number" step="0.01" value="${item.fob}" style="width:70px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3);color:#fff;padding:2px 6px;text-align:right" onchange="pendingPreviewItems[${i}].fob=parseFloat(this.value)||0"></td>` +
-      `<td style="text-align:center"><button class="btn btn-sm" onclick="removePreviewItem(${i})" style="color:var(--red);padding:2px 4px">🗑</button></td>` +
-      `</tr>`;
+  if (filtered.length === 0) {
+    body.innerHTML = `<div class="pv-empty">No hay productos que coincidan con este filtro.</div>`;
+    modal.style.display = 'flex';
+    return;
   }
 
   function renderChunk() {
-    const end = Math.min(rendered + CHUNK, pendingPreviewItems.length);
+    const end = Math.min(rendered + CHUNK, filtered.length);
     let html = '';
     for (let i = rendered; i < end; i++) {
-      html += buildRow(pendingPreviewItems[i], i);
+      html += buildCard(filtered[i]);
     }
-    body.querySelector('tbody').insertAdjacentHTML('beforeend', html);
+    body.insertAdjacentHTML('beforeend', html);
     rendered = end;
   }
 
-  // Estructura base de la tabla
-  body.innerHTML = `<table class="preview-table"><thead><tr>
-    <th style="width:30px"><input type="checkbox" checked onchange="toggleSelectAllPreview(this.checked)"></th>
-    <th style="width:30px">Est</th><th>SKU</th><th>Marca</th><th>Modelo</th><th>Variante</th><th>Cat</th><th style="width:80px">FOB $</th><th style="width:30px"></th>
-  </tr></thead><tbody></tbody></table>`;
-
   renderChunk();
 
-  // Lazy load al scrollear
-  const scrollContainer = body;
+  const scrollContainer = document.getElementById('pvGridWrap');
   function onScroll() {
-    if (rendered >= pendingPreviewItems.length) {
+    if (rendered >= filtered.length) {
       scrollContainer.removeEventListener('scroll', onScroll);
       return;
     }
-    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 200) {
+    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 300) {
       renderChunk();
     }
   }
+  scrollContainer.removeEventListener('scroll', onScroll);
   scrollContainer.addEventListener('scroll', onScroll);
 
   modal.style.display = 'flex';
 }
 
+function updateConfirmCount() {
+  const selCount = pendingPreviewItems.filter(i => i._selected).length;
+  const confirmBtn = document.getElementById('pvConfirmBtn');
+  if (confirmBtn) confirmBtn.textContent = `✅ Importar ${selCount} seleccionados`;
+}
+
 function toggleSelectAllPreview(checked) {
-  pendingPreviewItems.forEach(i => i._selected = checked);
-  renderImportPreviewModal();
+  // Afecta solo los items visibles según filtro + búsqueda activos
+  pendingPreviewItems.forEach(i => {
+    if (previewFilter !== 'ALL' && i.status !== previewFilter) return;
+    if (previewSearch) {
+      const hay = `${i.modelo} ${i.marca} ${i.variante} ${i.sku}`.toLowerCase();
+      if (!hay.includes(previewSearch)) return;
+    }
+    i._selected = checked;
+  });
+  renderImportPreviewModal(window._previewValidation);
 }
 
 function applyBatchBrand() {
