@@ -284,9 +284,31 @@ const PdfParser = {
                 }
 
                 if (visiblePixels >= 10) {
-                  const dataUrl = canvas.toDataURL('image/png');
+                  // Comprimir: limitar canvas a 150px max (thumbnails no necesitan más)
+                  const MAX_DIM = 150;
+                  let outW = canvas.width, outH = canvas.height;
+                  let finalDataUrl = dataUrl;
+                  if (canvas.width > MAX_DIM || canvas.height > MAX_DIM) {
+                    const scale = MAX_DIM / Math.max(canvas.width, canvas.height);
+                    outW = Math.round(canvas.width * scale);
+                    outH = Math.round(canvas.height * scale);
+                    const smallCanvas = document.createElement('canvas');
+                    smallCanvas.width = outW;
+                    smallCanvas.height = outH;
+                    const sctx = smallCanvas.getContext('2d');
+                    sctx.drawImage(canvas, 0, 0, outW, outH);
+                    finalDataUrl = smallCanvas.toDataURL('image/jpeg', 0.85);
+                  }
+
                   const dominantColor = this.extractDominantColor(ctx, imgObj.width, imgObj.height);
-                  pageImages.push({ pageNum, y, x, width: canvas.width, height: canvas.height, dataUrl, dominantColor });
+                  pageImages.push({
+                    pageNum, y, x,
+                    width: outW, height: outH,
+                    pdfWidth: imgW, pdfHeight: imgH,
+                    centerY: y + (imgH / 2),
+                    dataUrl: finalDataUrl,
+                    dominantColor
+                  });
                 }
               }
             }
@@ -484,7 +506,9 @@ const PdfParser = {
     }
 
     // 2. Validación de color dominante vs variante del producto
-    if (img.dominantColor && img.dominantColor.name !== 'UNKNOWN' && img.dominantColor.confidence > 25) {
+    //    Skip en imágenes muy chicas (< 60px) — el color dominante no es confiable
+    const imgMaxDim = Math.max(img.width || 0, img.height || 0);
+    if (img.dominantColor && img.dominantColor.name !== 'UNKNOWN' && img.dominantColor.confidence > 25 && imgMaxDim >= 60) {
       const imgColor = img.dominantColor.name;
       const variantText = ((product.variante || '') + ' ' + (product.modelo || '')).toLowerCase();
 
@@ -897,7 +921,8 @@ const PdfParser = {
       if (pageImages && pageImages.length) {
         const candidateImgs = pageImages.filter(img => {
           if (img.pageNum !== pageNum) return false;
-          if (img.y < topBound || img.y > bottomBound) return false;
+          const imgCenterY = img.centerY || img.y;
+          if (imgCenterY < topBound || imgCenterY > bottomBound) return false;
           return true;
         });
 
@@ -910,7 +935,8 @@ const PdfParser = {
           for (const img of candidateImgs) {
             const validation = this.validateImageForProduct(img, product);
             if (!validation.valid) continue;
-            const dist = Math.abs(img.y - anchor.y);
+            const imgCenterY = img.centerY || img.y;
+            const dist = Math.abs(imgCenterY - anchor.y);
             const combined = validation.score - dist; // mayor score, menor distancia
             if (combined > bestScore) {
               bestScore = combined;

@@ -536,32 +536,63 @@ function renderImportPreviewModal() {
   const statusText = (llmStatus && llmStatus.available) ? ` | Modelo Local (${llmStatus.model}): Conectado` : ' | Motor Local: No detectado (Ollama/LM Studio)';
   document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos.${statusText}`;
 
-  let html = '';
-  pendingPreviewItems.forEach((item, i) => {
+  // Renderizado lazy: primeras 100 filas, el resto al scrollear
+  const CHUNK = 100;
+  let rendered = 0;
+
+  function buildRow(item, i) {
     let statusBadge = '🟢';
     if (item.status === 'WARNING') statusBadge = '🟡';
     if (item.status === 'ERROR') statusBadge = '🔴';
-
     const warnTooltip = (item.warnings && item.warnings.length) ? item.warnings.join(' · ') : 'Confiable';
+    const rowBg = item.status === 'ERROR' ? 'background:rgba(239,68,68,0.08);' : (item.status === 'WARNING' ? 'background:rgba(234,179,8,0.06);' : '');
 
-    html += `<tr style="${item.status === 'ERROR' ? 'background: rgba(239,68,68,0.08);' : (item.status === 'WARNING' ? 'background: rgba(234,179,8,0.06);' : '')}">`;
-    html += `<td style="text-align: center;"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${i}]._selected = this.checked"></td>`;
-    html += `<td style="text-align: center; font-size: 14px;" title="${esc(warnTooltip)}">${statusBadge}</td>`;
-    html += `<td><input type="text" value="${esc(item.sku)}" style="width: 100%; border: none; background: transparent; font-family: monospace; font-size: 11px; color: #aaa;" onchange="pendingPreviewItems[${i}].sku = this.value"></td>`;
-    html += `<td><input type="text" value="${esc(item.marca)}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].marca = this.value"></td>`;
-    html += `<td><input type="text" value="${esc(item.modelo)}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].modelo = this.value"></td>`;
-    html += `<td><input type="text" value="${esc(item.variante || '')}" style="width: 100%; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #ccc; padding: 2px 6px;" onchange="pendingPreviewItems[${i}].variante = this.value"></td>`;
-    html += `<td>
-      <select style="border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 4px; font-size: 11px;" onchange="pendingPreviewItems[${i}].cat = this.value">
-        ${['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','CUIDADO_PERSONAL','OTRO'].map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
-    </td>`;
-    html += `<td class="num"><input type="number" step="0.01" value="${item.fob}" style="width: 70px; border: 1px solid var(--border); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; padding: 2px 6px; text-align: right;" onchange="pendingPreviewItems[${i}].fob = parseFloat(this.value)||0"></td>`;
-    html += `<td style="text-align: center;"><button class="btn btn-sm" onclick="removePreviewItem(${i})" style="color: var(--red); padding: 2px 4px;">🗑</button></td>`;
-    html += `</tr>`;
-  });
+    return `<tr style="${rowBg}">` +
+      `<td style="text-align:center"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${i}]._selected=this.checked"></td>` +
+      `<td style="text-align:center;font-size:14px" title="${esc(warnTooltip)}">${statusBadge}</td>` +
+      `<td><input type="text" value="${esc(item.sku)}" style="width:100%;border:none;background:transparent;font-family:monospace;font-size:11px;color:#aaa" onchange="pendingPreviewItems[${i}].sku=this.value"></td>` +
+      `<td><input type="text" value="${esc(item.marca)}" class="pv-input" onchange="pendingPreviewItems[${i}].marca=this.value"></td>` +
+      `<td><input type="text" value="${esc(item.modelo)}" class="pv-input" onchange="pendingPreviewItems[${i}].modelo=this.value"></td>` +
+      `<td><input type="text" value="${esc(item.variante || '')}" class="pv-input pv-input-dim" onchange="pendingPreviewItems[${i}].variante=this.value"></td>` +
+      `<td><select class="pv-select" onchange="pendingPreviewItems[${i}].cat=this.value">` +
+        ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'].map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
+      `</select></td>` +
+      `<td class="num"><input type="number" step="0.01" value="${item.fob}" style="width:70px;border:1px solid var(--border);border-radius:4px;background:rgba(0,0,0,0.3);color:#fff;padding:2px 6px;text-align:right" onchange="pendingPreviewItems[${i}].fob=parseFloat(this.value)||0"></td>` +
+      `<td style="text-align:center"><button class="btn btn-sm" onclick="removePreviewItem(${i})" style="color:var(--red);padding:2px 4px">🗑</button></td>` +
+      `</tr>`;
+  }
 
-  body.innerHTML = html;
+  function renderChunk() {
+    const end = Math.min(rendered + CHUNK, pendingPreviewItems.length);
+    let html = '';
+    for (let i = rendered; i < end; i++) {
+      html += buildRow(pendingPreviewItems[i], i);
+    }
+    body.querySelector('tbody').insertAdjacentHTML('beforeend', html);
+    rendered = end;
+  }
+
+  // Estructura base de la tabla
+  body.innerHTML = `<table class="preview-table"><thead><tr>
+    <th style="width:30px"><input type="checkbox" checked onchange="toggleSelectAllPreview(this.checked)"></th>
+    <th style="width:30px">Est</th><th>SKU</th><th>Marca</th><th>Modelo</th><th>Variante</th><th>Cat</th><th style="width:80px">FOB $</th><th style="width:30px"></th>
+  </tr></thead><tbody></tbody></table>`;
+
+  renderChunk();
+
+  // Lazy load al scrollear
+  const scrollContainer = body;
+  function onScroll() {
+    if (rendered >= pendingPreviewItems.length) {
+      scrollContainer.removeEventListener('scroll', onScroll);
+      return;
+    }
+    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 200) {
+      renderChunk();
+    }
+  }
+  scrollContainer.addEventListener('scroll', onScroll);
+
   modal.style.display = 'flex';
 }
 

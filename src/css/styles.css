@@ -1149,3 +1149,37 @@ select option, .select option {
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ===============================================================
+   PREVIEW TABLE — inputs compactos para renderizado lazy
+   =============================================================== */
+.pv-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  padding: 2px 6px;
+}
+.pv-input-dim { color: #ccc; }
+.pv-select {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.preview-table { width: 100%; border-collapse: collapse; }
+.preview-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 2;
+  padding: 6px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.preview-table td { padding: 3px 4px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+
