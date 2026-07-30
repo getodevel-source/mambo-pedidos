@@ -548,7 +548,7 @@ function renderImportPreviewModal(validation) {
   document.getElementById('badgeWarnCount').textContent = `🟡 ${yellowCount} Revisar`;
   document.getElementById('badgeErrCount').textContent = `🔴 ${redCount} Rechazados`;
   const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
-  const statusText = (llmStatus && llmStatus.available) ? ` | Modelo Local (${llmStatus.model}): Conectado` : ' | Motor Local: No detectado (Ollama/LM Studio)';
+  const statusText = (llmStatus && llmStatus.available) ? ` | IA Local: Activa` : '';
   document.getElementById('importPreviewSummary').textContent = `${pendingPreviewItems.length} productos detectados · ${greenCount} confirmados · ${redCount} rechazados.${statusText}`;
 
   // Renderizado lazy: primeras 100 filas, el resto al scrollear
@@ -1719,14 +1719,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }, 3000);
 
-  // Verificar disponibilidad del servidor LLM local (Ollama/LM Studio)
+  // Verificar disponibilidad del motor de IA local (opcional, auto-detectado)
   setTimeout(() => {
     if (typeof LocalLlm !== 'undefined') {
       LocalLlm.checkHealth().then(available => {
         if (available) {
-          console.log(`✅ Servidor LLM local detectado en ${LocalLlm.endpoint} (Modelo: ${LocalLlm.model})`);
+          console.log(`✅ Motor de IA local detectado en ${LocalLlm.endpoint}`);
         } else {
-          console.log(`ℹ️ Servidor LLM local no activo en ${LocalLlm.endpoint}`);
+          console.log(`ℹ️ Motor de IA local no activo (usando validación determinística)`);
         }
       });
     }

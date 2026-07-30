@@ -76,7 +76,7 @@ const LocalLlm = {
   async queryStructuredJson(prompt, systemPrompt = 'Responde exclusivamente con un objeto JSON válido.') {
     const isHealthy = await this.checkHealth();
     if (!isHealthy) {
-      throw new Error(`Servidor LLM local no disponible en ${this.endpoint}. Verifique que Ollama/LM Studio esté corriendo.`);
+      throw new Error(`Motor de IA local no disponible en ${this.endpoint}.`);
     }
 
     try {
