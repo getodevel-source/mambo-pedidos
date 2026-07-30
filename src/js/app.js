@@ -475,11 +475,19 @@ async function processFiles(files) {
     showProgress(basePct, `Cargando ${f.name}...`, `Archivo ${i + 1} de ${totalFiles}`);
 
     try {
-      const res = await AiCatalogEngine.processCatalogFile(f, customBrandsList, (current, total) => {
+      const ext = f.name.split('.').pop().toLowerCase();
+      const progressCb = (current, total) => {
         const filePct = (current / total) * stepPct;
         const currentPct = Math.round(basePct + filePct);
-        showProgress(currentPct, `🤖 Procesando ${f.name} por IA Local`, `Bloque/Página ${current} de ${total} · ${currentPct}%`);
-      });
+        showProgress(currentPct, `🤖 Procesando ${f.name}`, `Página ${current} de ${total} · ${currentPct}%`);
+      };
+
+      // PDFs → Parser Espacial (Cell Grid + LLM por celda)
+      // CSV/Excel → Motor de IA por chunks de texto
+      const res = (ext === 'pdf')
+        ? await PdfParser.processPdfFile(f, 0, customBrandsList, progressCb)
+        : await AiCatalogEngine.processCatalogFile(f, customBrandsList, progressCb);
+
       const incoming = res.products || [];
 
       for (const rawItem of incoming) {

@@ -17,6 +17,9 @@ const PdfParser = {
       const allImages = [];
       let fullTextForBrand = '';
 
+      // Pre-detectar marca desde el filename para usar como fallback durante la extracción
+      const filenameBrand = this.detectBrandFromFilename(file.name, customBrands) || '';
+
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         if (typeof onProgress === 'function') {
           try { onProgress(pageNum, pdf.numPages); } catch (e) {}
@@ -29,13 +32,29 @@ const PdfParser = {
           fullTextForBrand += content.items.map(item => item.str).join(' ') + ' ';
         }
 
+        // Refinar marca con contenido de las primeras 3 páginas
+        const currentBrand = (pageNum <= 3)
+          ? (this.detectBrandFromContent(fullTextForBrand, customBrands) || filenameBrand)
+          : (this.detectBrandFromContent(fullTextForBrand, customBrands) || filenameBrand);
+
         // Extraer imágenes de la página
         const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
         allImages.push(...pageImages);
 
-        // EXTRAER PRODUCTOS POR CELDAS ESPACIALES 2D (GRID CELL ENGINE V5)
-        const pageProducts = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, '', customBrands, allProducts);
-        allProducts.push(...pageProducts);
+        // EXTRAER PRODUCTOS (detecta automáticamente TABLA vs GRILLA)
+        const pageProducts = this.extractPageProductsByCellGrid(content.items, viewport.height, pageNum, pageImages, currentBrand, customBrands, allProducts);
+
+        if (pageProducts.length > 0) {
+          allProducts.push(...pageProducts);
+        } else {
+          // Fallback: sin anclas de precio $ → extracción por texto plano + LLM
+          const flatText = content.items.map(item => item.str).join(' ');
+          if (flatText.trim().length > 10 && typeof AiCatalogEngine !== 'undefined') {
+            const fallbackItems = await AiCatalogEngine.extractPageChunkWithAI(flatText, pageNum, customBrands);
+            const verified = AiCatalogEngine.groundAndVerifyExtractedItems(fallbackItems, flatText, pageNum);
+            allProducts.push(...verified);
+          }
+        }
       }
 
       const cleanText = fullTextForBrand.replace(/\s+/g, '');
@@ -45,8 +64,11 @@ const PdfParser = {
 
       const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
 
+      // Enriquecer con LLM por celda (si Ollama está activo)
+      const enrichedProducts = await this.enrichProductsWithCellLlm(allProducts, customBrands);
+
       // Asignar SKU y formatear catálogo final
-      const finalProducts = this.finalizeCatalogProducts(allProducts, brand, catalogLength, customBrands);
+      const finalProducts = this.finalizeCatalogProducts(enrichedProducts, brand, catalogLength, customBrands);
       return { brand, products: finalProducts };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
@@ -263,7 +285,8 @@ const PdfParser = {
 
                 if (visiblePixels >= 10) {
                   const dataUrl = canvas.toDataURL('image/png');
-                  pageImages.push({ pageNum, y, x, width: canvas.width, height: canvas.height, dataUrl });
+                  const dominantColor = this.extractDominantColor(ctx, imgObj.width, imgObj.height);
+                  pageImages.push({ pageNum, y, x, width: canvas.width, height: canvas.height, dataUrl, dominantColor });
                 }
               }
             }
@@ -354,6 +377,174 @@ const PdfParser = {
   },
 
   // =========================================================================
+  //  VALIDACIÓN VISUAL DE IMÁGENES (Color Dominante + Aspect Ratio)
+  // =========================================================================
+
+  /**
+   * Extrae el color dominante de una imagen (ignorando fondo transparente/blanco).
+   * Retorna { name, r, g, b, confidence } donde confidence es el % de píxeles que coinciden.
+   */
+  extractDominantColor(ctx, width, height) {
+    try {
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+      const buckets = {};
+      let totalVisible = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 30) continue; // transparente (fondo removido)
+
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+
+        // Ignorar píxeles casi blancos (fondo residual)
+        if (r > 235 && g > 235 && b > 235) continue;
+
+        const name = this.classifyColorName(r, g, b);
+        if (!buckets[name]) buckets[name] = { count: 0, rSum: 0, gSum: 0, bSum: 0 };
+        buckets[name].count++;
+        buckets[name].rSum += r;
+        buckets[name].gSum += g;
+        buckets[name].bSum += b;
+        totalVisible++;
+      }
+
+      if (totalVisible < 5) return { name: 'UNKNOWN', r: 128, g: 128, b: 128, confidence: 0 };
+
+      let best = null;
+      for (const [name, b] of Object.entries(buckets)) {
+        if (!best || b.count > best.count) {
+          best = { name, count: b.count, r: Math.round(b.rSum / b.count), g: Math.round(b.gSum / b.count), b: Math.round(b.bSum / b.count) };
+        }
+      }
+
+      return { ...best, confidence: Math.round((best.count / totalVisible) * 100) };
+    } catch (e) {
+      return { name: 'UNKNOWN', r: 128, g: 128, b: 128, confidence: 0 };
+    }
+  },
+
+  /**
+   * Clasifica un RGB a un nombre de color amplio.
+   */
+  classifyColorName(r, g, b) {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturation = max > 0 ? (max - min) / max : 0;
+    const brightness = max / 255;
+
+    // Acromáticos
+    if (brightness < 0.22) return 'BLACK';
+    if (saturation < 0.12 && brightness > 0.85) return 'WHITE';
+    if (saturation < 0.12) return brightness > 0.55 ? 'SILVER' : 'GRAY';
+
+    // Cromáticos
+    if (r > g + 40 && r > b + 40) {
+      if (g > 100 && b < 80) return 'GOLD';
+      if (g < 80) return 'RED';
+      return 'ORANGE';
+    }
+    if (g > r + 25 && g > b + 25) return 'GREEN';
+    if (b > r + 30 && b > g + 15) {
+      if (r > 80 && g < 100) return 'PURPLE';
+      if (g > 150) return 'CYAN';
+      return 'BLUE';
+    }
+    if (r > 140 && g < 130 && b > 120) return 'PINK';
+    if (r > 120 && g > 100 && b < 80) return 'GOLD';
+
+    return 'MULTICOLOR';
+  },
+
+  /**
+   * Valida si una imagen es coherente con un producto.
+   * Retorna { valid, score, warnings } donde score 0-100.
+   */
+  validateImageForProduct(img, product) {
+    const warnings = [];
+    let score = 100;
+
+    if (!img || !img.dataUrl) return { valid: false, score: 0, warnings: ['No image'] };
+
+    // 1. Validación de aspect ratio por categoría
+    const aspect = img.width / Math.max(1, img.height);
+    const cat = (product.cat || '').toUpperCase();
+
+    if (cat === 'TECLADO' && aspect < 0.8) {
+      score -= 30;
+      warnings.push(`⚠️ Imagen muy estrecha (ratio ${aspect.toFixed(2)}) para un teclado`);
+    }
+    if (cat === 'MOUSE' && aspect > 2.5) {
+      score -= 30;
+      warnings.push(`⚠️ Imagen muy ancha (ratio ${aspect.toFixed(2)}) para un mouse`);
+    }
+    if (cat === 'MOUSEPAD' && aspect < 0.5) {
+      score -= 20;
+      warnings.push(`⚠️ Imagen muy estrecha para un mousepad`);
+    }
+
+    // 2. Validación de color dominante vs variante del producto
+    if (img.dominantColor && img.dominantColor.name !== 'UNKNOWN' && img.dominantColor.confidence > 25) {
+      const imgColor = img.dominantColor.name;
+      const variantText = ((product.variante || '') + ' ' + (product.modelo || '')).toLowerCase();
+
+      // Mapear palabras de color en el texto del producto a nombres de color
+      const COLOR_MAP = {
+        'black': 'BLACK', 'negro': 'BLACK',
+        'white': 'WHITE', 'blanco': 'WHITE',
+        'pink': 'PINK', 'rosa': 'PINK',
+        'blue': 'BLUE', 'azul': 'BLUE',
+        'red': 'RED', 'rojo': 'RED',
+        'green': 'GREEN', 'verde': 'GREEN',
+        'purple': 'PURPLE', 'violeta': 'PURPLE', 'lavender': 'PURPLE',
+        'silver': 'SILVER', 'gris': 'GRAY', 'gray': 'GRAY', 'grey': 'GRAY',
+        'gold': 'GOLD', 'dorado': 'GOLD',
+        'orange': 'ORANGE', 'naranja': 'ORANGE',
+        'cyan': 'CYAN', 'teal': 'CYAN',
+      };
+
+      let expectedColor = null;
+      for (const [word, colorName] of Object.entries(COLOR_MAP)) {
+        if (variantText.includes(word)) {
+          expectedColor = colorName;
+          break;
+        }
+      }
+
+      if (expectedColor && expectedColor !== imgColor) {
+        // Colores compatibles (no penalizar)
+        const COMPATIBLE = {
+          'GRAY': ['SILVER', 'WHITE'],
+          'SILVER': ['GRAY', 'WHITE'],
+          'PURPLE': ['BLUE', 'PINK'],
+          'CYAN': ['BLUE', 'GREEN'],
+          'GOLD': ['ORANGE'],
+        };
+
+        const isCompatible = (COMPATIBLE[expectedColor] || []).includes(imgColor);
+        if (!isCompatible) {
+          score -= 40;
+          warnings.push(`⚠️ Color de imagen (${imgColor}) no coincide con el producto (${expectedColor})`);
+        }
+      }
+    }
+
+    // 3. Validación de tamaño mínimo
+    if (img.width < 30 || img.height < 30) {
+      score -= 50;
+      warnings.push('⚠️ Imagen demasiado pequeña para ser un producto');
+    }
+
+    // 4. Validación de resolución mínima para catálogos
+    if (img.width < 50 && img.height < 50) {
+      score -= 30;
+      warnings.push('⚠️ Resolución muy baja para identificar producto');
+    }
+
+    return { valid: score >= 50, score, warnings };
+  },
+
+  // =========================================================================
   //  MOTOR DE EXTRACCIÓN POR CELDAS ESPACIALES 2D (GRID CELL ENGINE V5)
   //  Aísla productos en celdas espaciales puras [X_min, X_max] x [Y_min, Y_max]
   //  evitando contaminación entre columnas y filtrando ruido de tabla.
@@ -373,7 +564,7 @@ const PdfParser = {
 
     // 2. Filtro estricto de Ruido de Encabezados de Tabla & Metadatos
     const NOISE_PATTERN = /\b(model|model\s*color|color|price|rmb|usd|picture|image|spec|specification|remark|note|moq|fob|cny|usd\s*price|rmb\s*price)\b/i;
-    
+
     const isHeaderNoiseLine = (str) => {
       if (!str) return false;
       const matches = str.match(new RegExp(NOISE_PATTERN.source, 'gi'));
@@ -385,6 +576,13 @@ const PdfParser = {
       if (/^[\u4e00-\u9fff\s]+$/.test(str)) return true;
       if (/zhengzhou|damulin|www\.|http|tel:|fax:|page\s*\d+/i.test(str)) return true;
       if (isHeaderNoiseLine(str)) return true;
+      // Ruido de headers de página y nombres corporativos
+      if (/^(electronic|technology|shenzhen|guangdong|co\.?,?|ltd\.?|inc\.?|corp\.?)$/i.test(str)) return true;
+      if (/electronic\s+technology|co\.\s*,?\s*ltd/i.test(str)) return true;
+      if (/^(product\s+name|prodcut|unit\s+photo|ean\s*barcode|classification|technical\s+parameters|description|office|gaming|series|items?\s+in|those\s+that|ceased\s+production|only\s+small|switches|the\s+items)\b/i.test(str)) return true;
+      if (/^(name|code|type|category|brand|status|date|version|sku|item|photo|barcode|picture)\s*$/i.test(str)) return true;
+      // Stop words en inglés que no son info de producto
+      if (/^(the|in|are|those|that|have|has|and|only|small|is|it|of|to|for|with|from|by|an|a|or|no|not|all|any|each|more|most|other|some|such|than|too|very|can|will|just|should|now|also|into|over|after|before|between|under|about|up|out|off|down|on|at|as|but|if|then|so|like|when|where|which|who|whom|why|how|what)\s*$/i.test(str)) return true;
       return false;
     };
 
@@ -406,6 +604,19 @@ const PdfParser = {
 
     if (!priceAnchors.length) return [];
 
+    // 4. Detectar layout: TABLA (1 columna de precios) vs GRILLA (múltiples columnas)
+    const uniqueXs = [];
+    for (const a of priceAnchors) {
+      if (!uniqueXs.some(ux => Math.abs(ux - a.x) < 40)) {
+        uniqueXs.push(a.x);
+      }
+    }
+
+    if (uniqueXs.length <= 2) {
+      return this.extractPageProductsByTableRows(rawElements, priceAnchors, viewportHeight, pageNum, pageImages, brandFallback, customBrands, existingProducts, isPageNoise, isHeaderNoiseLine);
+    }
+
+    // --- GRILLA multi-columna (path original) ---
     priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
     const pageProducts = [];
 
@@ -541,6 +752,188 @@ const PdfParser = {
         fob: anchor.price,
         img: matchedImg,
         rawText: rawCombined,
+        cellRawText: rawCombined,
+        pageNum,
+        x: anchor.x,
+        y: anchor.y
+      });
+    }
+
+    return pageProducts;
+  },
+
+  // =========================================================================
+  //  MOTOR DE EXTRACCIÓN POR FILAS DE TABLA (TABLE ROW ENGINE)
+  //  Para catálogos con una sola columna de precios (layout tabular).
+  //  Cada fila Y con ancla de precio $ = un producto.
+  // =========================================================================
+  extractPageProductsByTableRows(rawElements, priceAnchors, viewportHeight, pageNum, pageImages, brandFallback, customBrands, existingProducts, isPageNoise, isHeaderNoiseLine) {
+    priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
+    const pageProducts = [];
+
+    // Determinar la X de la columna de precios USD (promedio de anclas)
+    const priceColX = priceAnchors.reduce((s, a) => s + a.x, 0) / priceAnchors.length;
+
+    // Calcular altura de fila promedio para límites dinámicos
+    let avgRowHeight = 60;
+    if (priceAnchors.length > 1) {
+      const gaps = [];
+      for (let j = 1; j < priceAnchors.length; j++) {
+        const gap = priceAnchors[j].y - priceAnchors[j - 1].y;
+        if (gap > 5 && gap < 300) gaps.push(gap);
+      }
+      if (gaps.length) avgRowHeight = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    }
+
+    // Regex para detectar códigos de producto (ej: RZ01-03850100-R3C1)
+    const CODE_RE = /^[A-Z]{2,4}\d{0,2}\s*-\s*\d{6,}\s*-\s*[A-Z0-9]+$/i;
+    // Regex para ¥/￥ CNY
+    const CNY_SYMBOL_RE = /^[¥￥]$/;
+    // Regex para números CNY bare (ej: 235.75, 1,170.21)
+    const CNY_BARE_RE = /^[\d,]+\.\d{1,2}$/;
+    // Keywords de tipo de producto
+    const TYPE_KEYWORDS = /\b(wired|wireless|bluetooth|mechanical|optical|gaming|mouse|keyboard|headset|controller|earphone|earbuds|switch|numpad|mousepad|webcam|camera|microphone|chair|desk|hub|adapter|cable|stand)\b/i;
+
+    for (let i = 0; i < priceAnchors.length; i++) {
+      const anchor = priceAnchors[i];
+
+      // Calcular límites Y dinámicos: punto medio entre anclas consecutivas
+      const prevAnchor = i > 0 ? priceAnchors[i - 1] : null;
+      const nextAnchor = i < priceAnchors.length - 1 ? priceAnchors[i + 1] : null;
+      const topBound = prevAnchor ? (prevAnchor.y + anchor.y) / 2 : Math.max(0, anchor.y - avgRowHeight * 1.3);
+      const bottomBound = nextAnchor ? (anchor.y + nextAnchor.y) / 2 : Math.min(viewportHeight, anchor.y + 30);
+
+      // Recolectar TODOS los elementos dentro de los límites Y, a la izquierda de la columna de precios
+      const cellItems = rawElements.filter(el => {
+        if (el.y < topBound || el.y > bottomBound) return false;
+        if (el.x > priceColX - 15) return false; // excluir zona de precios
+        return true;
+      });
+
+      // Clasificar elementos de la celda
+      const nameParts = [];
+      const typeParts = [];
+      const colorParts = [];
+      let productCode = '';
+
+      const allItems = cellItems.sort((a, b) => a.y - b.y || a.x - b.x);
+
+      for (const el of allItems) {
+        const txt = el.text;
+
+        // Filtrar ruido
+        if (isPageNoise(txt)) continue;
+        if (isHeaderNoiseLine(txt)) continue;
+
+        // Filtrar CNY: símbolo ¥ y números bare cerca de la columna de precios
+        if (CNY_SYMBOL_RE.test(txt)) continue;
+        if (CNY_BARE_RE.test(txt) && el.x > priceColX - 80) continue;
+
+        // Filtrar precios USD inline (ya tenemos el ancla)
+        if (this.extractUsdPrice(txt) !== null) continue;
+
+        // Detectar código de producto
+        if (CODE_RE.test(txt.replace(/\s/g, ''))) {
+          productCode = txt;
+          continue;
+        }
+        // Código parcial (ej: "RZ01" "-" "03850100" "-" "R3C1" como items separados)
+        if (/^[A-Z]{2,4}\d{0,2}$/.test(txt) && el.x < 100) continue;
+        if (/^\d{6,}$/.test(txt) && el.x < 100) continue;
+        if (/^[A-Z]\d[A-Z]\d$/.test(txt) && el.x < 100) continue;
+        if (txt === '-' && el.x < 100) continue;
+
+        // Clasificar por posición X relativa a la columna de precios
+        const relX = el.x / priceColX; // 0..1 (izquierda..precio)
+
+        // Keywords que siempre van a variante (sin importar posición)
+        const isSwitchType = /\b(magnetic|hall\s*effect|linear|tactile|clicky|optical|mechanical|hot[\s-]?swap|pcb|gasket|foam|silicone|poron|ixpe|pet|fr4|aluminum|brass|carbon)\b/i.test(txt);
+        const isSensorSpec = /\b(paw\d{4}\w*|8k|4k|2\.4g|tri[\s-]?mode|25k|30k|35k|26000|dpi)\b/i.test(txt);
+        const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material)\b/i.test(txt);
+        const isColor = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|faker|wukong|myth|gunmetal|blackberry|periwinkle|neon|flash|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|arctic|fox|dream|whimsy|perilla|obsidian|any|tea)\b/i.test(txt);
+
+        if (isSwitchType || isSensorSpec || isDescriptor) {
+          typeParts.push(txt);
+        } else if (isColor && relX > 0.3) {
+          colorParts.push(txt);
+        } else if (relX < 0.45) {
+          if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
+            typeParts.push(txt);
+          } else {
+            nameParts.push(txt);
+          }
+        } else if (relX < 0.85) {
+          if (isColor) {
+            colorParts.push(txt);
+          } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
+            typeParts.push(txt);
+          } else {
+            nameParts.push(txt);
+          }
+        }
+        // relX >= 0.85: zona de precios, ya filtrado
+      }
+
+      // Construir modelo y variante
+      let rawModelo = nameParts.join(' ').replace(/\s+/g, ' ').trim();
+      let rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
+
+      // Si no hay nombre pero sí tipo, usar tipo como nombre
+      if (!rawModelo && rawVariante) {
+        rawModelo = rawVariante;
+        rawVariante = '';
+      }
+
+      if (!rawModelo) continue;
+
+      const rawCombined = rawModelo + ' ' + rawVariante;
+      const detectedBrand = this.detectBrandFromTextLine(rawCombined, customBrands) || brandFallback || 'OTRO';
+      const cat = this.detectCategory(rawCombined, detectedBrand);
+
+      const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
+
+      // Buscar imagen dentro de los mismos límites Y de la celda CON validación visual
+      let matchedImg = '';
+      if (pageImages && pageImages.length) {
+        const candidateImgs = pageImages.filter(img => {
+          if (img.pageNum !== pageNum) return false;
+          if (img.y < topBound || img.y > bottomBound) return false;
+          return true;
+        });
+
+        if (candidateImgs.length) {
+          // Validar cada candidata y elegir la mejor (score + distancia)
+          const product = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
+          let bestImg = null;
+          let bestScore = -1;
+
+          for (const img of candidateImgs) {
+            const validation = this.validateImageForProduct(img, product);
+            if (!validation.valid) continue;
+            const dist = Math.abs(img.y - anchor.y);
+            const combined = validation.score - dist; // mayor score, menor distancia
+            if (combined > bestScore) {
+              bestScore = combined;
+              bestImg = img;
+            }
+          }
+
+          if (bestImg) {
+            matchedImg = bestImg.dataUrl || '';
+          }
+        }
+      }
+
+      pageProducts.push({
+        sku: productCode,
+        cat,
+        marca: detectedBrand,
+        modelo: sanitized.modelo,
+        variante: sanitized.variante,
+        fob: anchor.price,
+        img: matchedImg,
+        rawText: rawCombined,
+        cellRawText: rawCombined,
         pageNum,
         x: anchor.x,
         y: anchor.y
@@ -569,6 +962,48 @@ const PdfParser = {
       .replace(/^[\-\s,:]+|[\-\s,:]+$/g, '')
       .trim();
 
+    // 1b. Remover códigos de barras EAN/UPC (13 dígitos) y números de serie largos
+    modelo = modelo.replace(/\b\d{12,15}\b/g, '').replace(/\s+/g, ' ').trim();
+
+    // 1c. Mover specs de sensor a variante (PAW3950MAX, PAW3395, etc.)
+    const SENSOR_RE = /\b(paw\d{4}\w*)\b/gi;
+    const sensorMatches = modelo.match(SENSOR_RE);
+    if (sensorMatches) {
+      modelo = modelo.replace(SENSOR_RE, '').replace(/\s+/g, ' ').trim();
+      variante = (sensorMatches.join(' ') + ' ' + variante).trim();
+    }
+
+    // 1d. Mover colores del modelo a variante
+    const COLOR_EXTRACT_RE = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|gunmetal|blackberry|neon|arctic|translucent)\b/gi;
+    const colorMatches = modelo.match(COLOR_EXTRACT_RE);
+    if (colorMatches && colorMatches.length > 0) {
+      // Solo mover colores si el modelo tiene otras palabras significativas
+      const nonColorWords = modelo.replace(COLOR_EXTRACT_RE, '').replace(/\s+/g, ' ').trim();
+      if (nonColorWords.length > 2) {
+        modelo = nonColorWords;
+        variante = (colorMatches.join(' ') + ' ' + variante).replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    // 1e. Remover palabras genéricas que no son modelo
+    modelo = modelo
+      .replace(/\b(list|item|product|prodcut|catalog|catalogue|new|release|hot|sale|pro version|electronic|technology|co\.,?\s*ltd\.?|shenzhen|guangdong|unit|photo|ean|barcode|classification|technical|parameters|description|office|gaming|series|cny|rmb|bottoming|total|style)\b/gi, '')
+      .replace(/\b\d+\.\d+mm\b/gi, '')  // specs técnicas
+      .replace(/\b\d+\.\d+mn\b/gi, '')  // typo de mm
+      .replace(/\s+/g, ' ')
+      .replace(/^[\-\s,:\.]+|[\-\s,:\.]+$/g, '')
+      .trim();
+
+    // Deduplicar palabras en modelo (ej: "AK820 Red AK820 Wired" → "AK820 Red Wired")
+    const modWords = modelo.split(/\s+/);
+    const uniqueModWords = [];
+    for (const w of modWords) {
+      if (!uniqueModWords.map(x => x.toLowerCase()).includes(w.toLowerCase())) {
+        uniqueModWords.push(w);
+      }
+    }
+    modelo = uniqueModWords.join(' ');
+
     // 2. Si el modelo resultante es puramente numérico/decimal (ej: "235.75" o "$120"), no dejar el precio como modelo
     if (/^\$?\d+([\.,]\d+)?$/.test(modelo) || /^\d+$/.test(modelo)) {
       if (variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
@@ -582,6 +1017,11 @@ const PdfParser = {
 
     variante = variante
       .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
+      // Remover specs técnicas de switches que contaminan la variante
+      .replace(/\b(working|lower|upper|axle|core|cover|stroke:?|material:?|force:?|total|pre[\s-]?travel|travel)\b/gi, '')
+      .replace(/\b\d+\.\d+mm\b/gi, '')  // "0.50mm"
+      .replace(/\b\d+g\b/gi, '')         // "5g" (force grams)
+      .replace(/\b(pom|pc|pa|upe|pa12|fr4|ixpe|pet)\b/gi, '') // material codes
       .replace(/[\-\s]+$/g, '')
       .replace(/^[\-\s]+/g, '')
       .replace(/\bmode\b/i, '3-Mode')
@@ -617,6 +1057,12 @@ const PdfParser = {
           modelo = baseCore;
         }
       }
+    }
+
+    // Segunda pasada: remover brand del modelo (puede haber quedado oculto bajo ruido limpiado)
+    if (brand && brand !== 'OTRO') {
+      const reBrand2 = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      modelo = modelo.replace(reBrand2, '').replace(/\s+/g, ' ').replace(/^[\-\s,:\.]+|[\-\s,:\.]+$/g, '').trim();
     }
 
     return { modelo: modelo || (brand !== 'OTRO' ? `${brand} Item` : 'Producto'), variante };
@@ -1031,22 +1477,33 @@ const PdfParser = {
   detectCategory(text, brand) {
     const t = (text || '').toLowerCase();
 
+    // Brand-level defaults (catalogs where brand implies category)
     if (brand === 'Polaroid') return 'CAMARA';
     if (brand === 'KZ') return 'AURICULAR';
     if (brand === 'Haimu') return 'SWITCH';
     if (brand === 'Philips') return 'CUIDADO_PERSONAL';
+    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
+    if (brand === 'Attack Shark') return 'MOUSE';
+    if (brand === 'Madlions' || brand === 'MCHOSE' || brand === 'Royal Kludge') return 'TECLADO';
+    if (brand === 'ATK' || brand === 'AULA' || brand === 'AJAZZ') return 'TECLADO';
+    if (brand === 'Irok' || brand === 'Mars') return 'TECLADO';
 
     if (/\b(numpad|numeric keypad|keypad|np20|ak33 numpad)\b/i.test(t)) return 'NUMPAD';
     if (/\b(controller|gamepad|joystick|mando|sn30|ultimate 2c|ultimate c|ultimate 3|vader|g7 se|t4 kaleid|g8 galileo)\b/i.test(t)) return 'CONTROLLER';
     if (/\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i.test(t)) return 'AURICULAR';
-    if (/\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|g435|g733)\b/i.test(t)) return 'HEADSET';
-    if (/\b(mousepad|mouse pad|deskmat|desk mat|playmat|tablemat|glass pad|poron pad|cordura pad|control pad|speed pad|cloth pad|glide pad|extended pad|rgb pad|custom pad|anti-slip mat)\b|\bmat\b/i.test(t)) return 'MOUSEPAD';
-    if (/\b(mouse|mice|raton|paw\d{4}|aj139\w*|aj159\w*|aj199\w*|ax5\w*|a5|l7|g3|sc200|sc580|x3|r1|x11|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|g305|g203|pebble)\b/i.test(t)) return 'MOUSE';
+    if (/\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|blackshark|g435|g733|g335|zone wired|zone wireless)\b/i.test(t)) return 'HEADSET';
+    if (/\b(mousepad|mouse pad|deskmat|desk mat|playmat|tablemat|glass pad|poron pad|cordura pad|control pad|speed pad|cloth pad|glide pad|extended pad|rgb pad|custom pad|anti-slip mat|goliathus|firefly|sphex)\b|\bmat\b/i.test(t)) return 'MOUSEPAD';
+    if (/\b(mouse|mice|raton|paw\d{4}|aj139\w*|aj159\w*|aj199\w*|ax5\w*|a5|l7|g3|sc200|sc580|x3|r1|x11\w*|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|naga|g305|g203|pebble|m100r|m90|b100|m170|m185|m220|m240|m275|m280|m310|m317|m325|m330|m500|m505|m510|m525|m650|m720|m750|mx\s*master|mx\s*anywhere|g102|g203|g304|g305|g402|g403|g502|g600|g602|g603|g604|g700|g703|g900|g903|gpro)\b/i.test(t)) return 'MOUSE';
     if (/\b(monitor|display|144hz|240hz|360hz|oled monitor)\b/i.test(t)) return 'MONITOR';
-    if (/\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch)\b/i.test(t)) return 'SWITCH';
-    if (/\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak650|mk87|mad 60|mad 68|titan 68|atk 68|atk rs|atk v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ace 68|ace 75|mix 87|jet 75|fizz|kumara)\b/i.test(t)) return 'TECLADO';
-
-    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
+    if (/\b(webcam|camera|streamcam|brio|c920|c922|c930|kiyo|c270|c310)\b/i.test(t)) return 'CAMARA';
+    if (/\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch|magnetic switch|hall effect|he switch)\b/i.test(t)) return 'SWITCH';
+    if (/\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak650|mk87|mad\s*60|mad\s*68|titan\s*68|atk\s*68|atk\s*rs|atk\s*v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ornata|ace\s*68|ace\s*75|mix\s*87|jet\s*75|fizz|kumara|v75x|v100pro|rs6|68rx|68\s*v3|g915|g815|g713|g613|g512|g413|g213|k845|k840|mx\s*keys|pop\s*keys)\b/i.test(t)) return 'TECLADO';
+    if (/\b(microphone|mic|condenser|streaming mic)\b/i.test(t)) return 'ACCESORIO';
+    if (/\b(keycap|key\s*cap|wrist\s*rest|hand\s*rest|grip\s*tape|dongle|charging\s*puck|base\s*station|coiled\s*cable|digital\s*pencil|crayon|presentation\s*remote|steering\s*wheel|shifter|pedals|mouse\s*feet|skates|glides|bungee|mouse\s*bungee|light\s*strip|phone\s*cooler|cushion|backpack|power\s*supply|thunderbolt|finger\s*sleeve|studs?)\b/i.test(t)) return 'ACCESORIO';
+    if (/\b(speaker|leviathan|nommo|soundbar)\b/i.test(t)) return 'SPEAKER';
+    if (/\b(chair|enki|iskur|fujin|gaming\s*chair)\b/i.test(t)) return 'SILLA_GAMING';
+    if (/\b(fan|kunai|hanbo|computer\s*case|tomahawk|aio\s*cooler|cpu\s*cooler)\b/i.test(t)) return 'ACCESORIO';
+    if (/\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i.test(t)) return 'TECLADO';
 
     return 'OTRO';
   },
@@ -1057,17 +1514,24 @@ const PdfParser = {
 
   matchImagesToProductsGlobal(products, allImages) {
     if (!allImages || !allImages.length || !products || !products.length) return;
+    // Deduplicar imágenes (mismo dataUrl = misma imagen extraída dos veces)
+    const seenUrls = new Set();
+    const uniqueImages = allImages.filter(img => {
+      if (!img.dataUrl || seenUrls.has(img.dataUrl)) return false;
+      seenUrls.add(img.dataUrl);
+      return true;
+    });
+
     const pageNumbers = [...new Set(products.map(p => p.pageNum))];
 
     for (const pNum of pageNumbers) {
       const pageProds = products.filter(p => p.pageNum === pNum);
-      const pageImgs = allImages.filter(img => img.pageNum === pNum);
+      const pageImgs = uniqueImages.filter(img => img.pageNum === pNum);
       if (!pageProds.length || !pageImgs.length) continue;
 
       const costMatrix = [];
       for (let i = 0; i < pageProds.length; i++) {
         const p = pageProds[i];
-        const fullTitleText = (p.modelo || '') + ' ' + (p.variante || '');
         const rowCost = [];
 
         for (let j = 0; j < pageImgs.length; j++) {
@@ -1075,18 +1539,33 @@ const PdfParser = {
           const distX = Math.abs(img.x - p.x);
           const distYRaw = p.y - img.y;
 
-          let penalty = 0;
-          if (img.y > p.y + 10) penalty += 50000;
-          if (distX > 160) penalty += 30000;
+          // Hard gate: demasiado lejos → Infinity (no asignar)
+          if (distX > 300 || distYRaw > 400 || distYRaw < -100) {
+            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation: null });
+            continue;
+          }
+
+          const validation = this.validateImageForProduct(img, p);
+
+          // Hard gate: validación visual fallida → Infinity
+          if (!validation.valid) {
+            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation });
+            continue;
+          }
+
+          let penalty = (100 - validation.score) * 150;
+          if (img.y > p.y + 10) penalty += 40000;
+          if (distX > 160) penalty += 25000;
 
           const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
-          rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty });
+          rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty, validation });
         }
         costMatrix.push(rowCost);
       }
 
       const assignedProds = new Set();
       const assignedImgs = new Set();
+      const MAX_SCORE = 50000;
 
       while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
         let minPair = null;
@@ -1096,22 +1575,22 @@ const PdfParser = {
           for (let j = 0; j < pageImgs.length; j++) {
             if (assignedImgs.has(j)) continue;
             const pair = costMatrix[i][j];
+            if (pair.totalScore === Infinity) continue;
             if (!minPair || pair.totalScore < minPair.totalScore) {
               minPair = pair;
             }
           }
         }
 
-        if (!minPair) break;
-        if (minPair.distX > 250 || minPair.distYRaw > 350 || minPair.distYRaw < -80) {
-          assignedProds.add(minPair.prodIdx);
-          continue;
-        }
+        if (!minPair || minPair.totalScore > MAX_SCORE) break;
 
         const winnerProd = pageProds[minPair.prodIdx];
         const winnerImg = pageImgs[minPair.imgIdx];
 
         winnerProd.img = winnerImg.dataUrl;
+        if (minPair.validation && minPair.validation.warnings.length) {
+          winnerProd.imgWarnings = minPair.validation.warnings;
+        }
         assignedProds.add(minPair.prodIdx);
         assignedImgs.add(minPair.imgIdx);
       }

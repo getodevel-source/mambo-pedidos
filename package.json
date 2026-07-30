@@ -1,6 +1,6 @@
 {
   "name": "mambo-pedidos",
-  "version": "1.5.9",
+  "version": "1.6.0",
   "description": "Mambo Pedidos - Gestor de catalogos y pedidos para perifericos gamer",
   "main": "src/index.html",
   "scripts": {
@@ -23,13 +23,14 @@
   "author": "Mambo",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.0.0",
+    "pdfjs-dist": "^3.11.174"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-store": "^2.0.0",
-    "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-store": "^2.0.0",
     "@tauri-apps/plugin-updater": "^2.0.0"
   }
 }
