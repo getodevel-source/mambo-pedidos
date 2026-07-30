@@ -510,31 +510,46 @@ async function processFiles(files) {
     }
   }
 
-  showProgress(100, '¡Carga completada al 100%!', 'Procesando catálogo final...');
-  setTimeout(hideProgress, 400);
+  showProgress(100, '🔍 Validando calidad de datos...', 'Motor de validación cruzada...');
 
   if (pendingPreviewItems.length > 0) {
-    renderImportPreviewModal();
+    // Capa 1+3+4: Validación cruzada + semáforo + estadística
+    const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+
+    // RED → deseleccionados por defecto (no se importan)
+    for (const p of validation.rejected) {
+      p._selected = false;
+    }
+
+    // RED → rechazados (no se importan, se muestran separados)
+    if (validation.rejected.length > 0) {
+      toast(`🔴 ${validation.rejected.length} productos rechazados por validación crítica`, 'error');
+    }
+
+    // Actualizar el preview con el resultado de la validación
+    renderImportPreviewModal(validation);
   } else {
     toast('⚠️ No se detectaron productos válidos en los archivos', 'warning');
   }
+  setTimeout(hideProgress, 400);
 }
 
-function renderImportPreviewModal() {
+function renderImportPreviewModal(validation) {
   const modal = document.getElementById('importPreviewModal');
   const body = document.getElementById('importPreviewBody');
   if (!modal || !body) return;
 
-  const validCount = pendingPreviewItems.filter(i => i.status === 'VALID').length;
-  const warnCount = pendingPreviewItems.filter(i => i.status === 'WARNING').length;
-  const errCount = pendingPreviewItems.filter(i => i.status === 'ERROR').length;
+  // Usar resultados de validación si existen, sino fallback
+  const greenCount = validation ? validation.stats.green : pendingPreviewItems.filter(i => i.status === 'GREEN').length;
+  const yellowCount = validation ? validation.stats.yellow : pendingPreviewItems.filter(i => i.status === 'YELLOW').length;
+  const redCount = validation ? validation.stats.red : pendingPreviewItems.filter(i => i.status === 'RED').length;
 
-  document.getElementById('badgeValidCount').textContent = `🟢 ${validCount} Confiables`;
-  document.getElementById('badgeWarnCount').textContent = `🟡 ${warnCount} Revisar`;
-  document.getElementById('badgeErrCount').textContent = `🔴 ${errCount} Incertidumbre`;
+  document.getElementById('badgeValidCount').textContent = `🟢 ${greenCount} Confirmados`;
+  document.getElementById('badgeWarnCount').textContent = `🟡 ${yellowCount} Revisar`;
+  document.getElementById('badgeErrCount').textContent = `🔴 ${redCount} Rechazados`;
   const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
   const statusText = (llmStatus && llmStatus.available) ? ` | Modelo Local (${llmStatus.model}): Conectado` : ' | Motor Local: No detectado (Ollama/LM Studio)';
-  document.getElementById('importPreviewSummary').textContent = `Se detectaron ${pendingPreviewItems.length} productos en los archivos.${statusText}`;
+  document.getElementById('importPreviewSummary').textContent = `${pendingPreviewItems.length} productos detectados · ${greenCount} confirmados · ${redCount} rechazados.${statusText}`;
 
   // Renderizado lazy: primeras 100 filas, el resto al scrollear
   const CHUNK = 100;
@@ -542,10 +557,10 @@ function renderImportPreviewModal() {
 
   function buildRow(item, i) {
     let statusBadge = '🟢';
-    if (item.status === 'WARNING') statusBadge = '🟡';
-    if (item.status === 'ERROR') statusBadge = '🔴';
-    const warnTooltip = (item.warnings && item.warnings.length) ? item.warnings.join(' · ') : 'Confiable';
-    const rowBg = item.status === 'ERROR' ? 'background:rgba(239,68,68,0.08);' : (item.status === 'WARNING' ? 'background:rgba(234,179,8,0.06);' : '');
+    if (item.status === 'YELLOW') statusBadge = '🟡';
+    if (item.status === 'RED') statusBadge = '🔴';
+    const warnTooltip = (item.warnings && item.warnings.length) ? item.warnings.join(' · ') : 'Confirmado';
+    const rowBg = item.status === 'RED' ? 'background:rgba(239,68,68,0.12);' : (item.status === 'YELLOW' ? 'background:rgba(234,179,8,0.06);' : '');
 
     return `<tr style="${rowBg}">` +
       `<td style="text-align:center"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${i}]._selected=this.checked"></td>` +
