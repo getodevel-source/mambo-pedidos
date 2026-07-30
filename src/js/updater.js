@@ -64,28 +64,6 @@ const AppUpdater = {
     return result;
   },
 
-  async _tauriDownloadAndInstall(onProgress) {
-    // El plugin descarga el artefacto firmado y lo instala in-place
-    // "plugin:updater|download_and_install" con callback de progreso via evento
-    return new Promise((resolve, reject) => {
-      // Registrar listener de eventos de progreso
-      const unlisten = window.__TAURI__?.event?.listen
-        ? window.__TAURI__.event.listen('tauri://update-status', (event) => {
-            if (onProgress) onProgress(event.payload);
-            if (event.payload?.status === 'DONE') {
-              if (unlisten) unlisten.then?.(fn => fn?.());
-              resolve();
-            } else if (event.payload?.status === 'ERROR') {
-              if (unlisten) unlisten.then?.(fn => fn?.());
-              reject(new Error(event.payload?.error || 'Error de actualización'));
-            }
-          })
-        : Promise.resolve(null);
-
-      this._invoke('plugin:updater|download_and_install', {}).catch(reject);
-    });
-  },
-
   async checkUpdate(userInitiated = false) {
     if (this.isChecking) return;
     this.isChecking = true;
@@ -243,9 +221,9 @@ const AppUpdater = {
 
   /**
    * Punto de entrada del botón "Instalar Actualización".
-   * Usa el plugin nativo de Tauri 2.0: descarga el .nsis.zip.sig,
-   * verifica la firma criptográfica, reemplaza el binario in-place y relanza.
-   * SIN desinstalar. SIN navegador. SIN full installer.
+   * Usa el plugin nativo de Tauri 2.0: descarga el artefacto firmado,
+   * verifica la firma criptográfica minisign, reemplaza in-place y relanza.
+   * Fallback: descarga manual desde GitHub si el plugin falla.
    */
   async startDirectDownload() {
     const progressWrap = document.getElementById('updateProgressWrap');
@@ -254,38 +232,74 @@ const AppUpdater = {
     const btn = document.getElementById('updateModalBtn');
 
     if (progressWrap) progressWrap.style.display = 'block';
-    if (progressBarInner) progressBarInner.style.width = '15%';
+    if (progressBarInner) progressBarInner.style.width = '5%';
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Descargando actualización...'; }
+    if (progressText) progressText.textContent = '🔐 Verificando firma y descargando...';
 
     try {
-      if (progressText) progressText.textContent = '🔍 Obteniendo la versión más reciente...';
+      // Camino principal: plugin oficial de Tauri (con verificación de firma minisign)
+      await new Promise((resolve, reject) => {
+        let unlistenFn = null;
 
-      const release = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
-        headers: { 'Accept': 'application/vnd.github.v3+json' },
-        cache: 'no-store'
-      }).then(r => r.json());
+        const cleanup = () => {
+          if (unlistenFn) {
+            try { unlistenFn(); } catch (e) {}
+            unlistenFn = null;
+          }
+        };
 
-      const exeAsset = (release.assets || []).find(a => a.name?.endsWith('.exe')) || (release.assets || []).find(a => a.name?.endsWith('.msi'));
-      if (exeAsset?.browser_download_url) {
-        if (progressText) progressText.textContent = '⬇️ Descargando e iniciando instalador...';
-        if (progressBarInner) progressBarInner.style.width = '50%';
-        toast('⬇️ Descargando e iniciando el instalador oficial...', 'info');
+        // Listener de progreso real del plugin
+        if (window.__TAURI__?.event?.listen) {
+          window.__TAURI__.event.listen('tauri://update-status', (event) => {
+            const p = event.payload || {};
+            if (p.status === 'Started' || p.status === 'Pending') {
+              if (progressText) progressText.textContent = '⬇️ Descargando actualización firmada...';
+              if (progressBarInner) progressBarInner.style.width = '15%';
+            } else if (p.status === 'Progress') {
+              const pct = Math.min(90, Math.max(15, Math.round((p.chunkLength || 0) / 1024)));
+              if (progressBarInner) progressBarInner.style.width = pct + '%';
+              if (progressText) progressText.textContent = `⬇️ Descargando... ${pct}%`;
+            } else if (p.status === 'Done' || p.status === 'UpToDate') {
+              cleanup();
+              resolve();
+            } else if (p.status === 'Error') {
+              cleanup();
+              reject(new Error(p.error || 'Error en actualización'));
+            }
+          }).then(fn => { unlistenFn = fn; }).catch(() => {});
+        }
 
-        let pct = 50;
-        const interval = setInterval(() => {
-          pct = Math.min(pct + 10, 95);
-          if (progressBarInner) progressBarInner.style.width = pct + '%';
-          if (pct >= 95) clearInterval(interval);
-        }, 500);
+        // Timeout de seguridad: si en 5 min no hay respuesta, abortar
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timeout de descarga'));
+        }, 300000);
 
-        await this._invoke('download_and_install_update', { url: exeAsset.browser_download_url });
-        clearInterval(interval);
-        return;
-      }
-    } catch (err) {
-      console.warn('Update download error:', err);
+        this._invoke('plugin:updater|download_and_install', {})
+          .then(() => { clearTimeout(timeout); resolve(); })
+          .catch(err => { clearTimeout(timeout); cleanup(); reject(err); });
+      });
+
+      // Éxito: el plugin descargó, verificó la firma e instaló
+      if (progressText) progressText.textContent = '✅ Actualización instalada. Reiniciando...';
+      if (progressBarInner) progressBarInner.style.width = '100%';
+      toast('✅ Actualización instalada. La app se reiniciará.', 'success');
+
+      // Relanzar la app
+      setTimeout(() => {
+        this._invoke('plugin:process|restart', {}).catch(() => {
+          this._invoke('restart_app', {}).catch(() => {
+            window.location.reload();
+          });
+        });
+      }, 1500);
+
+      return;
+    } catch (pluginErr) {
+      console.warn('Plugin updater failed, falling back to manual download:', pluginErr.message || pluginErr);
     }
 
+    // Fallback: abrir descarga manual en navegador
     if (progressText) progressText.textContent = '⚠️ Abriendo descarga en navegador...';
     if (progressBarInner) progressBarInner.style.width = '100%';
     if (btn) { btn.disabled = false; btn.textContent = '🌐 Abrir descarga manual'; }

@@ -8,6 +8,9 @@ build/
 *.dmg
 *.deb
 *.AppImage
+
+# Signing keys (NEVER commit)
+.keys/
 *.tar.gz
 *.zip
 
