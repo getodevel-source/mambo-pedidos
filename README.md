@@ -1,11 +1,11 @@
-# Mambo Pedidos 📦 (v1.2.6 (Stable))
+# Mambo Pedidos 📦 (v1.6.0)
 
-[![Version](https://img.shields.io/badge/version-v1.2.6 (Stable)-orange.svg)](https://github.com/getodevel-source/mambo-pedidos/releases)
+[![Version](https://img.shields.io/badge/version-v1.6.0-orange.svg)](https://github.com/getodevel-source/mambo-pedidos/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tauri 2.0](https://img.shields.io/badge/Tauri-2.0-blueviolet.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 
-**Mambo Pedidos** es una aplicación de escritorio de alto rendimiento desarrollada por [@geto_dev](https://instagram.com/geto_dev) para la gestión inteligente de catálogos mayoristas de periféricos gamer, importación de PDFs con Visión por IA, desambiguación de modelos y armado de pedidos con cálculo automático de rentabilidad, logística y simulaciones comerciales.
+**Mambo Pedidos** es una aplicación de escritorio desarrollada por [@geto_dev](https://instagram.com/geto_dev) para la gestión inteligente de catálogos mayoristas de periféricos gamer. Importa PDFs con parsing espacial, enriquecimiento por IA local, validación visual de imágenes y armado de pedidos con cálculo automático de rentabilidad y logística.
 
 🔗 **Repositorio:** [https://github.com/getodevel-source/mambo-pedidos](https://github.com/getodevel-source/mambo-pedidos)
 
@@ -13,37 +13,48 @@
 
 ## ✨ Características Principales
 
-### 👁️ Visión por IA Neuronal (ONNX WebGPU) & Recorte de Productos
-- **Detección de Bounding Box por IA (`detectObjectBoundingBoxNeural`):** Detección semántica del objeto (producto) en el canvas del PDF que recorta márgenes muertos aplicando un colchón de seguridad del 4% para preservar siluetas de teclados, mouses y auriculares blancos o claros.
-- **Ciclo de Vida Bajo Demanda:** Inicializa los tensores de Visión ONNX WebGPU únicamente al procesar catálogos y libera el 100% de la memoria VRAM/RAM (`0MB` de residuo) al finalizar.
-- **Asociación Espacial 2D con Candados 1-a-1:** Asigna imágenes a productos por distancia euclidiana en 2D ($\sqrt{\Delta X^2 + 1.3\Delta Y^2}$) con candados (`claimedImages`) para evitar cruces en grillas multi-columna.
+### 📐 Motor de Importación Espacial (Table Row Engine)
+- **Detección automática de layout**: identifica si el catálogo es tabla (una columna de precios) o grilla (múltiples columnas) y adapta el parsing.
+- **Extracción por coordenadas X/Y**: cada producto se localiza por su posición espacial en el PDF, no por texto plano. Límites Y dinámicos calculados entre filas consecutivas.
+- **13 marcas detectadas automáticamente**: 8BitDo, AJAZZ, ATK, Attack Shark, AULA, Irok/Mars, Haimu, KZ, Logitech, Madlions, Razer, Royal Kludge, MCHOSE.
+- **15 categorías con 99.8% de cobertura**: MOUSE, TECLADO, CONTROLLER, AURICULAR, HEADSET, SWITCH, MOUSEPAD, CAMARA, SPEAKER, SILLA_GAMING, ACCESORIO, NUMPAD, MONITOR, CUIDADO_PERSONAL.
+- **Limpieza de modelos**: remoción de códigos de barras EAN, specs de sensores (PAW3950), ruido corporativo, colores separados a variante.
 
-### 🏷️ Desglose Inteligente NLP de Atributos
-- **Separación de Modelo y Variante/Color (`parseModelAndVariant`):** Desarticula cadenas largas (ej: *"AULA F75 Mechanical Keyboard (White / Reaper Switch)"*) en un **modelo corto y limpio** (`"F75"`) y una **variante de color/switch** renderizada como un badge verde pastel en las tarjetas del catálogo.
+### 🤖 IA Local por Celda (Ollama)
+- **Enriquecimiento por celda**: cada producto se envía individualmente al LLM local para limpiar nombre, detectar categoría y normalizar atributos.
+- **Grounding anti-alucinación**: verificación literal de precios FOB contra el texto crudo del PDF.
+- **Fallback determinístico**: si Ollama no está activo, el parser espacial funciona de forma autónoma.
 
-### 📊 Modal de Carga con Animación 0% a 100%
-- **Pantalla de Carga de Cristal (`#loadingOverlay`):** Modal con fondo blur de alta gama que muestra en vivo el progreso numérico animado (`0% -> 100%`), barra de progreso con neón y el estado página a página del catálogo procesado.
+### 🖼️ Validación Visual de Imágenes
+- **Color dominante**: extrae el color principal de la imagen y lo compara con la variante del producto (ej: producto "Black" con imagen blanca → rechaza).
+- **Aspect ratio por categoría**: un teclado no puede tener una imagen estrecha, un mouse no puede tener una imagen panorámica.
+- **Hard gates**: si la imagen falla la validación, el producto queda sin foto. Sin imagen > imagen incorrecta.
+- **Deduplicación**: elimina imágenes duplicadas extraídas del PDF antes del matching.
 
-### 🎨 Sidebar Simplificada y Ergonomía
-- **Botón Unificado de Importación:** Reemplaza botones apilados por un único control `📁 Cargar Carpeta / PDFs` con indicación de zona de arrastre (*drag & drop*).
-- **Herramientas Organizadas:** Acceso rápido en 1-click a Pantalla Completa y Búsqueda de Actualizaciones.
+### 🚚 Logística y Cotizaciones
+- **Flete por peso vs % FOB**: cálculo por $/Kg o porcentaje sobre FOB para envíos aéreos y marítimos.
+- **Cotización en PDF y Excel**: presupuestos formales e informes financieros con packing list aduanero.
 
-### 🚚 Logística Avanzada y Cotizaciones
-- **Flete por Peso vs % FOB:** Cálculo por $/Kg o porcentaje sobre FOB para envíos Aéreos y Marítimos.
-- **Cotización Cliente en PDF & Excel Aduanero:** Genera presupuestos formales e informes financieros en 3 pestañas.
-
-### 🔄 Actualizador Nativo Silencioso In-Place (Tauri 2.0)
-- Descarga e instalación in-place con parches firmados criptográficamente y flags nativos `/REINSTALL /NOUNINSTALL` en Windows para actualizar **sin asistentes ni ventanas de desinstalación**.
+### 🔄 Actualizador Nativo Firmado (Tauri 2.0)
+- **Plugin oficial de Tauri** para el flujo completo: check → download → verify signature → install → restart.
+- **Firma minisign**: cada update se verifica criptográficamente antes de instalar.
+- **Progreso real**: eventos del plugin muestran el avance real de la descarga.
 
 ---
 
 ## 📥 Instalación
 
 ### Windows
-1. Andá a [Releases](https://github.com/getodevel-source/mambo-pedidos/releases)
-2. Descargá el `.msi` o `.exe` de la versión `v1.2.6`
-3. Ejecutá el instalador
-4. Listo, la app buscará e instalará futuras actualizaciones silenciosamente en 1-click
+1. Ir a [Releases](https://github.com/getodevel-source/mambo-pedidos/releases)
+2. Descargar `Mambo.Pedidos_x.x.x_x64-setup.exe`
+3. Ejecutar el instalador
+4. La app busca e instala actualizaciones automáticamente
+
+### Linux
+- `.AppImage` (portable) o `.deb` (Debian/Ubuntu) disponibles en Releases
+
+### macOS
+- `.dmg` para Apple Silicon (aarch64) disponible en Releases
 
 ---
 
@@ -52,12 +63,13 @@
 | Capa | Tecnología |
 |---|---|
 | **Backend** | Rust + Tauri 2.0 |
-| **Frontend** | HTML5 + CSS3 Vanilla + JavaScript ES6+ |
-| **Motor de IA & Visión** | ONNX Runtime WebGPU + Micro-LLM Semantic Rules |
+| **Frontend** | HTML5 + CSS3 + JavaScript ES6+ (Vanilla) |
+| **IA Local** | Ollama (llama3 / qwen2.5) vía REST API |
+| **PDF Parser** | PDF.js 3.11 (extracción espacial X/Y + Canvas 2D) |
+| **Spreadsheets** | SheetJS (XLSX) + PapaParse (CSV) |
 | **Persistencia** | LocalStorage + Tauri Store |
-| **PDF Parser & Images** | PDF.js (Mozilla) + Canvas 2D API |
-| **Spreadsheets & CSV** | SheetJS (XLSX) + PapaParse |
-| **Actualizador** | Tauri 2.0 Native Silent Updater Plugin + GitHub Actions CI/CD |
+| **Updater** | Tauri Plugin Updater + minisign + GitHub Releases |
+| **CI/CD** | GitHub Actions (build multi-platform + firma) |
 
 ---
 
@@ -65,53 +77,62 @@
 
 ```
 mambo-pedidos/
-├── src/                    # Frontend WebApp
-│   ├── index.html         # Estructura e interfaz principal con modal 0-100%
-│   ├── css/               # Estilos obsidian dark mode y tooltips
+├── src/
+│   ├── index.html              # Interfaz principal
 │   └── js/
-│       ├── app.js         # Controlador principal y barra de progreso 0-100%
-│       ├── textSanitizer.js# Sanitización determinística de texto y catálogos
-│       ├── localLlm.js    # Conector a modelo de lenguaje local (Ollama / LM Studio)
-│       ├── calculator.js  # Motor de cálculo financiero y logística
-│       ├── pdfParser.js   # Extractor espacial X/Y e imágenes por IA
-│       ├── fileImporter.js# Importador CSV/Excel y Packing List
-│       ├── quoteGenerator.js# Generador de cotizaciones en PDF
-│       ├── updater.js     # Descargador nativo de actualizaciones in-place
-│       ├── storage.js     # Persistencia local
-│       └── tests.js       # Suite de 39 pruebas unitarias
-├── src-tauri/              # Backend Rust
-│   ├── src/
-│   │   ├── main.rs        # Entry point de ejecutable
-│   │   └── lib.rs         # Comandos Tauri + updater con flags silenciosos
-│   ├── Cargo.toml         # Dependencias Rust v1.2.6
-│   └── tauri.conf.json    # Configuración de Tauri 2.0
-├── .github/
-│   └── workflows/
-│       └── release.yml    # Pipeline de compilación y firma digital
-├── package.json
-└── README.md
+│       ├── app.js              # Controlador principal
+│       ├── pdfParser.js        # Motor espacial: Table Row Engine + Grid Cell Engine + validación de imágenes
+│       ├── aiCatalogEngine.js  # Motor de ingesta por IA local (3 capas anti-alucinación)
+│       ├── textSanitizer.js    # Sanitización determinística de texto
+│       ├── localLlm.js         # Conector a Ollama / LM Studio
+│       ├── catalogValidator.js # Auditor de calidad por producto (6 reglas)
+│       ├── calculator.js       # Motor de cálculo financiero y logística
+│       ├── fileImporter.js     # Importador CSV/Excel + Packing List
+│       ├── quoteGenerator.js   # Generador de cotizaciones en PDF
+│       ├── updater.js          # Actualizador nativo con firma minisign
+│       ├── storage.js          # Persistencia local
+│       └── tests.js            # Suite de pruebas unitarias
+├── src-tauri/
+│   ├── src/lib.rs              # Comandos Tauri + plugins
+│   ├── Cargo.toml
+│   └── tauri.conf.json         # Config Tauri 2.0 + updater pubkey
+├── scripts/
+│   ├── bump-version.js         # Verificador de coherencia de versión
+│   ├── build-signed.bat        # Build con clave de firma
+│   ├── test-spatial-import.js  # Test de calidad contra 13 catálogos reales
+│   └── test-geometry-dump.js   # Diagnóstico de geometría PDF
+├── .github/workflows/
+│   └── release.yml             # CI/CD multi-platform
+└── .keys/                      # Claves de firma (NUNCA commitear)
 ```
 
 ---
 
-## 🛠️ Pruebas y Desarrollo Local
+## 🛠️ Desarrollo Local
 
-### Ejecutar Suite de Pruebas Unitarias (39 PASS)
 ```bash
-node -e "const fs = require('fs'); global.window=global; global.document={createElement:()=>({getContext:()=>null})}; global.XLSX={utils:{aoa_to_sheet:()=>({}),book_new:()=>({SheetNames:[]}),book_append_sheet:(wb, ws, name)=>{ (wb.SheetNames = wb.SheetNames || []).push(name); }},writeFile:()=>{}}; const vm = require('vm'); ['validations.js', 'pdfParser.js', 'calculator.js', 'textSanitizer.js', 'localLlm.js', 'aiCatalogEngine.js', 'catalogValidator.js', 'quoteGenerator.js', 'fileImporter.js', 'updater.js', 'tests.js'].forEach(f => vm.runInThisContext(fs.readFileSync('src/js/' + f, 'utf8'))); Tests.runAll();"
+# Instalar dependencias
+npm install
+
+# Modo desarrollo
+npm run dev
+
+# Build con firma (Windows)
+scripts\build-signed.bat
+
+# Test de importación contra catálogos reales
+node scripts/test-spatial-import.js
+
+# Verificar coherencia de versión
+node scripts/bump-version.js
 ```
 
 ---
 
 ## 👤 Autor
 
-Desarrollado con ❤️ por **[@geto_dev](https://instagram.com/geto_dev)**.
+Desarrollado por **[@geto_dev](https://instagram.com/geto_dev)**.
 
 ## 📄 Licencia
 
-Este proyecto está bajo la Licencia **MIT**.
-
-
-
-
-
+**MIT**
