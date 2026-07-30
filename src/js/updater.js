@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '1.7.0',
+  CURRENT_VERSION: '1.7.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -35,7 +35,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '1.7.0';
+    return this.CURRENT_VERSION || '1.7.1';
   },
 
   /**
@@ -215,8 +215,18 @@ const AppUpdater = {
   },
 
   openInBrowser(url) {
-    const targetUrl = url || (this.latestVersion ? `${this.REPO_URL}/releases/tag/v${this.latestVersion}` : `${this.REPO_URL}/releases/latest`);
+    const targetUrl = url || this._directInstallerUrl() || (this.latestVersion ? `${this.REPO_URL}/releases/tag/v${this.latestVersion}` : `${this.REPO_URL}/releases/latest`);
     this.openExternal(targetUrl);
+  },
+
+  /**
+   * URL de descarga DIRECTA del instalador Windows (saltea la página de GitHub).
+   * Si el plugin de updater falla, al menos el .exe empieza a bajar de una.
+   */
+  _directInstallerUrl() {
+    if (!this.latestVersion) return null;
+    const v = this.latestVersion;
+    return `${this.REPO_URL}/releases/download/v${v}/Mambo.Pedidos_${v}_x64-setup.exe`;
   },
 
   /**

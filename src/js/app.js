@@ -275,6 +275,7 @@ function renderCatalog() {
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';
     html += '<td><input class="inline" value="' + esc(r.marca) + '" onchange="updateField(\'' + skuJs + '\', \'marca\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.modelo) + '" onchange="updateField(\'' + skuJs + '\', \'modelo\', this.value)"></td>';
+    html += '<td><input class="inline" value="' + esc(r.variante || '') + '" placeholder="—" onchange="updateField(\'' + skuJs + '\', \'variante\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.cat) + '" onchange="updateField(\'' + skuJs + '\', \'cat\', this.value)"></td>';
     html += '<td><input class="inline num" value="' + r.fob.toFixed(2) + '" onchange="updateField(\'' + skuJs + '\', \'fob\', this.value)"></td>';
     html += '<td>';
@@ -1050,6 +1051,17 @@ function zoomImageByUrl(url, caption) {
   if (modal) modal.style.display = 'flex';
 }
 
+function closeImageZoomModal() {
+  const modal = document.getElementById('imageZoomModal');
+  if (modal) modal.style.display = 'none';
+  activeZoomSku = null;
+}
+
+function triggerImageUpload() {
+  const input = document.getElementById('productImageFileInput');
+  if (input) input.click();
+}
+
 function openSupplierCompareModal() {
   const modal = document.getElementById('supplierCompareModal');
   const body = document.getElementById('supplierCompareBody');
@@ -1248,11 +1260,17 @@ function renderDolarBadges() {
   const cripto = liveDolarData.cripto?.venta;
 
   let html = '';
-  if (mayorista) html += `<span class="dolar-chip" onclick="applyDolarRate('mayorista')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #fff;" title="Click para aplicar $${mayorista} ARS">🏛️ Mayorista: $${Math.round(mayorista)}</span>`;
-  if (oficial) html += `<span class="dolar-chip" onclick="applyDolarRate('oficial')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #fff;" title="Click para aplicar $${oficial} ARS">🏢 Oficial: $${Math.round(oficial)}</span>`;
-  if (blue) html += `<span class="dolar-chip" onclick="applyDolarRate('blue')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #38bdf8;" title="Click para aplicar $${blue} ARS">💙 Blue: $${Math.round(blue)}</span>`;
-  if (mep) html += `<span class="dolar-chip" onclick="applyDolarRate('mep')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #a5b4fc;" title="Click para aplicar $${mep} ARS">📈 MEP: $${Math.round(mep)}</span>`;
-  if (cripto) html += `<span class="dolar-chip" onclick="applyDolarRate('cripto')" style="cursor: pointer; background: rgba(255,255,255,0.12); padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #34d399;" title="Click para aplicar $${cripto} ARS">⚡ Cripto: $${Math.round(cripto)}</span>`;
+  const chip = (key, label, value, color) =>
+    `<button class="dolar-chip" onclick="applyDolarRate('${key}')" title="Aplicar $${Math.round(value)} ARS como tipo de cambio">` +
+      `<span class="dolar-dot" style="background:${color}"></span>` +
+      `<span class="dolar-label">${label}</span>` +
+      `<span class="dolar-value">$${Math.round(value).toLocaleString('es-AR')}</span>` +
+    `</button>`;
+  if (mayorista) html += chip('mayorista', 'Mayorista', mayorista, '#e2e8f0');
+  if (oficial)   html += chip('oficial', 'Oficial', oficial, '#94a3b8');
+  if (blue)      html += chip('blue', 'Blue', blue, '#38bdf8');
+  if (mep)       html += chip('mep', 'MEP', mep, '#a5b4fc');
+  if (cripto)    html += chip('cripto', 'Cripto', cripto, '#34d399');
 
   badgeList.innerHTML = html;
 }
@@ -1269,7 +1287,7 @@ function applyDolarRate(key) {
   if (tcInput) {
     tcInput.value = Math.round(val);
     recalc();
-    toast(`💵 Tasa de Cambio aplicada: Dólar ${key.toUpperCase()} ($${Math.round(val)} ARS)`, 'success');
+    toast(`Tasa de cambio aplicada: Dólar ${key.toUpperCase()} ($${Math.round(val).toLocaleString('es-AR')} ARS)`, 'success');
   }
 }
 

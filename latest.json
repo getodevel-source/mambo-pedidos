@@ -1,27 +1,27 @@
 {
-  "version": "1.7.0",
-  "notes": "Motor de validación cruzada de 4 capas con semáforo de confianza (GREEN/YELLOW/RED). Rediseño completo del preview de importación: grid de cards visuales con imágenes, tabs de semáforo, búsqueda en vivo y animaciones premium. Mejoras en matching de imágenes (centerY, compresión, validación de ocupación).",
+  "version": "1.7.1",
+  "notes": "Correcciones críticas: extracción de imágenes (carga async de pdf.js), modal de foto que no cerraba, columna Color/Variante en el catálogo, dólar sin emojis, fallback de actualización descarga el instalador directo.",
   "pub_date": "2026-07-30T00:00:00.000Z",
   "platforms": {
     "linux-x86_64": {
       "signature": "PLACEHOLDER_LINUX_SIG",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.AppImage"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.1/Mambo.Pedidos_1.7.1_amd64.AppImage"
     },
     "linux-x86_64-appimage": {
       "signature": "PLACEHOLDER_LINUX_SIG",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.AppImage"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.1/Mambo.Pedidos_1.7.1_amd64.AppImage"
     },
     "linux-x86_64-deb": {
       "signature": "PLACEHOLDER_LINUX_SIG",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_amd64.deb"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.1/Mambo.Pedidos_1.7.1_amd64.deb"
     },
     "windows-x86_64": {
       "signature": "PLACEHOLDER_WINDOWS_SIG",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_x64-setup.exe"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.1/Mambo.Pedidos_1.7.1_x64-setup.exe"
     },
     "windows-x86_64-nsis": {
       "signature": "PLACEHOLDER_WINDOWS_SIG",
-      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.0/Mambo.Pedidos_1.7.0_x64-setup.exe"
+      "url": "https://github.com/getodevel-source/mambo-pedidos/releases/download/v1.7.1/Mambo.Pedidos_1.7.1_x64-setup.exe"
     }
   }
 }

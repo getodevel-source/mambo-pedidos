@@ -193,27 +193,47 @@ const PdfParser = {
       const argsArray = ops.argsArray;
 
       for (let i = 0; i < fnArray.length; i++) {
-        if (fnArray[i] === pdfjsLib.OPS.paintImageXObject || fnArray[i] === pdfjsLib.OPS.paintInlineImageXObject) {
+        const op = fnArray[i];
+        if (op !== pdfjsLib.OPS.paintImageXObject && op !== pdfjsLib.OPS.paintInlineImageXObject) continue;
+
+        let imgObj = null;
+        if (op === pdfjsLib.OPS.paintInlineImageXObject) {
+          // Imagen inline: el objeto viene directo en los argumentos
+          imgObj = argsArray[i][0];
+        } else {
+          // paintImageXObject: pdf.js carga la imagen de forma ASINCRÓNICA.
+          // El .get() sincrónico lanza excepción si aún no está resuelta → hay que esperar con callback.
           const imageName = argsArray[i][0];
-          let imgObj = null;
           try {
-            imgObj = page.objs.get(imageName);
+            imgObj = await new Promise((resolve) => {
+              let settled = false;
+              const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, 2500);
+              try {
+                page.objs.get(imageName, (obj) => {
+                  if (!settled) { settled = true; clearTimeout(timer); resolve(obj); }
+                });
+              } catch (e) {
+                if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
+              }
+            });
           } catch (e) {
             continue;
           }
-          if (!imgObj || !imgObj.width || !imgObj.height) continue;
-          if (imgObj.width < 25 || imgObj.height < 25) continue;
+        }
 
-          let ctm = null;
-          for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
-            if (fnArray[j] === pdfjsLib.OPS.transform) {
-              ctm = argsArray[j];
-              break;
-            }
+        if (!imgObj || !imgObj.width || !imgObj.height) continue;
+        if (imgObj.width < 25 || imgObj.height < 25) continue;
+
+        let ctm = null;
+        for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+          if (fnArray[j] === pdfjsLib.OPS.transform) {
+            ctm = argsArray[j];
+            break;
           }
+        }
 
-          let x = ctm ? ctm[4] : 0;
-          let y = ctm ? viewport.height - ctm[5] : 0;
+        let x = ctm ? ctm[4] : 0;
+        let y = ctm ? viewport.height - ctm[5] : 0;
 
           if (typeof document !== 'undefined') {
             const canvas = document.createElement('canvas');
@@ -313,7 +333,6 @@ const PdfParser = {
               }
             }
           }
-        }
       }
     } catch (err) {
       console.warn('Extracción de imágenes no soportada:', err);

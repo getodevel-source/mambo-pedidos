@@ -824,6 +824,27 @@ select option, .select option {
 .dolar-chip:active {
   transform: translateY(0);
 }
+.dolar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+.dolar-label {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.dolar-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
 
 /* ===============================================================
    CHIPS & BADGES DE FILTRO Y ESTADO
