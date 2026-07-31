@@ -86,6 +86,9 @@ const Tests = {
     this.testSpreadsheetCatalogRoundTrip();
     this.testSpreadsheetOrderRoundTrip();
     this.testSpreadsheetRouteAssertion();
+    this.testUpdaterSmokeGate();
+    this.testUpdaterManifestValidation();
+    this.testUpdaterTamperRejection();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1201,6 +1204,111 @@ const Tests = {
     const gate = QualityGate.GateOutcome({ gate: 'spreadsheet-external', reason: 'Full corpus not available' });
     this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'Spreadsheet external gate produces SKIPPED');
     this.assert(gate.gate === 'spreadsheet-external', 'Gate preserves spreadsheet-external name');
+  },
+
+  // ── Slice 4: Signed Updater Smoke ──
+
+  testUpdaterSmokeGate() {
+    // Without TAURI_SIGNED_SMOKE=1, result is SKIPPED_ENVIRONMENT_GATED
+    const result = UpdaterSmoke.runSmokeSequence({ env: {} });
+    this.assert(result.result === 'SKIPPED_ENVIRONMENT_GATED',
+      'Sin TAURI_SIGNED_SMOKE=1 → SKIPPED_ENVIRONMENT_GATED');
+    this.assert(result.sequence.includes('check-environment'),
+      'Secuencia incluye check-environment');
+    this.assert(result.evidence.gate === 'SKIPPED_ENVIRONMENT_GATED',
+      'Evidence registra gate SKIPPED');
+
+    // With gate but no manifest → REJECTED
+    const result2 = UpdaterSmoke.runSmokeSequence({ env: { TAURI_SIGNED_SMOKE: '1' } });
+    this.assert(result2.result === 'REJECTED_MANIFEST_INVALID',
+      'Con gate pero sin manifest → REJECTED_MANIFEST_INVALID');
+  },
+
+  testUpdaterManifestValidation() {
+    // Valid manifest structure
+    const validManifest = {
+      version: '1.8.0',
+      platform: 'windows-x86_64',
+      url: 'https://github.com/example/releases/latest.json',
+      hash: 'a'.repeat(64),
+      publicKey: 'dW50cnVzdGVkIGNvbW1lbnQ6IHRoaXMgaXMgYSByZWFsIHB1YmxpYyBrZXkgZm9yIHRlc3Rpbmc='
+    };
+    const check = UpdaterSmoke.validateManifest(validManifest);
+    this.assert(check.valid === true, 'Manifest válido es aceptado');
+    this.assert(check.errors.length === 0, 'Manifest válido sin errores');
+
+    // Invalid manifest
+    const invalidCheck = UpdaterSmoke.validateManifest({ version: '1.0' });
+    this.assert(invalidCheck.valid === false, 'Manifest incompleto es rechazado');
+    this.assert(invalidCheck.errors.length > 0, 'Manifest incompleto tiene errores');
+
+    // Placeholder key rejection
+    const placeholder = UpdaterSmoke.validatePublicKey('YOUR_PUBLIC_KEY_HERE');
+    this.assert(placeholder.accepted === false, 'Placeholder key es rechazada');
+    this.assert(placeholder.reason.includes('Placeholder'), 'Razón menciona Placeholder');
+
+    // Short key rejection
+    const shortKey = UpdaterSmoke.validatePublicKey('abc');
+    this.assert(shortKey.accepted === false, 'Key corta es rechazada');
+
+    // Valid key accepted
+    const goodKey = UpdaterSmoke.validatePublicKey('dW50cnVzdGVkIGNvbW1lbnQ6IHRoaXMgaXMgYSByZWFsIHB1YmxpYyBrZXkgZm9yIHRlc3Rpbmc=');
+    this.assert(goodKey.accepted === true, 'Key válida es aceptada');
+
+    // Metadata agreement
+    const agreed = UpdaterSmoke.verifyMetadataAgreement(
+      { version: '1.8.0', platform: 'windows-x86_64', hash: 'a'.repeat(64) },
+      { version: '1.8.0', platform: 'windows-x86_64' }
+    );
+    this.assert(agreed.agreed === true, 'Metadata coincidente es aceptada');
+
+    const disagreed = UpdaterSmoke.verifyMetadataAgreement(
+      { version: '1.7.0', platform: 'windows-x86_64', hash: 'a'.repeat(64) },
+      { version: '1.8.0', platform: 'windows-x86_64' }
+    );
+    this.assert(disagreed.agreed === false, 'Metadata con versión distinta es rechazada');
+  },
+
+  testUpdaterTamperRejection() {
+    const crypto = require('crypto');
+    const artifact = Buffer.from('fake-installer-bytes-for-testing');
+    const correctHash = crypto.createHash('sha256').update(artifact).digest('hex');
+    const tamperedHash = 'f'.repeat(64);
+
+    // Correct hash → verified
+    const good = UpdaterSmoke.verifyArtifactHash(artifact, correctHash);
+    this.assert(good.verified === true, 'Hash correcto → verificado');
+
+    // Tampered hash → rejected
+    const bad = UpdaterSmoke.verifyArtifactHash(artifact, tamperedHash);
+    this.assert(bad.verified === false, 'Hash alterado → rechazado');
+    this.assert(bad.reason.includes('mismatch'), 'Razón incluye mismatch');
+
+    // Full sequence with tampered artifact
+    const manifest = {
+      version: '1.8.0', platform: 'windows-x86_64',
+      url: 'https://example.com/latest.json',
+      hash: tamperedHash,
+      publicKey: 'dW50cnVzdGVkIGNvbW1lbnQ6IHRoaXMgaXMgYSByZWFsIHB1YmxpYyBrZXkgZm9yIHRlc3Rpbmc='
+    };
+    const sig = 'dW50cnVzdGVkIHNpZ25hdHVyZSBmb3IgdGVzdGluZyBwdXJwb3NlcyBvbmx5';
+    const result = UpdaterSmoke.runSmokeSequence({
+      manifest, artifactContent: artifact, signature: sig,
+      env: { TAURI_SIGNED_SMOKE: '1' }
+    });
+    this.assert(result.result === 'REJECTED_ARTIFACT_TAMPERED',
+      'Artefacto alterado → REJECTED_ARTIFACT_TAMPERED');
+    this.assert(result.sequence.includes('verify-artifact-hash'),
+      'Secuencia incluye verify-artifact-hash');
+    this.assert(!result.sequence.includes('install'),
+      'Install NO se ejecuta con artefacto alterado');
+
+    // Signature structure check
+    const sigOk = UpdaterSmoke.verifySignatureStructure(sig, manifest.publicKey);
+    this.assert(sigOk.verified === true, 'Firma estructuralmente válida');
+
+    const sigBad = UpdaterSmoke.verifySignatureStructure('', manifest.publicKey);
+    this.assert(sigBad.verified === false, 'Firma vacía → rechazada');
   }
 };
 
