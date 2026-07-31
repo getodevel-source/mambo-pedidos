@@ -80,6 +80,7 @@ const Tests = {
     this.testInfraImprovements();
     this.testReliabilityLayers();
     this.testCategoryEvidence();
+    this.testImportReliability();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -956,6 +957,51 @@ const Tests = {
     const kz = PdfParser.detectCategoryWithEvidence('ZSN Pro X', 'KZ');
     this.assert(kz.category === 'AURICULAR', `KZ → AURICULAR (got "${kz.category}")`);
     this.assert(kz.confidence === 95, `Brand-exclusive confidence = 95 (got ${kz.confidence})`);
+  },
+
+  testImportReliability() {
+    // Import summary: successful
+    const ok = Reliability.buildImportSummary({ fileName: 'catalogo.pdf', totalParsed: 50, imported: 45, skipped: 3, failed: 2 });
+    this.assert(ok.status === 'OK', 'Import OK status');
+    this.assert(ok.message.includes('45 importados'), 'Mensaje incluye count importados');
+    this.assert(ok.message.includes('3 omitidos'), 'Mensaje incluye count omitidos');
+
+    // Import summary: empty parse
+    const empty = Reliability.buildImportSummary({ fileName: 'vacío.csv', totalParsed: 0 });
+    this.assert(empty.status === 'EMPTY', 'Empty parse → EMPTY status');
+    this.assert(empty.message.includes('no produjo ningún producto'), 'Empty parse tiene diagnóstico');
+
+    // Import summary: all failed
+    const allFailed = Reliability.buildImportSummary({ fileName: 'roto.xlsx', totalParsed: 10, imported: 0, failed: 10 });
+    this.assert(allFailed.status === 'ALL_FAILED', 'All failed → ALL_FAILED status');
+
+    // Product viability
+    const viable = Reliability.validateProductViability({ modelo: 'K552', fob: 35 });
+    this.assert(viable.viable === true, 'Producto con modelo y FOB es viable');
+
+    const noModel = Reliability.validateProductViability({ modelo: '', fob: 35 });
+    this.assert(noModel.viable === false, 'Producto sin modelo no es viable');
+    this.assert(noModel.missing.includes('modelo'), 'Reporta modelo faltante');
+
+    const noFob = Reliability.validateProductViability({ modelo: 'K552', fob: 0 });
+    this.assert(noFob.viable === false, 'Producto sin FOB no es viable');
+    this.assert(noFob.missing.includes('fob'), 'Reporta FOB faltante');
+
+    // File type validation
+    const pdfOk = Reliability.validateFileType('catalogo.pdf', 'any');
+    this.assert(pdfOk.valid === true, 'PDF es tipo válido');
+    this.assert(pdfOk.detectedType === 'pdf', 'Detecta tipo pdf');
+
+    const xlsOk = Reliability.validateFileType('datos.xls', 'any');
+    this.assert(xlsOk.valid === true, 'XLS es tipo válido');
+    this.assert(xlsOk.detectedType === 'xlsx', 'XLS se mapea a xlsx');
+
+    const badType = Reliability.validateFileType('foto.jpg', 'any');
+    this.assert(badType.valid === false, 'JPG no es tipo válido');
+    this.assert(badType.reason.includes('no soportada'), 'Razón explica tipo no soportado');
+
+    const wrongType = Reliability.validateFileType('datos.csv', 'pdf');
+    this.assert(wrongType.valid === false, 'CSV cuando se espera PDF → inválido');
   },
 
   // ── Slice 1: catalog-quality-contract ──

@@ -250,6 +250,72 @@ const Reliability = {
       return { encoding: 'utf-16be', hasBOM: true };
     }
     return { encoding: 'utf-8', hasBOM: false };
+  },
+
+  // ── Layer 5: Import Result Summary ──
+
+  /**
+   * Build a structured summary of an import operation.
+   * @param {Object} opts - { fileName, totalParsed, imported, skipped, failed, emptyParse, warnings }
+   * @returns {Object} Structured summary with user-visible message
+   */
+  buildImportSummary(opts) {
+    const { fileName = '', totalParsed = 0, imported = 0, skipped = 0, failed = 0, warnings = [] } = opts || {};
+    const emptyParse = totalParsed === 0;
+
+    let status, message;
+    if (emptyParse) {
+      status = 'EMPTY';
+      message = `⚠️ "${fileName}" no produjo ningún producto. Verificá que el archivo tenga datos y el formato correcto.`;
+    } else if (failed > 0 && imported === 0) {
+      status = 'ALL_FAILED';
+      message = `❌ "${fileName}": ${failed} filas fallaron, 0 importadas. Revisá los errores.`;
+    } else if (imported > 0) {
+      status = 'OK';
+      const parts = [`${imported} importados`];
+      if (skipped > 0) parts.push(`${skipped} omitidos`);
+      if (failed > 0) parts.push(`${failed} con error`);
+      message = `✅ "${fileName}": ${parts.join(', ')}.`;
+    } else {
+      status = 'EMPTY';
+      message = `⚠️ "${fileName}": ${totalParsed} filas procesadas pero ninguna cumplió los criterios de importación.`;
+    }
+
+    return { status, message, fileName, totalParsed, imported, skipped, failed, emptyParse, warnings };
+  },
+
+  /**
+   * Validate that a parsed product has the minimum viable fields.
+   * @param {Object} item - Parsed product item
+   * @returns {{ viable: boolean, missing: string[] }}
+   */
+  validateProductViability(item) {
+    const missing = [];
+    if (!item) return { viable: false, missing: ['item'] };
+    if (!item.modelo || String(item.modelo).trim().length === 0) missing.push('modelo');
+    const fob = Number(item.fob);
+    if (!Number.isFinite(fob) || fob <= 0) missing.push('fob');
+    return { viable: missing.length === 0, missing };
+  },
+
+  /**
+   * Validate file type before processing.
+   * @param {string} fileName - The file name
+   * @param {string} expectedType - 'pdf', 'csv', 'xlsx', or 'any'
+   * @returns {{ valid: boolean, detectedType: string, reason: string }}
+   */
+  validateFileType(fileName, expectedType) {
+    const ext = (fileName || '').split('.').pop().toLowerCase();
+    const typeMap = { pdf: 'pdf', csv: 'csv', xlsx: 'xlsx', xls: 'xlsx' };
+    const detectedType = typeMap[ext] || 'unknown';
+
+    if (detectedType === 'unknown') {
+      return { valid: false, detectedType, reason: `Extensión ".${ext}" no soportada. Usá PDF, CSV o XLSX.` };
+    }
+    if (expectedType && expectedType !== 'any' && detectedType !== expectedType) {
+      return { valid: false, detectedType, reason: `Se esperaba ${expectedType} pero se recibió .${ext}` };
+    }
+    return { valid: true, detectedType, reason: '' };
   }
 };
 
