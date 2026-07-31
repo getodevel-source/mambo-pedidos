@@ -22,51 +22,8 @@ function scheduleCatalogSave() {
   }, 150);
 }
 
-function toast(msg, type = '') {
-  const t = document.getElementById('toast');
-  if (!t) return;
-  t.textContent = msg;
-  t.className = `toast show ${type}`;
-  setTimeout(() => t.classList.remove('show'), 3500);
-}
-
-
-
-function showProgress(pct, statusText = 'Procesando archivos...', subText = '') {
-  const p = document.getElementById('progress');
-  const b = document.getElementById('progressBar');
-  if (p && b) {
-    p.style.display = 'block';
-    b.style.width = `${pct}%`;
-  }
-
-  const overlay = document.getElementById('loadingOverlay');
-  const progressBar = document.getElementById('progressBarInner');
-  const progressPct = document.getElementById('progressPctText');
-  const progressTitle = document.getElementById('progressTitleText');
-  const progressSub = document.getElementById('progressSubText');
-
-  const cleanPct = Math.min(100, Math.max(0, Math.round(pct)));
-
-  if (overlay) overlay.style.display = 'flex';
-  if (progressBar) progressBar.style.width = `${cleanPct}%`;
-  if (progressPct) progressPct.textContent = `${cleanPct}%`;
-  if (progressTitle && statusText) progressTitle.textContent = statusText;
-  if (progressSub && subText) progressSub.textContent = subText;
-}
-
-function hideProgress() {
-  const p = document.getElementById('progress');
-  if (p) p.style.display = 'none';
-
-  const overlay = document.getElementById('loadingOverlay');
-  if (overlay) {
-    showProgress(100, '¡Carga completada al 100%!', 'Abriendo vista previa...');
-    setTimeout(() => {
-      overlay.style.display = 'none';
-    }, 450);
-  }
-}
+// toast, showProgress, hideProgress, showDropOverlay, hideDropOverlay
+// are now in src/js/ui/notifications.js (loaded before app.js)
 
 function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
@@ -1029,53 +986,7 @@ function recalc() {
   renderPedidoTable();
 }
 
-async function clonarPedido(index) {
-  const historial = await AppStorage.loadHistorial();
-  if (!historial[index]) return;
-  const p = historial[index];
-  selection = {};
-  p.items.forEach(it => {
-    selection[it.sku] = it.qty;
-  });
-
-  currentPedido = JSON.parse(JSON.stringify(p));
-  currentPedido.name = p.name + ' (Copia)';
-  currentPedido.date = new Date().toISOString();
-
-  switchView('pedido');
-  renderPedido();
-  toast('👯 Pedido clonado exitosamente', 'success');
-}
-
-async function copiarResumenPedido(index) {
-  const historial = await AppStorage.loadHistorial();
-  if (!historial[index]) return;
-  const p = historial[index];
-  const t = p.totals || {};
-  let txt = `📦 ${p.name}\n`;
-  txt += `📅 Fecha: ${new Date(p.date).toLocaleDateString('es-AR')}\n`;
-  txt += `------------------------------\n`;
-  p.items.forEach(it => {
-    txt += `• ${it.qty}x ${it.marca} ${it.modelo} (${it.sku}) - PVP: $${(it.pvp || 0).toLocaleString()}\n`;
-  });
-  txt += `------------------------------\n`;
-  txt += `💵 FOB Total: $${(t.fob || 0).toLocaleString()} USD\n`;
-  txt += `🚢 Costo Puesto en País: $${(t.costo || 0).toLocaleString()} USD\n`;
-  txt += `🧾 IVA separado: $${(t.ivaUsd || 0).toLocaleString()} USD / ARS $${(t.ivaArs || 0).toLocaleString()}\n`;
-  txt += `📦 Costo bruto con IVA: $${(t.totalBrutoConIva || t.costo || 0).toLocaleString()} USD\n`;
-  txt += `💰 Facturación Proyectada: $${(t.facturacion || 0).toLocaleString()} USD\n`;
-  txt += `🟢 Ganancia Neta: $${(t.margen || 0).toLocaleString()} USD (${t.margenPct || 0}%)\n`;
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(() => {
-      toast('📋 Resumen copiado al portapapeles', 'success');
-    });
-  } else {
-    toast('📋 Resumen generado en la consola', 'info');
-    console.log(txt);
-  }
-}
-
+// clonarPedido, copiarResumenPedido → src/js/ui/historyView.js
 
 let catalogViewMode = 'table';
 let activeZoomSku = null;
@@ -1677,78 +1588,9 @@ function removePedItem(idx) {
   recalc();
 }
 
-// Historial UI
-async function saveToHistorial() {
-  if (!currentPedido || !currentPedido.items.length) { toast('No hay pedido', 'error'); return; }
-
-  const validation = Validations.validateOrder({ items: currentPedido.items });
-  if (!validation.valid) {
-    showValidationPanel(validation.errors, validation.warnings);
-    toast('❌ Hay errores que corregir antes de guardar', 'error');
-    return;
-  }
-
-  currentPedido.name = document.getElementById('pedidoName').value || 'Pedido sin nombre';
-  currentPedido.costs = getCostInputs();
-  currentPedido.date = new Date().toISOString();
-
-  const res = Calculator.calculateOrder(currentPedido.items, currentPedido.costs);
-  currentPedido.totals = res.totals;
-
-  const list = await AppStorage.loadHistorial();
-  list.unshift({ ...currentPedido });
-  await AppStorage.saveHistorial(list);
-  toast('💾 ' + currentPedido.name + ' guardado', 'success');
-  updateBadges();
-  hideValidationPanel();
-  switchView('historial');
-}
-
-async function renderHistorial() {
-  const list = await AppStorage.loadHistorial();
-  const cont = document.getElementById('historialList');
-  document.getElementById('historialSubtitle').textContent = list.length + ' pedido' + (list.length !== 1 ? 's' : '') + ' guardado' + (list.length !== 1 ? 's' : '');
-  if (!list.length) {
-    cont.innerHTML = '<div class="card"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Sin pedidos guardados</div><div class="empty-sub">Armá un pedido desde el catálogo y hacé click en "Guardar en historial".</div></div></div>';
-    return;
-  }
-  let html = '';
-  list.forEach((p, i) => {
-    const t = p.totals || {};
-    const date = new Date(p.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-    html += '<div class="card" style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">';
-    html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + '</div></div>';
-    html += '<div class="row" style="gap: 24px;">';
-    html += '<div><div class="stat-label">FOB</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px;">$' + (t.fob || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="stat-label">Costo</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--blue);">$' + (t.costo || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="stat-label">Fact</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--primary);">$' + (t.facturacion || t.fact || 0).toFixed(0) + '</div></div>';
-    html += '<div><div class="stat-label">Margen</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--green);">$' + (t.margen || 0).toFixed(0) + '</div></div>';
-    html += '</div>';
-    html += '<div class="row" style="gap: 8px;">';
-    html += '<button class="btn btn-primary btn-sm" onclick="loadFromHistorial(' + i + ')">Abrir</button>';
-    html += '<button class="btn btn-secondary btn-sm" onclick="clonarPedido(' + i + ')" title="Clonar este pedido como nuevo">👯 Clonar</button>';
-    html += '<button class="btn btn-secondary btn-sm" onclick="copiarResumenPedido(' + i + ')" title="Copiar resumen al portapapeles">📋 Copiar</button>';
-    html += '<button class="btn btn-danger btn-sm" onclick="deleteFromHistorial(' + i + ')">🗑</button>';
-    html += '</div></div>';
-  });
-  cont.innerHTML = html;
-}
-
-async function loadFromHistorial(idx) {
-  const list = await AppStorage.loadHistorial();
-  currentPedido = list[idx];
-  switchView('pedido');
-  renderPedido();
-  toast('📂 Pedido cargado', 'info');
-}
-async function deleteFromHistorial(idx) {
-  if (!confirm('¿Borrar este pedido?')) return;
-  const list = await AppStorage.loadHistorial();
-  list.splice(idx, 1);
-  await AppStorage.saveHistorial(list);
-  renderHistorial();
-  updateBadges();
-}
+// Historial UI → src/js/ui/historyView.js
+// saveToHistorial, renderHistorial, loadFromHistorial,
+// clonarPedido, copiarResumenPedido, deleteFromHistorial
 
 function showValidationPanel(errors, warnings) {
   let panel = document.getElementById('validationPanel');
@@ -1901,15 +1743,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 1000);
 });
 
-function showDropOverlay() {
-  if (document.getElementById('dropOverlay')) return;
-  const o = document.createElement('div');
-  o.id = 'dropOverlay';
-  o.style.cssText = 'position: fixed; inset: 0; background: rgba(255,90,31,0.1); border: 3px dashed #FF5A1F; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; backdrop-filter: blur(4px);';
-  o.innerHTML = '<div style="background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 32px 48px; text-align: center;"><div style="font-size: 48px;">📥</div><div style="font-family: Sora, sans-serif; font-size: 18px; font-weight: 700; margin-top: 8px;">Soltá los archivos</div></div>';
-  document.body.appendChild(o);
-}
-function hideDropOverlay() { const e = document.getElementById('dropOverlay'); if (e) e.remove(); }
+// showDropOverlay/hideDropOverlay are now in src/js/ui/notifications.js
 
 // Global Escape Key Listener for Modals
 window.addEventListener('keydown', (e) => {
