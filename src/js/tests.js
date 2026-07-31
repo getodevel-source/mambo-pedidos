@@ -77,6 +77,7 @@ const Tests = {
     await this.testCellStructuredLlmPipeline();
     this.testAppUpdaterModule();
     this.testUpdaterConfigValidation();
+    this.testInfraImprovements();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -821,6 +822,35 @@ const Tests = {
     // Empty/null manifest
     const empty = AppUpdater.detectPlaceholderSignatures(null);
     this.assert(empty.clean === true, 'Manifest null → clean (no platforms to check)');
+  },
+
+  testInfraImprovements() {
+    // Progress: cancellation mechanism
+    this.assert(typeof UINotifications.requestCancel === 'function', 'requestCancel existe');
+    this.assert(typeof UINotifications.isCancelRequested === 'function', 'isCancelRequested existe');
+    this.assert(UINotifications.isCancelRequested() === false, 'Cancel no solicitado inicialmente');
+    UINotifications.requestCancel();
+    this.assert(UINotifications.isCancelRequested() === true, 'Cancel solicitado después de requestCancel');
+    UINotifications.showProgress(0);
+    this.assert(UINotifications.isCancelRequested() === false, 'showProgress resetea cancel');
+
+    // Progress: per-file progress
+    this.assert(typeof UINotifications.showFileProgress === 'function', 'showFileProgress existe');
+
+    // LLM: status label
+    const llmStatus = LocalLlm.getStatus();
+    this.assert(typeof llmStatus.label === 'string' && llmStatus.label.length > 0, 'LLM status tiene label');
+    this.assert(typeof LocalLlm.updateStatusBadge === 'function', 'updateStatusBadge existe');
+
+    // QuoteGenerator: currency formatter
+    this.assert(typeof QuoteGenerator.formatCurrency === 'function', 'formatCurrency existe');
+    const formatted = QuoteGenerator.formatCurrency(1234.56, { locale: 'en-US', currency: 'USD' });
+    this.assert(formatted.includes('1,234.56') || formatted.includes('1234.56'), `formatCurrency formatea correctamente (got "${formatted}")`);
+
+    // Image extraction: aspect ratio guard
+    this.assert(typeof PdfParser.buildImageEvidence === 'function', 'buildImageEvidence disponible');
+    const wideImg = PdfParser.buildImageEvidence('test', 1, { width: 1000, height: 10, x: 0, y: 0, dataUrl: 'data:image/png;base64,AA' }, 'SKU', 'matched');
+    this.assert(wideImg !== null, 'buildImageEvidence funciona con imagen panorámica');
   },
 
   // ── Slice 1: catalog-quality-contract ──
