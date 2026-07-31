@@ -1029,7 +1029,8 @@ function recalc() {
   renderPedidoTable();
 }
 
-function clonarPedido(index) {
+async function clonarPedido(index) {
+  const historial = await AppStorage.loadHistorial();
   if (!historial[index]) return;
   const p = historial[index];
   selection = {};
@@ -1046,7 +1047,8 @@ function clonarPedido(index) {
   toast('👯 Pedido clonado exitosamente', 'success');
 }
 
-function copiarResumenPedido(index) {
+async function copiarResumenPedido(index) {
+  const historial = await AppStorage.loadHistorial();
   if (!historial[index]) return;
   const p = historial[index];
   const t = p.totals || {};

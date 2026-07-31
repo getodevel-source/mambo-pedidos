@@ -11,7 +11,8 @@
     "build:linux": "tauri build --target x86_64-unknown-linux-gnu",
     "bump": "node scripts/bump-version.js",
     "check:version": "node scripts/bump-version.js --check",
-    "test": "node scripts/run-tests.js"
+    "test": "node scripts/run-tests.js",
+    "lint": "eslint src/js/ scripts/ --max-warnings 200"
   },
   "keywords": [
     "mambo",
@@ -24,7 +25,10 @@
   "author": "Mambo",
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.0.0",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "pdfjs-dist": "^3.11.174"
   },
   "dependencies": {
