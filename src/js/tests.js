@@ -95,6 +95,9 @@ const Tests = {
     this.testSkuAuditThreeDomains();
     this.testSkuDeterministicMapping();
     this.testSkuAmbiguityGate();
+    await this.testPersistenceWithEvidence();
+    await this.testStoreFallbackRecovery();
+    this.testImportabilityFilter();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1498,6 +1501,120 @@ const Tests = {
     // AP-3b gate
     const gate = QualityGate.GateOutcome({ gate: 'sku-migration', reason: 'AP-3b approval required' });
     this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'AP-3b gate produce SKIPPED');
+  },
+
+  // ── Slice 7: UI/E2E Persistence & Fallback ──
+
+  async testPersistenceWithEvidence() {
+    // Create items with R1-R10 evaluations
+    const item1 = {
+      sku: 'E2E-001', marca: 'Redragon', modelo: 'K552', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    item1._evaluations = CatalogValidator.evaluateItem(item1);
+
+    const item2 = {
+      sku: 'E2E-002', marca: 'AULA', modelo: 'F75', variante: 'Pink',
+      cat: 'TECLADO', fob: 41, img: '-',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    item2._evaluations = CatalogValidator.evaluateItem(item2);
+
+    const selection = { 'E2E-001': 5 };
+
+    // Save with evidence
+    const saveResult = await AppStorage.saveCatalogWithEvidence([item1, item2], selection);
+    this.assert(saveResult.evidence.itemCount === 2, 'Save evidence: 2 items');
+    this.assert(saveResult.evidence.selectionKeys === 1, 'Save evidence: 1 selection key');
+    this.assert(saveResult.evidence.hasEvaluations === true, 'Save evidence: has evaluations');
+    this.assert(typeof saveResult.backend === 'string', 'Save evidence: backend recorded');
+
+    // Load with evidence
+    const loadResult = await AppStorage.loadCatalogWithEvidence();
+    this.assert(loadResult.evidence.restored === true, 'Load evidence: restored');
+    this.assert(loadResult.evidence.itemCount === 2, 'Load evidence: 2 items restored');
+    this.assert(loadResult.evidence.hasEvaluations === true, 'Load evidence: evaluations survived');
+    this.assert(loadResult.items.length === 2, 'Load: 2 items');
+    this.assert(loadResult.sel['E2E-001'] === 5, 'Load: selection preserved');
+
+    // Verify R1-R10 evaluations survived round-trip
+    const loadedItem1 = loadResult.items.find(i => i.sku === 'E2E-001');
+    this.assert(loadedItem1 && loadedItem1._evaluations && loadedItem1._evaluations.length === 10,
+      'R1-R10 evaluations survived persistence round-trip');
+
+    // YELLOW item (missing image) is preserved, not dropped
+    const loadedItem2 = loadResult.items.find(i => i.sku === 'E2E-002');
+    this.assert(loadedItem2 !== undefined, 'YELLOW item (missing image) preserved in storage');
+    const r9 = loadedItem2._evaluations ? loadedItem2._evaluations.find(e => e.code === 'R9') : null;
+    this.assert(r9 && r9.status === 'YELLOW', 'R9 YELLOW survived persistence');
+  },
+
+  async testStoreFallbackRecovery() {
+    // Simulate Store failure by nullifying storeInstance
+    const originalStore = AppStorage.storeInstance;
+    AppStorage.storeInstance = null;
+
+    const item = {
+      sku: 'FALL-001', marca: 'Logitech', modelo: 'G203', variante: 'White',
+      cat: 'MOUSE', fob: 22.99, img: 'data:image/png;base64,BBBB',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    item._evaluations = CatalogValidator.evaluateItem(item);
+
+    // Save should fall back to LocalStorage
+    const saveResult = await AppStorage.saveCatalogWithEvidence([item], { 'FALL-001': 2 });
+    this.assert(saveResult.backend === 'localstorage', 'Fallback: backend is localstorage');
+    this.assert(saveResult.evidence.itemCount === 1, 'Fallback: 1 item saved');
+
+    // Load should recover from LocalStorage
+    const loadResult = await AppStorage.loadCatalogWithEvidence();
+    this.assert(loadResult.evidence.restored === true, 'Fallback: data restored');
+    this.assert(loadResult.evidence.backend === 'localstorage', 'Fallback: loaded from localstorage');
+    this.assert(loadResult.items.length === 1, 'Fallback: 1 item recovered');
+    this.assert(loadResult.items[0].sku === 'FALL-001', 'Fallback: correct SKU recovered');
+    this.assert(loadResult.evidence.hasEvaluations === true, 'Fallback: evaluations recovered');
+
+    // Restore original store
+    AppStorage.storeInstance = originalStore;
+  },
+
+  testImportabilityFilter() {
+    // GREEN item → importable
+    const greenItem = {
+      sku: 'GRN-001', marca: 'Redragon', modelo: 'K552', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    greenItem._evaluations = CatalogValidator.evaluateItem(greenItem);
+
+    // YELLOW item (missing image) → importable
+    const yellowItem = {
+      sku: 'YEL-001', marca: 'AULA', modelo: 'F75', variante: 'Pink',
+      cat: 'TECLADO', fob: 41, img: '-',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    yellowItem._evaluations = CatalogValidator.evaluateItem(yellowItem);
+
+    // RED item (invalid FOB) → rejected
+    const redItem = {
+      sku: 'RED-001', marca: 'Redragon', modelo: 'K552', variante: 'Black',
+      cat: 'TECLADO', fob: -5, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    redItem._evaluations = CatalogValidator.evaluateItem(redItem);
+
+    const { importable, rejected } = AppStorage.filterByImportability([greenItem, yellowItem, redItem]);
+    this.assert(importable.length === 2, `Importable: 2 items (got ${importable.length})`);
+    this.assert(rejected.length === 1, `Rejected: 1 item (got ${rejected.length})`);
+    this.assert(rejected[0].sku === 'RED-001', 'RED item is rejected');
+    this.assert(importable.some(i => i.sku === 'GRN-001'), 'GREEN item is importable');
+    this.assert(importable.some(i => i.sku === 'YEL-001'), 'YELLOW item is importable (reviewable)');
+
+    // RED item has REJECTED evaluation
+    const redR1 = redItem._evaluations.find(e => e.code === 'R1');
+    this.assert(redR1.importability === 'REJECTED', 'RED R1 has REJECTED importability');
+    this.assert(redR1.status === 'RED', 'RED R1 has RED status');
   }
 };
 

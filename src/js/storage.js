@@ -260,6 +260,111 @@ const AppStorage = {
       return { idempotent: true, reason: 'Same input identity; migration is a no-op' };
     }
     return { idempotent: false, reason: `Input changed: "${existingReceipt.inputIdentity}" → "${newReceipt.inputIdentity}"` };
+  },
+
+  // ── Slice 7: Persistence & Fallback Evidence ──
+
+  /**
+   * Save catalog with quality evidence, recording which storage backend was used.
+   * @param {Array} items - Catalog items with R1-R10 evaluations
+   * @param {Object} selection - SKU → qty map
+   * @returns {Promise<Object>} { backend: 'tauri'|'localstorage', evidence: {} }
+   */
+  async saveCatalogWithEvidence(items, selection) {
+    const evidence = { backend: null, itemCount: 0, selectionKeys: 0, hasEvaluations: false };
+    const payload = {
+      items: (items || []).map(item => {
+        const copy = Object.assign({}, item);
+        if (item._evaluations) copy._evaluations = item._evaluations;
+        return copy;
+      }),
+      sel: selection || {},
+      savedAt: new Date().toISOString()
+    };
+    evidence.itemCount = payload.items.length;
+    evidence.selectionKeys = Object.keys(payload.sel).length;
+    evidence.hasEvaluations = payload.items.some(i => i._evaluations && i._evaluations.length > 0);
+
+    if (this.storeInstance) {
+      try {
+        await this.storeInstance.set(this.KEYS.CATALOG, payload);
+        await this.storeInstance.save();
+        evidence.backend = 'tauri';
+        return { backend: 'tauri', evidence };
+      } catch (e) {
+        evidence.backend = 'localstorage';
+        evidence.tauriError = e.message;
+      }
+    } else {
+      evidence.backend = 'localstorage';
+    }
+
+    try {
+      localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(payload));
+    } catch (e) {
+      evidence.localstorageError = e.message;
+    }
+    return { backend: evidence.backend, evidence };
+  },
+
+  /**
+   * Load catalog and verify quality evidence survived the round-trip.
+   * @returns {Promise<Object>} { items, sel, evidence: { backend, itemCount, hasEvaluations, restored } }
+   */
+  async loadCatalogWithEvidence() {
+    const evidence = { backend: null, itemCount: 0, hasEvaluations: false, restored: false };
+    let data = null;
+
+    if (this.storeInstance) {
+      try {
+        data = await this.storeInstance.get(this.KEYS.CATALOG);
+        if (data) evidence.backend = 'tauri';
+      } catch (e) {
+        evidence.tauriError = e.message;
+      }
+    }
+
+    if (!data) {
+      try {
+        const raw = localStorage.getItem(this.KEYS.CATALOG);
+        if (raw) {
+          data = JSON.parse(raw);
+          evidence.backend = evidence.backend || 'localstorage';
+        }
+      } catch (e) {
+        evidence.localstorageError = e.message;
+      }
+    }
+
+    if (data && data.items && Array.isArray(data.items)) {
+      evidence.itemCount = data.items.length;
+      evidence.hasEvaluations = data.items.some(i => i._evaluations && i._evaluations.length > 0);
+      evidence.restored = true;
+      return { items: data.items, sel: data.sel || {}, evidence };
+    }
+
+    evidence.restored = false;
+    return { items: [], sel: {}, evidence };
+  },
+
+  /**
+   * Filter items by importability: RED/REJECTED rows are excluded, YELLOW/GREEN are kept.
+   * @param {Array} items - Items with _evaluations
+   * @returns {{ importable: [], rejected: [] }}
+   */
+  filterByImportability(items) {
+    const importable = [];
+    const rejected = [];
+    for (const item of (items || [])) {
+      const evals = item._evaluations || [];
+      const hasRejection = evals.some(e => e.importability === 'REJECTED');
+      if (hasRejection) {
+        rejected.push(item);
+      } else {
+        importable.push(item);
+      }
+    }
+    return { importable, rejected };
   }
 };
 
