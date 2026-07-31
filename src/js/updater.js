@@ -333,6 +333,67 @@ const AppUpdater = {
     } catch (e) {
       return false;
     }
+  },
+
+  /**
+   * Validate updater configuration at startup.
+   * Checks endpoint reachability format and rejects placeholder public keys.
+   * @returns {{ valid: boolean, warnings: string[] }}
+   */
+  validateConfig() {
+    const warnings = [];
+    const PLACEHOLDER_PATTERNS = ['PLACEHOLDER', 'YOUR_', 'REPLACE_ME', 'INSERT_', 'PASTE_'];
+
+    // Check pubkey from Tauri config (embedded at build time)
+    try {
+      const conf = window.__TAURI_INTERNALS__?.config?.plugins?.updater
+        || window.__TAURI__?.config?.plugins?.updater;
+      if (conf) {
+        const pubkey = conf.pubkey || '';
+        if (!pubkey || pubkey.length < 20) {
+          warnings.push('Updater public key is missing or too short');
+        } else {
+          const upper = pubkey.toUpperCase();
+          for (const p of PLACEHOLDER_PATTERNS) {
+            if (upper.includes(p)) {
+              warnings.push(`Updater public key contains placeholder pattern "${p}"`);
+              break;
+            }
+          }
+        }
+        const endpoints = conf.endpoints || [];
+        if (!endpoints.length) {
+          warnings.push('No updater endpoints configured');
+        } else {
+          for (const ep of endpoints) {
+            if (!ep.startsWith('https://')) {
+              warnings.push(`Updater endpoint is not HTTPS: ${ep}`);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      warnings.push(`Could not read updater config: ${e.message}`);
+    }
+
+    return { valid: warnings.length === 0, warnings };
+  },
+
+  /**
+   * Detect placeholder signatures in a release manifest (latest.json).
+   * @param {Object} manifest - Parsed latest.json
+   * @returns {{ clean: boolean, placeholders: string[] }}
+   */
+  detectPlaceholderSignatures(manifest) {
+    const placeholders = [];
+    if (!manifest || !manifest.platforms) return { clean: true, placeholders };
+    for (const [platform, info] of Object.entries(manifest.platforms)) {
+      const sig = (info.signature || '').toUpperCase();
+      if (!sig || sig.includes('PLACEHOLDER') || sig.includes('YOUR_') || sig.length < 20) {
+        placeholders.push(platform);
+      }
+    }
+    return { clean: placeholders.length === 0, placeholders };
   }
 };
 

@@ -76,6 +76,7 @@ const Tests = {
     this.testOnDemandZeroIdleMemoryGuarantee();
     await this.testCellStructuredLlmPipeline();
     this.testAppUpdaterModule();
+    this.testUpdaterConfigValidation();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -783,6 +784,43 @@ const Tests = {
     this.assert(AppUpdater.isNewerVersion('1.5.6', '1.5.7') === false, 'Compara correctamente 1.5.6 < 1.5.7');
     this.assert(typeof AppUpdater.openInBrowser === 'function', 'AppUpdater.openInBrowser disponible');
     this.assert(typeof AppUpdater.showModal === 'function', 'AppUpdater.showModal disponible para emerger pop-ups');
+  },
+
+  testUpdaterConfigValidation() {
+    // validateConfig returns structured result
+    const config = AppUpdater.validateConfig();
+    this.assert(typeof config === 'object' && config !== null, 'validateConfig devuelve objeto');
+    this.assert(typeof config.valid === 'boolean', 'validateConfig tiene campo valid');
+    this.assert(Array.isArray(config.warnings), 'validateConfig tiene array de warnings');
+
+    // detectPlaceholderSignatures with clean manifest
+    const cleanManifest = {
+      version: '1.8.0',
+      platforms: {
+        'windows-x86_64': { signature: 'dW50cnVzdGVkIHNpZ25hdHVyZQ==', url: 'https://example.com/app.exe' }
+      }
+    };
+    const clean = AppUpdater.detectPlaceholderSignatures(cleanManifest);
+    this.assert(clean.clean === true, 'Manifest con firma válida → clean');
+    this.assert(clean.placeholders.length === 0, 'Sin placeholders en manifest limpio');
+
+    // detectPlaceholderSignatures with placeholder manifest
+    const badManifest = {
+      version: '1.7.1',
+      platforms: {
+        'windows-x86_64': { signature: 'PLACEHOLDER_WINDOWS_SIG', url: 'https://example.com/app.exe' },
+        'linux-x86_64': { signature: 'PLACEHOLDER_LINUX_SIG', url: 'https://example.com/app.AppImage' }
+      }
+    };
+    const bad = AppUpdater.detectPlaceholderSignatures(badManifest);
+    this.assert(bad.clean === false, 'Manifest con PLACEHOLDER → no clean');
+    this.assert(bad.placeholders.length === 2, `Detecta 2 plataformas con placeholder (got ${bad.placeholders.length})`);
+    this.assert(bad.placeholders.includes('windows-x86_64'), 'Detecta placeholder en windows');
+    this.assert(bad.placeholders.includes('linux-x86_64'), 'Detecta placeholder en linux');
+
+    // Empty/null manifest
+    const empty = AppUpdater.detectPlaceholderSignatures(null);
+    this.assert(empty.clean === true, 'Manifest null → clean (no platforms to check)');
   },
 
   // ── Slice 1: catalog-quality-contract ──
