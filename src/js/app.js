@@ -10,6 +10,17 @@ let dragCount = 0;
 // Escape Helpers
 function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function escJs(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+function hasCatalogImage(value) {
+  return typeof value === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(value.trim());
+}
+
+let catalogSaveTimer = null;
+function scheduleCatalogSave() {
+  clearTimeout(catalogSaveTimer);
+  catalogSaveTimer = setTimeout(() => {
+    AppStorage.saveCatalog(catalog, selection).catch(err => console.error('No se pudo persistir el catálogo:', err));
+  }, 150);
+}
 
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
@@ -262,17 +273,24 @@ function renderCatalog() {
   }
 
   const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" fill="#12131C"/><circle cx="8.5" cy="8.5" r="1.5" fill="#334155"/><polyline points="21 15 16 10 5 21" stroke="#334155"/></svg>');
+  const qualityBadge = r => {
+    const status = ['GREEN', 'YELLOW', 'RED'].includes(r.status) ? r.status : 'YELLOW';
+    const labels = { GREEN: 'Verificado', YELLOW: 'Revisión', RED: 'No importable' };
+    const reason = r.qualityReason || (r.warnings || [])[0] || 'Estado de calidad no disponible';
+    const reasonHtml = status === 'GREEN' ? '' : `<small style="display:block; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted);" title="${esc(reason)}">${esc(reason)}</small>`;
+    return `<span title="${esc(reason)}" style="font-size:10px; font-weight:800; color:${status === 'GREEN' ? '#34d399' : status === 'YELLOW' ? '#fde047' : '#f87171'};">● ${labels[status]}</span>${reasonHtml}`;
+  };
 
   let html = '';
   pageItems.forEach(r => {
     const qty = selection[r.sku] || 0;
     const isSel = qty > 0;
     const skuJs = escJs(r.sku);
-    const imgHtml = r.img ? `<img src="${esc(r.img)}" onerror="this.onerror=null; this.src='${DEFAULT_SVG_IMG}';" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; cursor: zoom-in; background: rgba(0,0,0,0.4); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<img src="${DEFAULT_SVG_IMG}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; opacity: 0.4;">`;
+    const imgHtml = hasCatalogImage(r.img) ? `<img src="${esc(r.img)}" onerror="this.onerror=null; this.src='${DEFAULT_SVG_IMG}';" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; cursor: zoom-in; background: rgba(0,0,0,0.4); border: 1px solid var(--border);" onclick="zoomImage('${skuJs}')">` : `<img src="${DEFAULT_SVG_IMG}" alt="Sin imagen" title="Sin imagen: requiere revisión" style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px; opacity: 0.4;">`;
     html += '<tr' + (isSel ? ' style="background: rgba(255,90,31,0.05);"' : '') + '>';
     html += '<td class="checkbox"><input type="checkbox" ' + (isSel ? 'checked' : '') + ' onchange="toggleItem(\'' + skuJs + '\', this.checked)"></td>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
-    html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';
+    html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code><br>' + qualityBadge(r) + '</td>';
     html += '<td><input class="inline" value="' + esc(r.marca) + '" onchange="updateField(\'' + skuJs + '\', \'marca\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.modelo) + '" onchange="updateField(\'' + skuJs + '\', \'modelo\', this.value)"></td>';
     html += '<td><input class="inline" value="' + esc(r.variante || '') + '" placeholder="—" onchange="updateField(\'' + skuJs + '\', \'variante\', this.value)"></td>';
@@ -296,7 +314,7 @@ function renderCatalog() {
       const isSel = qty > 0;
       const skuJs = escJs(r.sku);
       const pvp = (r.fob * 2.5).toFixed(2);
-      const imgSrc = r.img || DEFAULT_SVG_IMG;
+      const imgSrc = hasCatalogImage(r.img) ? r.img : DEFAULT_SVG_IMG;
 
       gridHtml += `<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; border: ${isSel ? '2px solid var(--primary)' : '1px solid var(--border)'}; background: ${isSel ? 'rgba(255,87,34,0.05)' : 'var(--surface)'}; border-radius: 12px; position: relative;">`;
       gridHtml += `<div style="width: 100%; height: 140px; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in;" onclick="zoomImage('${skuJs}')">`;
@@ -304,7 +322,7 @@ function renderCatalog() {
       gridHtml += `</div>`;
       gridHtml += `<div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">`;
       gridHtml += `<span style="font-weight: 700; color: var(--primary); background: rgba(255,87,34,0.15); padding: 2px 6px; border-radius: 4px;">${esc(r.marca)}</span>`;
-      gridHtml += `<code style="font-size: 10px; color: var(--text-3);">${esc(r.sku)}</code>`;
+      gridHtml += `<code style="font-size: 10px; color: var(--text-3);">${esc(r.sku)}</code>${qualityBadge(r)}`;
       gridHtml += `</div>`;
       const variantHtml = r.variante ? `<span style="display: inline-block; font-size: 10px; font-weight: 600; color: #a7f3d0; background: rgba(16,185,129,0.15); padding: 1px 5px; border-radius: 4px; margin-left: 6px;">${esc(r.variante)}</span>` : '';
       gridHtml += `<div style="font-weight: 700; font-size: 13px; color: #fff; line-height: 1.3; height: 34px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${esc(r.modelo)}${variantHtml}</div>`;
@@ -323,36 +341,41 @@ function renderCatalog() {
   }
 
   document.getElementById('catalogBody').innerHTML = html;
-  AppStorage.saveCatalog(catalog, selection);
   updateBadges();
 }
 
 function toggleItem(sku, on) {
   if (on) { if (!selection[sku]) selection[sku] = 1; }
   else { delete selection[sku]; }
+  scheduleCatalogSave();
   renderCatalog();
 }
 function setQty(sku, val) {
   const qty = parseInt(val) || 0;
   if (qty > 0) selection[sku] = qty;
   else delete selection[sku];
+  scheduleCatalogSave();
   renderCatalog();
 }
 function toggleSelectAll(on) {
   if (on) catalog.forEach(r => selection[r.sku] = 1);
   else selection = {};
+  scheduleCatalogSave();
   renderCatalog();
 }
 function removeItem(sku) {
   if (!confirm('¿Eliminar ' + sku + '?')) return;
   catalog = catalog.filter(r => r.sku !== sku);
   delete selection[sku];
+  scheduleCatalogSave();
   renderCatalog();
 }
 function addCatalogItem() {
-  const n = catalog.length + 1;
-  const sku = 'NEW-' + String(n).padStart(4, '0');
+  const sku = typeof SkuAllocator !== 'undefined'
+    ? SkuAllocator.allocateBatch([{ marca: 'NEW', cat: 'OTRO', modelo: 'Producto nuevo', variante: '' }], catalog)[0].sku
+    : 'NEW-' + String(catalog.length + 1).padStart(4, '0');
   catalog.unshift({ sku, cat: 'OTRO', marca: '', modelo: 'Producto nuevo', variante: '', fob: 0 });
+  scheduleCatalogSave();
   showCatalogContent();
   renderCatalog();
   toast('➕ Producto agregado', 'success');
@@ -389,12 +412,15 @@ function updateField(oldSku, field, value) {
     if (!isNaN(n) && n > 0 && n <= 500) { item.fob = n; }
     else { renderCatalog(); return; }
   } else if (field === 'sku' && value && value !== oldSku) {
-    if (catalog.find(r => r.sku === value)) { toast('SKU duplicado', 'error'); renderCatalog(); return; }
-    if (selection[oldSku]) { selection[value] = selection[oldSku]; delete selection[oldSku]; }
-    item.sku = value;
+    const normalizedSku = typeof SkuAllocator !== 'undefined' ? SkuAllocator.normalizeSku(value) : value;
+    if (catalog.find(r => r !== item && (typeof SkuAllocator !== 'undefined' ? SkuAllocator.normalizeSku(r.sku) === normalizedSku : r.sku === normalizedSku))) { toast('SKU duplicado globalmente', 'error'); renderCatalog(); return; }
+    if (selection[oldSku]) { selection[normalizedSku] = selection[oldSku]; delete selection[oldSku]; }
+    item.sku = normalizedSku;
   } else if (value) {
     item[field] = value;
   }
+  if (typeof CatalogValidator !== 'undefined') CatalogValidator.runFullValidation(catalog);
+  scheduleCatalogSave();
   renderCatalog();
 }
 
@@ -496,12 +522,9 @@ async function processFiles(files) {
           ? TextSanitizer.sanitizeItem(rawItem, customBrandsList)
           : rawItem;
 
-        const evalRes = PdfParser.evaluateItemConfidence(item);
-        item.confidence = evalRes.confidence;
-        item.status = evalRes.status;
-        item.warnings = evalRes.warnings;
+        item.img = hasCatalogImage(item.img) ? item.img : '-';
         item.sourceFile = f.name;
-        item._selected = true;
+        item._selected = item.status !== 'RED' && item.importable !== false;
 
         pendingPreviewItems.push(item);
       }
@@ -514,12 +537,16 @@ async function processFiles(files) {
   showProgress(100, '🔍 Validando calidad de datos...', 'Motor de validación cruzada...');
 
   if (pendingPreviewItems.length > 0) {
+    if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(pendingPreviewItems, catalog);
     // Capa 1+3+4: Validación cruzada + semáforo + estadística
     const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
 
     // RED → deseleccionados por defecto (no se importan)
     for (const p of validation.rejected) {
       p._selected = false;
+    }
+    for (const p of validation.accepted.concat(validation.review)) {
+      p._selected = p.importable !== false;
     }
 
     // RED → rechazados (no se importan, se muestran separados)
@@ -570,7 +597,7 @@ function renderImportPreviewModal(validation) {
   const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
   const statusText = (llmStatus && llmStatus.available) ? ' · IA Local activa' : '';
   document.getElementById('importPreviewSummary').textContent =
-    `${pendingPreviewItems.length} productos detectados · ${greenCount} listos para importar${statusText}`;
+    `${pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ${yellowCount} en revisión · ${redCount} no importables${statusText}`;
 
   // Filtrar por tab + búsqueda
   const filtered = pendingPreviewItems
@@ -592,18 +619,16 @@ function renderImportPreviewModal(validation) {
   const CATS = ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'];
 
   function buildCard({ item, idx }) {
-    const status = item.status || 'GREEN';
+    const status = ['GREEN', 'YELLOW', 'RED'].includes(item.status) ? item.status : 'RED';
     const reason = (item.warnings && item.warnings.length) ? item.warnings[0] : '';
-    const imgHtml = item.img
-      ? `<img class="pv-card-img" src="${item.img}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    const imgHtml = hasCatalogImage(item.img)
+      ? `<img class="pv-card-img" src="${esc(item.img)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
-    const placeholder = `<div class="pv-card-img pv-card-img-empty" style="${item.img ? 'display:none' : ''}">📦</div>`;
+    const placeholder = `<div class="pv-card-img pv-card-img-empty" style="${hasCatalogImage(item.img) ? 'display:none' : ''}">-</div>`;
 
-    const reasonBanner = (status === 'RED' && reason)
-      ? `<div class="pv-reason">⛔ ${esc(reason)}</div>`
-      : (status === 'YELLOW' && reason)
-        ? `<div class="pv-reason pv-reason-warn">⚠️ ${esc(reason)}</div>`
-        : '';
+    const reasonBanner = reason
+      ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${status === 'RED' ? '⛔' : status === 'YELLOW' ? '⚠️' : '✅'} ${esc(reason)}</div>`
+      : '';
 
     return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
       `<label class="pv-card-check"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="pendingPreviewItems[${idx}]._selected=this.checked;updateConfirmCount()"></label>` +
@@ -611,13 +636,13 @@ function renderImportPreviewModal(validation) {
       `<div class="pv-card-media">${imgHtml}${placeholder}</div>` +
       `<div class="pv-card-body">` +
         `<div class="pv-card-brand">${esc(item.marca || 'OTRO')}</div>` +
-        `<input class="pv-card-model" value="${esc(item.modelo)}" onchange="pendingPreviewItems[${idx}].modelo=this.value" title="Modelo (clic para editar)">` +
-        `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" onchange="pendingPreviewItems[${idx}].variante=this.value">` +
+      `<input class="pv-card-model" value="${esc(item.modelo)}" onchange="updatePreviewItem(${idx}, 'modelo', this.value)" title="Modelo (clic para editar)">` +
+      `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" onchange="updatePreviewItem(${idx}, 'variante', this.value)">` +
         `<div class="pv-card-meta">` +
-          `<select class="pv-card-cat" onchange="pendingPreviewItems[${idx}].cat=this.value">` +
+          `<select class="pv-card-cat" onchange="updatePreviewItem(${idx}, 'cat', this.value)">` +
             CATS.map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
           `</select>` +
-          `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" onchange="pendingPreviewItems[${idx}].fob=parseFloat(this.value)||0"></div>` +
+          `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" onchange="updatePreviewItem(${idx}, 'fob', this.value)"></div>` +
         `</div>` +
         reasonBanner +
       `</div>` +
@@ -669,10 +694,23 @@ function updateConfirmCount() {
   if (confirmBtn) confirmBtn.textContent = `✅ Importar ${selCount} seleccionados`;
 }
 
+function updatePreviewItem(idx, field, value) {
+  const item = pendingPreviewItems[idx];
+  if (!item) return;
+  item[field] = field === 'fob'
+    ? (parseFloat(String(value).replace(',', '.')) || 0)
+    : String(value || '').trim();
+  const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+  validation.rejected.forEach(p => { p._selected = false; });
+  window._previewValidation = validation;
+  renderImportPreviewModal(validation);
+}
+
 function toggleSelectAllPreview(checked) {
   // Afecta solo los items visibles según filtro + búsqueda activos
   pendingPreviewItems.forEach(i => {
     if (previewFilter !== 'ALL' && i.status !== previewFilter) return;
+    if (i.importable === false || i.status === 'RED') return;
     if (previewSearch) {
       const hay = `${i.modelo} ${i.marca} ${i.variante} ${i.sku}`.toLowerCase();
       if (!hay.includes(previewSearch)) return;
@@ -692,7 +730,10 @@ function applyBatchBrand() {
       count++;
     }
   });
-  renderImportPreviewModal();
+  const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+  validation.rejected.forEach(p => { p._selected = false; });
+  window._previewValidation = validation;
+  renderImportPreviewModal(validation);
   toast(`🛠️ Marca "${brand}" aplicada a ${count} ítems`, 'success');
 }
 
@@ -706,7 +747,10 @@ function applyBatchCat() {
       count++;
     }
   });
-  renderImportPreviewModal();
+  const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+  validation.rejected.forEach(p => { p._selected = false; });
+  window._previewValidation = validation;
+  renderImportPreviewModal(validation);
   toast(`🛠️ Categoría "${cat}" aplicada a ${count} ítems`, 'success');
 }
 
@@ -717,7 +761,10 @@ async function autoCorrectPreviewWithAI() {
     if (typeof TextSanitizer !== 'undefined') {
       pendingPreviewItems = TextSanitizer.autoCorrectItems(pendingPreviewItems, customBrandsList);
     }
-    renderImportPreviewModal();
+    const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+    validation.rejected.forEach(p => { p._selected = false; });
+    window._previewValidation = validation;
+    renderImportPreviewModal(validation);
     toast('✨ Catálogo sanitizado correctamente', 'success');
   } catch (err) {
     console.error('Error en sanitización:', err);
@@ -741,7 +788,9 @@ function closeImportPreviewModal() {
 }
 
 async function confirmImportPreview() {
-  const selectedItems = pendingPreviewItems.filter(i => i._selected);
+  const validation = CatalogValidator.runFullValidation(pendingPreviewItems);
+  if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(pendingPreviewItems, catalog);
+  const selectedItems = pendingPreviewItems.filter(i => i._selected && i.status !== 'RED' && i.importable !== false);
   if (!selectedItems.length) {
     toast('No hay productos seleccionados para importar', 'warning');
     return;
@@ -752,17 +801,22 @@ async function confirmImportPreview() {
   let skippedCount = 0;
 
   for (const item of selectedItems) {
-    const existing = catalog.find(c =>
-      (c.sku && item.sku && c.sku === item.sku) ||
-      (c.marca.toLowerCase().trim() === item.marca.toLowerCase().trim() &&
-       c.modelo.toLowerCase().trim() === item.modelo.toLowerCase().trim() &&
-       (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim())
-    );
+    const existing = catalog.find(c => typeof SkuAllocator !== 'undefined'
+      ? SkuAllocator.isEquivalent(c, item)
+      : ((c.marca || '').toLowerCase().trim() === (item.marca || '').toLowerCase().trim() &&
+         (c.modelo || '').toLowerCase().trim() === (item.modelo || '').toLowerCase().trim() &&
+         (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim()));
 
     if (existing) {
       if (Math.abs(existing.fob - item.fob) >= 0.01) {
         existing.fob = item.fob;
         existing.cat = item.cat || existing.cat;
+        existing.variante = item.variante || existing.variante || '';
+        existing.img = hasCatalogImage(item.img) ? item.img : (existing.img || '-');
+        existing.status = item.status;
+        existing.warnings = item.warnings;
+        existing.confidence = item.confidence;
+        existing.grounded = item.grounded;
         updatedCount++;
       } else {
         skippedCount++;
@@ -775,7 +829,13 @@ async function confirmImportPreview() {
         modelo: item.modelo,
         variante: item.variante || '',
         fob: item.fob,
-        img: item.img || ''
+        img: hasCatalogImage(item.img) ? item.img : '-',
+        status: item.status,
+        warnings: item.warnings || [],
+        confidence: item.confidence,
+        grounded: item.grounded,
+        sourceFile: item.sourceFile,
+        qualityReason: item.qualityReason
       });
       addedCount++;
     }
@@ -802,8 +862,12 @@ function validarYOarmarPedido() {
   }
   const items = Object.entries(selection).map(([sku, qty]) => {
     const r = catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, img: r ? r.img || '' : '', qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
   });
+  if (items.some(item => item.status === 'RED')) {
+    toast('Hay productos en rojo que no pueden pasar a un pedido confirmado', 'error');
+    return;
+  }
 
   const validation = Validations.validateOrder({ items });
   if (!validation.valid) {
@@ -824,7 +888,7 @@ function armarPedido() {
   if (!sel.length) { toast('Seleccioná al menos un producto', 'error'); return; }
   const items = sel.map(([sku, qty]) => {
     const r = catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, img: r ? r.img || '' : '', qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
   });
   currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');
@@ -849,7 +913,7 @@ function getCostInputs() {
     derechos: document.getElementById('cDerechos')?.value || 16,
     tasa: document.getElementById('cTasa')?.value || 3,
     perc: document.getElementById('cPerc')?.value || 6,
-    ivaPct: document.getElementById('cIvaPct')?.value || 21,
+    ivaPct: document.getElementById('cIvaPct')?.value !== undefined && document.getElementById('cIvaPct')?.value !== '' ? document.getElementById('cIvaPct').value : 21,
     desp: document.getElementById('cDesp')?.value || 500,
     courier: document.getElementById('cCourier')?.value || 8,
     markup: document.getElementById('cMarkup')?.value || 2.5,
@@ -907,6 +971,7 @@ function recalc() {
   if (document.getElementById('pedFob')) document.getElementById('pedFob').textContent = '$' + t.fob.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' USD';
   if (document.getElementById('pedFobSub')) document.getElementById('pedFobSub').textContent = t.qty + ' u · ARS $' + (t.fobArs || 0).toLocaleString();
   if (document.getElementById('pedCosto')) document.getElementById('pedCosto').textContent = '$' + Math.round(t.costo).toLocaleString() + ' USD';
+  if (document.getElementById('pedCostoSub')) document.getElementById('pedCostoSub').textContent = 'Neto · Bruto con IVA $' + Math.round(t.totalBrutoConIva || t.costo).toLocaleString() + ' USD';
   if (document.getElementById('pedFact')) document.getElementById('pedFact').textContent = '$' + Math.round(t.facturacion).toLocaleString() + ' USD';
   if (document.getElementById('pedMargen')) document.getElementById('pedMargen').textContent = '$' + Math.round(t.margen).toLocaleString() + ' USD';
   if (document.getElementById('pedMargenSub')) document.getElementById('pedMargenSub').textContent = t.facturacion > 0 ? t.margenPct + '% margen (ARS $' + (t.margenArs || 0).toLocaleString() + ')' : '—';
@@ -994,6 +1059,8 @@ function copiarResumenPedido(index) {
   txt += `------------------------------\n`;
   txt += `💵 FOB Total: $${(t.fob || 0).toLocaleString()} USD\n`;
   txt += `🚢 Costo Puesto en País: $${(t.costo || 0).toLocaleString()} USD\n`;
+  txt += `🧾 IVA separado: $${(t.ivaUsd || 0).toLocaleString()} USD / ARS $${(t.ivaArs || 0).toLocaleString()}\n`;
+  txt += `📦 Costo bruto con IVA: $${(t.totalBrutoConIva || t.costo || 0).toLocaleString()} USD\n`;
   txt += `💰 Facturación Proyectada: $${(t.facturacion || 0).toLocaleString()} USD\n`;
   txt += `🟢 Ganancia Neta: $${(t.margen || 0).toLocaleString()} USD (${t.margenPct || 0}%)\n`;
 
@@ -1036,7 +1103,7 @@ function zoomImage(sku) {
   activeZoomSku = sku;
   const item = catalog.find(r => r.sku === sku);
   if (item) {
-    zoomImageByUrl(item.img || '', `${item.marca} ${item.modelo} (${item.sku})`);
+    zoomImageByUrl(hasCatalogImage(item.img) ? item.img : '', `${item.marca} ${item.modelo} (${item.sku})`);
   }
 }
 
@@ -1231,8 +1298,10 @@ let liveDolarData = null;
 
 async function fetchLiveDolarRates(userInitiated = false) {
   if (userInitiated) toast('🔄 Consultando DólarAPI en vivo...', 'info');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
-    const res = await fetch('https://dolarapi.com/v1/dolares', { cache: 'no-store' });
+    const res = await fetch('https://dolarapi.com/v1/dolares', { cache: 'no-store', signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     liveDolarData = {};
@@ -1245,6 +1314,8 @@ async function fetchLiveDolarRates(userInitiated = false) {
   } catch (err) {
     console.warn('Error al obtener cotizaciones de dólar:', err);
     if (userInitiated) toast('⚠️ No se pudo conectar con la API de Dólar', 'error');
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -1435,9 +1506,15 @@ function runDoorToDoorCalculation() {
   </div>`;
 
   html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border);">
-    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Tributos Aduana SIM (Derechos+IVA+Perc)</div>
+    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Tributos Aduana SIM (sin IVA)</div>
     <div style="font-size: 18px; font-weight: 800; color: #fde047;">$${Math.round(s.totalTributosAduanaUsd).toLocaleString()} USD</div>
     <div style="font-size: 11px; color: var(--text-muted);">ARS $${Math.round(s.totalTributosAduanaUsd * tc).toLocaleString()}</div>
+  </div>`;
+
+  html += `<div class="card" style="padding: 12px; background: rgba(244,114,182,0.12); border: 1px solid rgba(244,114,182,0.35);">
+    <div style="font-size: 10px; color: #f9a8d4; text-transform: uppercase; font-weight: 800;">IVA separado / repercutible</div>
+    <div style="font-size: 18px; font-weight: 800; color: #f472b6;">$${Math.round(s.totalIvaAduanaUsd || 0).toLocaleString()} USD</div>
+    <div style="font-size: 11px; color: #f9a8d4;">ARS $${Math.round((s.totalIvaAduanaUsd || 0) * tc).toLocaleString()}</div>
   </div>`;
 
   html += `<div class="card" style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border);">
@@ -1447,9 +1524,9 @@ function runDoorToDoorCalculation() {
   </div>`;
 
   html += `<div class="card" style="padding: 12px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4);">
-    <div style="font-size: 10px; color: #34d399; text-transform: uppercase; font-weight: 800;">PRECIO FINAL PUESTO EN PUERTA</div>
+    <div style="font-size: 10px; color: #34d399; text-transform: uppercase; font-weight: 800;">COSTO NETO PUESTO EN PUERTA</div>
     <div style="font-size: 20px; font-weight: 800; color: #34d399;">$${Math.round(s.totalPuertaUsd).toLocaleString()} USD</div>
-    <div style="font-size: 11px; color: #34d399; font-weight: 700;">ARS $${Math.round(s.totalPuertaArs).toLocaleString()}</div>
+    <div style="font-size: 11px; color: #34d399; font-weight: 700;">ARS $${Math.round(s.totalPuertaArs).toLocaleString()} · Bruto con IVA $${Math.round(s.totalPuertaConIvaUsd).toLocaleString()} USD</div>
   </div>`;
 
   html += `</div>`;
@@ -1473,7 +1550,7 @@ function runDoorToDoorCalculation() {
     html += `<td style="padding: 6px; font-weight: 600; color: #fff;">${esc(i.marca)} ${esc(i.modelo)}</td>`;
     html += `<td style="padding: 6px; font-family: monospace; color: #a5b4fc;">${i.ncm}</td>`;
     html += `<td style="padding: 6px; text-align: right; color: var(--text-muted);">$${i.fob.toFixed(2)}</td>`;
-    html += `<td style="padding: 6px; text-align: right; color: #fde047;">$${(i.totalTributosItemUsd / i.qty).toFixed(2)}</td>`;
+    html += `<td style="padding: 6px; text-align: right; color: #fde047;">$${(i.qty > 0 ? i.totalTributosItemUsd / i.qty : 0).toFixed(2)}</td>`;
     html += `<td style="padding: 6px; text-align: right; font-weight: 800; color: #34d399;">$${i.costoPuertaUnitUsd.toFixed(2)}</td>`;
     html += `<td style="padding: 6px; text-align: right; font-weight: 800; color: var(--accent);">$${Math.round(i.costoPuertaUnitArs).toLocaleString()} ARS</td>`;
     html += `</tr>`;
@@ -1509,11 +1586,16 @@ function handleProductImageFile(e) {
 function updateProductImage(sku, dataUrl) {
   const item = catalog.find(r => r.sku === sku);
   if (item) {
+    if (!hasCatalogImage(dataUrl)) {
+      toast('La imagen seleccionada no es válida', 'error');
+      return;
+    }
     item.img = dataUrl;
+    if (typeof CatalogValidator !== 'undefined') CatalogValidator.runFullValidation(catalog);
     zoomImageByUrl(dataUrl, `${item.marca} ${item.modelo} (${item.sku})`);
     renderCatalog();
     if (typeof renderPedidoTable === 'function') renderPedidoTable();
-    AppStorage.saveCatalog(catalog, selection);
+    scheduleCatalogSave();
     toast('📷 Foto del producto actualizada', 'success');
   }
 }
@@ -1521,7 +1603,7 @@ function updateProductImage(sku, dataUrl) {
 function triggerCleanBackground() {
   if (!activeZoomSku) return;
   const item = catalog.find(r => r.sku === activeZoomSku);
-  if (!item || !item.img) { toast('No hay imagen para procesar', 'error'); return; }
+  if (!item || !hasCatalogImage(item.img)) { toast('No hay imagen válida para procesar', 'error'); return; }
 
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -1563,7 +1645,7 @@ function renderPedidoTable() {
   if (!currentPedido) return;
   let html = '';
   currentPedido.items.forEach((r, i) => {
-    const imgHtml = r.img ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">🖼️</span>`;
+    const imgHtml = hasCatalogImage(r.img) ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">-</span>`;
     html += '<tr>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';
@@ -1739,6 +1821,7 @@ function loadDemoCatalog() {
   ];
   catalog = demo.map(d => ({...d}));
   selection = {};
+  scheduleCatalogSave();
   showCatalogContent();
   renderCatalog();
   toast('🎮 ' + catalog.length + ' productos demo cargados', 'success');
@@ -1774,7 +1857,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       else rows = await FileImporter.processExcelFile(file);
       
       const items = rows.map(r => ({
-        sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, color: r.variante || '', fob: r.fob, qty: 1
+        sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, qty: 1
       }));
       currentPedido = { name: 'Pedido importado ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
       switchView('pedido');
@@ -1839,4 +1922,3 @@ window.addEventListener('keydown', (e) => {
     if (window.AppUpdater && typeof window.AppUpdater.closeModal === 'function') window.AppUpdater.closeModal();
   }
 });
-

@@ -57,14 +57,8 @@ const AppStorage = {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
-      console.warn('LocalStorage quota superada. Guardando versión compacta sin imágenes pesadas...', e);
-      try {
-        // Fallback Ponytail: Strip base64 image strings to ensure data preservation without crashing
-        const compactVal = JSON.parse(JSON.stringify(value, (k, v) => (k === 'img' && typeof v === 'string' && v.length > 500 ? '' : v)));
-        localStorage.setItem(key, JSON.stringify(compactVal));
-      } catch (err) {
-        console.error('Error al guardar datos compactos en LocalStorage:', err);
-      }
+      console.error('No se pudo guardar el catálogo: cuota de almacenamiento insuficiente. Se conservaron los datos en memoria y no se eliminaron imágenes.', e);
+      throw new Error('Cuota de almacenamiento insuficiente; el catálogo no fue truncado');
     }
   },
 
@@ -88,12 +82,35 @@ const AppStorage = {
   async loadCatalog() {
     const data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
     if (data && data.items && Array.isArray(data.items)) {
-      data.items = data.items.map(item => {
+      data.items = data.items.filter(item => item && typeof item === 'object').map(item => {
         if (typeof TextSanitizer !== 'undefined' && typeof TextSanitizer.sanitizeItem === 'function') {
-          return TextSanitizer.sanitizeItem(item);
+          item = TextSanitizer.sanitizeItem(item);
         }
+        item.sku = String(item.sku || '').trim();
+        item.marca = String(item.marca || 'OTRO').trim();
+        item.modelo = String(item.modelo || 'Producto').trim();
+        item.cat = String(item.cat || 'OTRO').trim().toUpperCase();
+        item.fob = Number.parseFloat(item.fob);
+        if (!Number.isFinite(item.fob)) item.fob = 0;
+        if (!item.img || typeof item.img !== 'string' || !/^data:image\/(?:png|jpe?g|webp|gif);/i.test(item.img)) item.img = '-';
+        if (!item.variante && item.color) item.variante = item.color;
+        if (!item.color && item.variante) item.color = item.variante;
         return item;
       });
+      const previousSkus = data.items.map(item => item.sku);
+      if (typeof SkuAllocator !== 'undefined' && typeof SkuAllocator.allocateBatch === 'function') {
+        SkuAllocator.allocateBatch(data.items, []);
+      }
+      if (typeof CatalogValidator !== 'undefined' && typeof CatalogValidator.runFullValidation === 'function') {
+        CatalogValidator.runFullValidation(data.items);
+      }
+      const previousSelection = data.sel && typeof data.sel === 'object' ? data.sel : {};
+      const remappedSelection = {};
+      data.items.forEach((item, index) => {
+        const qty = Number(previousSelection[previousSkus[index]]) || 0;
+        if (item.sku && qty > 0 && !remappedSelection[item.sku]) remappedSelection[item.sku] = qty;
+      });
+      data.sel = remappedSelection;
     }
     return data;
   },

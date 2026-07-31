@@ -7,6 +7,14 @@
  *   1. Validación cruzada por producto (reglas determinísticas)
  *   3. Semáforo de confianza con rechazo activo (GREEN/YELLOW/RED)
  *   4. Validación estadística por catálogo (outliers, ratios)
+ *
+ * Contract (R1-R10): evaluateItem() produces exactly one Evaluation per code.
+ * Each Evaluation = {code,severity,status,evidence,reason,importability}.
+ * Aggregate = {violationsByCode:{R1..R10}, canonicalGroupCount:10, stats}.
+ *
+ * Approval gates (unresolved):
+ *   AP-1: Missing/invalid images are YELLOW, never GREEN, not hard-blocking.
+ *   AP-2: Sanitized fixtures checked in; full-corpus uses env-gated manifest.
  */
 
 const CatalogValidator = {
@@ -47,19 +55,22 @@ const CatalogValidator = {
    * @returns {{ status: 'GREEN'|'YELLOW'|'RED', score: number, violations: Array, critical: Array }}
    */
   validateItem(item) {
-    if (!item) return { status: 'RED', score: 0, violations: ['Producto nulo'], critical: ['Producto nulo'] };
+    if (!item) return { status: 'RED', score: 0, violations: [], critical: ['Producto nulo'], warnings: ['Producto nulo'] };
 
     const violations = [];
     const critical = [];
+    const sku = (item.sku || '').toString().trim();
     const modelo = (item.modelo || '').trim();
     const variante = (item.variante || '').trim();
     const marca = (item.marca || '').trim();
-    const cat = (item.cat || '').trim();
-    const fob = parseFloat(item.fob) || 0;
+    const cat = (item.cat || '').trim().toUpperCase();
+    const fob = Number.parseFloat(item.fob);
+
+    if (!sku || sku === '-') critical.push('SKU vacío o inválido');
 
     // ── R1: FOB válido ──
-    if (fob <= 0 || isNaN(fob)) {
-      critical.push(`FOB inválido ($${fob})`);
+    if (!Number.isFinite(fob) || fob <= 0) {
+      critical.push(`FOB inválido ($${Number.isFinite(fob) ? fob : 0})`);
     }
 
     // ── R2: Modelo no es basura ──
@@ -92,12 +103,12 @@ const CatalogValidator = {
 
     // ── R5: Categoría válida ──
     if (!cat || cat === 'OTRO') {
-      violations.push(`Categoría no clasificada ("${cat || 'vacía'}")`);
+      critical.push(`Categoría no clasificada ("${cat || 'vacía'}")`);
     }
 
     // ── R6: Marca especificada ──
     if (!marca || marca === 'OTRO') {
-      violations.push('Marca no detectada');
+      critical.push('Marca no detectada');
     }
 
     // ── R7: Variante no es un precio ──
@@ -110,8 +121,17 @@ const CatalogValidator = {
       violations.push(`Modelo y variante idénticos ("${modelo}")`);
     }
 
-    // ── R9: Imagen presente (informativo, NO afecta semáforo) ──
-    // La ausencia de imagen es esperable y no indica dato erróneo.
+    // ── R9: Imagen válida. Falta de imagen requiere revisión y bloquea verde. ──
+    const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
+    if (!hasImage) violations.push('Imagen faltante o inválida: requiere revisión');
+
+    // ── R10: Evidencia literal del FOB. ──
+    const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
+    if (grounded === false) {
+      violations.push(item.groundingReason || 'FOB sin evidencia literal suficiente');
+    } else if (grounded !== true) {
+      critical.push('Evidencia de grounding insuficiente');
+    }
 
     // ── Semáforo ──
     let status = 'GREEN';
@@ -123,11 +143,19 @@ const CatalogValidator = {
       status = 'YELLOW';
     }
 
-    const totalChecks = 9;
+    const totalChecks = 11;
     const failedCount = critical.length + violations.length;
     const score = Math.max(0, Math.round(((totalChecks - failedCount) / totalChecks) * 100));
 
-    return { status, score, violations, critical };
+    return {
+      status,
+      score,
+      violations,
+      critical,
+      grounded: grounded === true,
+      hasImage,
+      warnings: [...critical, ...violations]
+    };
   },
 
   /**
@@ -211,14 +239,28 @@ const CatalogValidator = {
     // Capa 1+3: Validación por producto
     for (const p of products) {
       const result = this.validateItem(p);
+      const sourceWarnings = Array.isArray(p.sourceWarnings) ? p.sourceWarnings : [];
+      const sourceConfidence = Number.isFinite(Number(p.confidence)) ? Number(p.confidence) : null;
+      const sourceStatus = this.normalizeStatus(p.sourceStatus || p.status);
       p._validation = result;
-      p.status = result.status;
-      p.warnings = [...result.critical, ...result.violations];
+      p.sourceStatus = sourceStatus;
+      // Preserve upstream evidence: a parser/AI RED or YELLOW result cannot be
+      // promoted back to GREEN by the deterministic checks alone.
+      p.status = this.maxStatus(result.status, sourceStatus);
+      p.warnings = [...new Set([...sourceWarnings, ...result.critical, ...result.violations])];
+      p.sourceConfidence = sourceConfidence;
       p.confidence = result.score;
+      p.grounded = p.grounded !== undefined ? p.grounded : p.isGroundedFob;
+      p.qualityReason = p.warnings[0] || 'Sin observaciones';
+      p.importable = p.status !== 'RED';
     }
 
     // Capa 4: Estadística del catálogo
     this.validateCatalogStats(products);
+    for (const p of products) {
+      p.importable = p.status !== 'RED';
+      p.qualityReason = (p.warnings && p.warnings[0]) || 'Sin observaciones';
+    }
 
     // Separar por semáforo
     const accepted = products.filter(p => p.status === 'GREEN');
@@ -237,6 +279,231 @@ const CatalogValidator = {
         greenPct: Math.round((accepted.length / Math.max(1, products.length)) * 100)
       }
     };
+  },
+
+  normalizeStatus(status) {
+    const value = String(status || '').toUpperCase();
+    if (value === 'RED' || value === 'ERROR' || value === 'INVALID') return 'RED';
+    if (value === 'YELLOW' || value === 'WARNING') return 'YELLOW';
+    if (value === 'GREEN' || value === 'VALID') return 'GREEN';
+    return '';
+  },
+
+  maxStatus(left, right) {
+    const rank = { '': 0, GREEN: 1, YELLOW: 2, RED: 3 };
+    return rank[right] > rank[left] ? right : left;
+  },
+
+  /**
+   * Emite exactamente una Evaluation por cada código R1-R10.
+   * Cada Evaluation contiene: code, severity, status, evidence, reason, importability.
+   * @param {Object} item - Producto con sku, marca, modelo, variante, cat, fob, img, grounded, etc.
+   * @returns {Array<Evaluation>} Array de 10 evaluaciones en orden R1-R10
+   */
+  evaluateItem(item) {
+    if (!item) {
+      return this._defaultEvaluations('R1', 'Producto nulo');
+    }
+
+    const evals = [];
+    const sku = (item.sku || '').toString().trim();
+    const modelo = (item.modelo || '').trim();
+    const variante = (item.variante || '').trim();
+    const marca = (item.marca || '').trim();
+    const cat = (item.cat || '').trim().toUpperCase();
+    const fob = Number.parseFloat(item.fob);
+    const sourceStatus = this.normalizeStatus(item.sourceStatus || '');
+    const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
+    const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
+
+    // ── R1: FOB válido ──
+    const fobFinite = Number.isFinite(fob) && fob > 0;
+    evals.push(this._makeEval('R1',
+      fobFinite ? 'PASS' : 'CRITICAL',
+      fobFinite ? 'GREEN' : 'RED',
+      fobFinite ? 'IMPORTABLE' : 'REJECTED',
+      { observed: Number.isFinite(fob) ? fob : 0, expected: '>0 finito', source: (item.fobRaw || `sku:${sku}`) },
+      fobFinite ? 'FOB válido' : `FOB inválido ($${Number.isFinite(fob) ? fob : 0})`
+    ));
+
+    // ── R2: Modelo no es basura ──
+    const GARBAGE_RE = /^(producto\s*item|item|\.|\-|n\/a|undefined|null|none|list|earphones?)$/i;
+    const modelOk = modelo && modelo.length >= 2
+      && !GARBAGE_RE.test(modelo)
+      && !/^\$?\d+([\.,]\d+)?$/.test(modelo)
+      && !/^(co\.?,?|ltd\.?|electronic|technology|shenzhen)$/i.test(modelo);
+    let r2Reason = 'Modelo válido';
+    if (!modelo || modelo.length < 2) r2Reason = `Modelo vacío o demasiado corto ("${modelo}")`;
+    else if (GARBAGE_RE.test(modelo)) r2Reason = `Modelo es ruido genérico ("${modelo}")`;
+    else if (/^\$?\d+([\.,]\d+)?$/.test(modelo)) r2Reason = `Modelo es un precio numérico ("${modelo}")`;
+    else if (/^(co\.?,?|ltd\.?|electronic|technology|shenzhen)$/i.test(modelo)) r2Reason = `Modelo es ruido corporativo ("${modelo}")`;
+    evals.push(this._makeEval('R2',
+      modelOk ? 'PASS' : 'CRITICAL',
+      modelOk ? 'GREEN' : 'RED',
+      modelOk ? 'IMPORTABLE' : 'REJECTED',
+      { observed: modelo, expected: 'texto significativo', source: `modelo:${sku}` },
+      r2Reason
+    ));
+
+    // ── R3: Precio sensato por categoría ──
+    const range = this.PRICE_RANGES[cat];
+    let r3Severity = 'PASS', r3Status = 'GREEN', r3Import = 'IMPORTABLE';
+    let r3Reason = 'Precio dentro de rango';
+    if (range && fob > 0) {
+      if (fob < range.min || fob > range.max) {
+        r3Severity = 'CRITICAL'; r3Status = 'RED'; r3Import = 'REJECTED';
+        r3Reason = `Precio $${fob} fuera de rango para ${cat} ($${range.min}-$${range.max})`;
+      } else if (fob > range.warn) {
+        r3Severity = 'WARNING'; r3Status = 'YELLOW'; r3Import = 'IMPORTABLE';
+        r3Reason = `Precio $${fob} inusualmente alto para ${cat} (>$${range.warn})`;
+      }
+    }
+    evals.push(this._makeEval('R3', r3Severity, r3Status, r3Import,
+      { observed: Number.isFinite(fob) ? fob : 0, expected: range ? `$${range.min}-$${range.max}` : 'sin rango', source: cat },
+      r3Reason
+    ));
+
+    // ── R4: Marca-categoría coherente ──
+    const lock = this.BRAND_LOCK[marca];
+    const brandCatOk = !lock || cat === 'OTRO' || lock.includes(cat);
+    evals.push(this._makeEval('R4',
+      brandCatOk ? 'PASS' : 'CRITICAL',
+      brandCatOk ? 'GREEN' : 'RED',
+      brandCatOk ? 'IMPORTABLE' : 'REJECTED',
+      { observed: `${marca}→${cat}`, expected: lock ? lock.join(',') : 'compatible', source: 'BRAND_LOCK' },
+      brandCatOk ? 'Marca-categoría coherente' : `${marca} no fabrica ${cat} (solo: ${lock.join(', ')})`
+    ));
+
+    // ── R5: Categoría válida ──
+    const catOk = cat && cat !== 'OTRO';
+    evals.push(this._makeEval('R5',
+      catOk ? 'PASS' : 'CRITICAL',
+      catOk ? 'GREEN' : 'RED',
+      catOk ? 'IMPORTABLE' : 'REJECTED',
+      { observed: cat || 'vacía', expected: 'categoría conocida', source: 'vocabulario' },
+      catOk ? 'Categoría válida' : `Categoría no clasificada ("${cat || 'vacía'}")`
+    ));
+
+    // ── R6: Marca especificada ──
+    const brandOk = marca && marca !== 'OTRO';
+    evals.push(this._makeEval('R6',
+      brandOk ? 'PASS' : 'CRITICAL',
+      brandOk ? 'GREEN' : 'RED',
+      brandOk ? 'IMPORTABLE' : 'REJECTED',
+      { observed: marca || 'vacía', expected: 'marca conocida', source: 'vocabulario' },
+      brandOk ? 'Marca especificada' : 'Marca no detectada'
+    ));
+
+    // ── R7: Variante no es un precio ──
+    const variantIsPrice = variante && /^[\$]?\d+([\.,]\d+)?$/.test(variante);
+    evals.push(this._makeEval('R7',
+      variantIsPrice ? 'WARNING' : 'PASS',
+      variantIsPrice ? 'YELLOW' : 'GREEN',
+      'IMPORTABLE',
+      { observed: variante, expected: 'texto descriptivo', source: 'variante' },
+      variantIsPrice ? `Variante es un precio ("${variante}")` : 'Variante descriptiva'
+    ));
+
+    // ── R8: Modelo ≠ Variante ──
+    const modelEqVariant = modelo && variante && modelo.toLowerCase() === variante.toLowerCase();
+    evals.push(this._makeEval('R8',
+      modelEqVariant ? 'WARNING' : 'PASS',
+      modelEqVariant ? 'YELLOW' : 'GREEN',
+      'IMPORTABLE',
+      { observed: `modelo:"${modelo}" variante:"${variante}"`, expected: 'distintos', source: 'modelo+variante' },
+      modelEqVariant ? `Modelo y variante idénticos ("${modelo}")` : 'Modelo y variante distintos'
+    ));
+
+    // ── R9: Imagen válida ──
+    evals.push(this._makeEval('R9',
+      hasImage ? 'PASS' : 'WARNING',
+      hasImage ? 'GREEN' : 'YELLOW',
+      'IMPORTABLE',
+      { observed: hasImage ? 'data:image/...' : 'faltante/inválida', expected: 'data:image/png|jpeg|webp|gif', source: 'img' },
+      hasImage ? 'Imagen válida' : 'Imagen faltante o inválida: requiere revisión'
+    ));
+
+    // ── R10: Evidencia de grounding ──
+    let r10Sev, r10Sta, r10Imp, r10Reason;
+    if (grounded === true) {
+      r10Sev = 'PASS'; r10Sta = 'GREEN'; r10Imp = 'IMPORTABLE';
+      r10Reason = 'FOB verificado literalmente';
+    } else if (grounded === false) {
+      r10Sev = 'WARNING'; r10Sta = 'YELLOW'; r10Imp = 'IMPORTABLE';
+      r10Reason = item.groundingReason || 'FOB sin evidencia literal suficiente';
+    } else {
+      r10Sev = 'CRITICAL'; r10Sta = 'RED'; r10Imp = 'REJECTED';
+      r10Reason = 'Evidencia de grounding insuficiente';
+    }
+    evals.push(this._makeEval('R10', r10Sev, r10Sta, r10Imp,
+      { observed: grounded === true ? 'verificado' : (grounded === false ? 'no verificado' : 'ausente'),
+        expected: 'presencia literal en fuente', source: item.groundingReason || 'grounding' },
+      r10Reason
+    ));
+
+    // Apply upstream status: a RED/YELLOW from source cannot be promoted to GREEN
+    if (sourceStatus === 'RED' || sourceStatus === 'YELLOW') {
+      for (const e of evals) {
+        if (e.status === 'GREEN') {
+          e.status = sourceStatus;
+          if (sourceStatus === 'RED') {
+            e.severity = 'WARNING';
+            e.importability = 'REJECTED';
+          }
+        }
+      }
+    }
+
+    return evals;
+  },
+
+  /**
+   * Helper: crea una Evaluation con los campos requeridos.
+   */
+  _makeEval(code, severity, status, importability, evidence, reason) {
+    return { code, severity, status, importability, evidence, reason };
+  },
+
+  /**
+   * Devuelve 10 evaluaciones por defecto (todas RED/CRITICAL) para un producto fallido.
+   */
+  _defaultEvaluations(firstCode, firstReason) {
+    const evals = [];
+    const codes = ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10'];
+    for (const code of codes) {
+      evals.push({
+        code, severity: 'CRITICAL', status: 'RED', importability: 'REJECTED',
+        evidence: { observed: 'nulo', expected: 'válido', source: 'producto_nulo' },
+        reason: code === firstCode ? firstReason : 'Producto nulo — validación imposible'
+      });
+    }
+    return evals;
+  },
+
+  /**
+   * Agrega violaciones desde evaluaciones R1-R10.
+   * @param {Array<Evaluation>} evaluations - Array de evaluaciones (p.ej. de una fila)
+   * @returns {{ violationsByCode: Object, canonicalGroupCount: number, stats: Object }}
+   */
+  aggregateViolations(evaluations) {
+    const violationsByCode = {};
+    const codes = ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10'];
+    for (const code of codes) violationsByCode[code] = 0;
+
+    for (const e of evaluations) {
+      if (e.status !== 'GREEN' && violationsByCode.hasOwnProperty(e.code)) {
+        violationsByCode[e.code]++;
+      }
+    }
+
+    const stats = {
+      total: evaluations.length,
+      green: evaluations.filter(e => e.status === 'GREEN').length,
+      yellow: evaluations.filter(e => e.status === 'YELLOW').length,
+      red: evaluations.filter(e => e.status === 'RED').length
+    };
+
+    return { violationsByCode, canonicalGroupCount: 10, stats };
   }
 };
 

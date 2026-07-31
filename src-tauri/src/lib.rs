@@ -85,6 +85,13 @@ fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "URL externa inválida".to_string())?;
+    let host = parsed.host_str().unwrap_or_default();
+    let allowed_host = matches!(host, "github.com" | "www.github.com" | "instagram.com" | "www.instagram.com");
+    if !matches!(parsed.scheme(), "http" | "https") || !allowed_host || url.chars().any(|c| matches!(c, '&' | '|' | '<' | '>' | '^' | '"')) {
+        return Err("URL externa no permitida".to_string());
+    }
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -106,41 +113,6 @@ fn open_external_url(url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    Ok(())
-}
-
-#[tauri::command]
-async fn download_and_install_update(url: String) -> Result<(), String> {
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("HTTP Error {}", response.status()));
-    }
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-
-    let temp_dir = std::env::temp_dir();
-    let is_msi = url.to_lowercase().ends_with(".msi");
-    let file_name = if is_msi { "mambo_update.msi" } else { "mambo_update.exe" };
-    let temp_path = temp_dir.join(file_name);
-
-    std::fs::write(&temp_path, &bytes).map_err(|e| e.to_string())?;
-
-    #[cfg(target_os = "windows")]
-    {
-        if is_msi {
-            std::process::Command::new("msiexec")
-                .args(["/i", temp_path.to_str().unwrap()])
-                .spawn()
-                .map_err(|e| e.to_string())?;
-        } else {
-            std::process::Command::new(&temp_path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        std::process::exit(0);
-    }
-
-    #[cfg(not(target_os = "windows"))]
     Ok(())
 }
 
@@ -200,7 +172,7 @@ async fn query_local_ai(
     image_base64: Option<String>,
     system: Option<String>,
     format: Option<serde_json::Value>,
-    options: Option<serde_json::Value>,
+    _options: Option<serde_json::Value>,
     timeout_secs: Option<u64>
 ) -> Result<serde_json::Value, String> {
     let base_url = endpoint.unwrap_or_else(|| "http://localhost:8080".to_string());
@@ -213,7 +185,7 @@ async fn query_local_ai(
 
     // First try native llama-server endpoint (/completion)
     let native_url = format!("{}/completion", base_url.trim_end_matches('/'));
-    let mut native_body = serde_json::json!({
+    let native_body = serde_json::json!({
         "prompt": format!("System: {}\nUser: {}\nAssistant:", system.unwrap_or_default(), prompt),
         "temperature": 0.1,
         "n_predict": 1024,
@@ -321,7 +293,6 @@ pub fn run() {
             validate_order,
             get_app_data_dir,
             open_external_url,
-            download_and_install_update,
             check_local_ai_status,
             query_local_ai,
             start_local_ai_session,

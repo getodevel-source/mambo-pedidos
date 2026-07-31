@@ -15,7 +15,7 @@ const Tests = {
     }
   },
 
-  runAll() {
+  async runAll() {
     console.log('🧪 Ejecutando Suite de Pruebas Unitarias de Mambo Pedidos...');
     this.results = [];
 
@@ -57,8 +57,16 @@ const Tests = {
     this.testCategoryChipsIconSupport();
     this.testRepairCatalogItem();
     this.testCatalogValidatorRules();
+    this.testMissingImageIsNotGreen();
+    this.testUpstreamQualityCannotBePromoted();
+    this.testGroundingBarrier();
+    this.testGlobalSkuCollisionAllocation();
+    this.testIvaIsSeparateFromProductCost();
+    this.testColorVariantRoundTripContract();
+    this.testUpdaterNotesArePlainText();
     this.testPreserveModelNamesWithoutGenericOverwrite();
     this.testImageExtractionNoAbortingBreak();
+    this.testInvalidImageIsNotAssigned();
     this.testKpiMinFobDecimalFormatting();
     this.testEscapeKeyModalDismissal();
     this.testZeroTotalQtyDoorToDoorLiquidation();
@@ -66,13 +74,17 @@ const Tests = {
     this.testCatalogFiltersAudit();
     this.testRealCatalogCoherence();
     this.testOnDemandZeroIdleMemoryGuarantee();
-    this.testCellStructuredLlmPipeline();
+    await this.testCellStructuredLlmPipeline();
     this.testAppUpdaterModule();
+    this.testContractEvaluateItem();
+    this.testContractViolationsByCode();
+    this.testContractGateOutcome();
+    this.testContractFixtureRoundTrip();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
     console.log(`\n📊 Resultado: ${passed}/${total} pruebas pasaron exitosamente.`);
-    return { passed, total, results: this.results };
+    return { passed, failed: total - passed, total, results: this.results };
   },
 
   testCalculator() {
@@ -338,23 +350,23 @@ const Tests = {
 
   testColorGuardPinkVsBlack() {
     // Canvas profile of a dark/black image: low luminance
-    const darkProfile = { avgR: 30, avgG: 30, avgB: 30, avgSat: 0, avgVal: 0.15, hue: 0 };
-    const res = AiDisambiguator.verifyImageColorMatch(darkProfile, 'Pink Controller');
-    this.assert(res.match === false, 'Color Guard rechazó la imagen oscura/negra asignada a "Pink Controller"');
+    const darkImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'BLACK', confidence: 70 } };
+    const res = PdfParser.validateImageForProduct(darkImage, { cat: 'CONTROLLER', modelo: 'Pink Controller', variante: 'Pink' });
+    this.assert(res.valid === false, 'Color Guard rechazó la imagen oscura/negra asignada a "Pink Controller"');
   },
 
   testColorGuardWhiteVsBlack() {
     // Canvas profile of a dark image vs White title
-    const darkProfile = { avgR: 20, avgG: 20, avgB: 20, avgSat: 0, avgVal: 0.10, hue: 0 };
-    const res = AiDisambiguator.verifyImageColorMatch(darkProfile, 'White Controller for Xbox');
-    this.assert(res.match === false, 'Color Guard rechazó la imagen negra asignada a "White Controller"');
+    const darkImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'BLACK', confidence: 70 } };
+    const res = PdfParser.validateImageForProduct(darkImage, { cat: 'CONTROLLER', modelo: 'White Controller for Xbox', variante: 'White' });
+    this.assert(res.valid === false, 'Color Guard rechazó la imagen negra asignada a "White Controller"');
   },
 
   testColorGuardGreenPass() {
     // A green controller image: high green channel, green hue
-    const greenProfile = { avgR: 40, avgG: 140, avgB: 50, avgSat: 0.75, avgVal: 0.55, hue: 112 };
-    const res = AiDisambiguator.verifyImageColorMatch(greenProfile, 'Green 8BitDo Ultimate 2C Controller');
-    this.assert(res.match === true, 'Color Guard validó correctamente foto verde para "Green Controller"');
+    const greenImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'GREEN', confidence: 70 } };
+    const res = PdfParser.validateImageForProduct(greenImage, { cat: 'CONTROLLER', modelo: 'Green 8BitDo Ultimate 2C Controller', variante: 'Green' });
+    this.assert(res.valid === true, 'Color Guard validó correctamente foto verde para "Green Controller"');
   },
 
   testTopDownDirectionalGate() {
@@ -385,14 +397,14 @@ const Tests = {
 
   testColorGuardPinkVsPurple() {
     // Purple profile: hue 270 (purple/violet)
-    const purpleProfile = { avgR: 120, avgG: 60, avgB: 180, avgSat: 0.65, avgVal: 0.70, hue: 270 };
-    const resPink = AiDisambiguator.verifyImageColorMatch(purpleProfile, '8BitDo Ultimate 2C Controller Pink');
-    this.assert(resPink.match === false, 'Color Guard rechazó la imagen Violeta/Púrpura asignada a "Pink Controller"');
+    const purpleImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'PURPLE', confidence: 70 } };
+    const resPink = PdfParser.validateImageForProduct(purpleImage, { cat: 'CONTROLLER', modelo: '8BitDo Ultimate 2C Controller', variante: 'Pink' });
+    this.assert(resPink.valid === false, 'Color Guard rechazó la imagen Violeta/Púrpura asignada a "Pink Controller"');
 
     // Pink profile: hue 330 (pink/magenta)
-    const pinkProfile = { avgR: 220, avgG: 80, avgB: 160, avgSat: 0.64, avgVal: 0.86, hue: 330 };
-    const resPurple = AiDisambiguator.verifyImageColorMatch(pinkProfile, '8BitDo Ultimate 2C Controller Purple');
-    this.assert(resPurple.match === false, 'Color Guard rechazó la imagen Rosa/Pink asignada a "Purple Controller"');
+    const pinkImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'PINK', confidence: 70 } };
+    const resPurple = PdfParser.validateImageForProduct(pinkImage, { cat: 'CONTROLLER', modelo: '8BitDo Ultimate 2C Controller', variante: 'Purple' });
+    this.assert(resPurple.valid === false, 'Color Guard rechazó la imagen Rosa/Pink asignada a "Purple Controller"');
   },
 
   testGlobalBipartiteMatching() {
@@ -406,15 +418,15 @@ const Tests = {
     const pinkProfile = { avgR: 220, avgG: 80, avgB: 160, avgSat: 0.64, avgVal: 0.86, hue: 330 };
     const purpleProfile = { avgR: 120, avgG: 60, avgB: 180, avgSat: 0.65, avgVal: 0.70, hue: 270 };
 
-    const imgPink = { pageNum: 1, x: 100, y: 80, width: 200, height: 200, dataUrl: 'data:pink', colorProfile: pinkProfile };
-    const imgPurple = { pageNum: 1, x: 250, y: 80, width: 200, height: 200, dataUrl: 'data:purple', colorProfile: purpleProfile };
+    const imgPink = { pageNum: 1, x: 100, y: 80, width: 200, height: 200, dataUrl: 'data:image/png;base64,AAAA', colorProfile: pinkProfile };
+    const imgPurple = { pageNum: 1, x: 250, y: 80, width: 200, height: 200, dataUrl: 'data:image/png;base64,BBBB', colorProfile: purpleProfile };
 
     const products = PdfParser.parseRows(rows, '8BitDo', 0, [], [imgPink, imgPurple]);
     const prodPink = products.find(p => p.variante.toLowerCase().includes('pink'));
     const prodPurple = products.find(p => p.variante.toLowerCase().includes('purple'));
 
-    this.assert(prodPink && prodPink.img === 'data:pink', 'Asignación Bipartita asignó correctamente la foto Pink al producto Pink');
-    this.assert(prodPurple && prodPurple.img === 'data:purple', 'Asignación Bipartita asignó correctamente la foto Purple al producto Purple');
+    this.assert(prodPink && prodPink.img === 'data:image/png;base64,AAAA', 'Asignación Bipartita asignó correctamente la foto Pink al producto Pink');
+    this.assert(prodPurple && prodPurple.img === 'data:image/png;base64,BBBB', 'Asignación Bipartita asignó correctamente la foto Purple al producto Purple');
   },
 
   testHeaderPriorityRowContext() {
@@ -443,8 +455,8 @@ const Tests = {
       { str: 'Ultimate 2 Wireless Controller', transform: [1,0,0,1,300,500] },
       { str: 'White - $35.19', transform: [1,0,0,1,300,350] }
     ];
-    const imgBlack = { pageNum: 1, x: 100, y: 380, width: 200, height: 200, dataUrl: 'img:black', colorProfile: null };
-    const imgWhite = { pageNum: 1, x: 300, y: 380, width: 200, height: 200, dataUrl: 'img:white', colorProfile: null };
+    const imgBlack = { pageNum: 1, x: 100, y: 380, width: 200, height: 200, dataUrl: 'data:image/png;base64,AAAA', colorProfile: null };
+    const imgWhite = { pageNum: 1, x: 300, y: 380, width: 200, height: 200, dataUrl: 'data:image/png;base64,BBBB', colorProfile: null };
 
     const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [imgBlack, imgWhite], '8BitDo', []);
     this.assert(products.length === 2, 'Grid Engine v5 extrajo exactamente 2 productos de la grilla de 2 columnas');
@@ -452,8 +464,8 @@ const Tests = {
     const pBlack = products.find(p => p.variante.includes('Black'));
     const pWhite = products.find(p => p.variante.includes('White'));
 
-    this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless Controller' && pBlack.img === 'img:black', 'Producto 1 (Black) extrajo modelo limpio y su foto de celda aislada');
-    this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless Controller' && pWhite.img === 'img:white', 'Producto 2 (White) extrajo modelo limpio y su foto de celda aislada');
+    this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless Controller' && pBlack.img === 'data:image/png;base64,AAAA', 'Producto 1 (Black) extrajo modelo limpio y su foto de celda aislada');
+    this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless Controller' && pWhite.img === 'data:image/png;base64,BBBB', 'Producto 2 (White) extrajo modelo limpio y su foto de celda aislada');
   },
 
   testDoorToDoorCustomsLiquidation() {
@@ -536,12 +548,73 @@ const Tests = {
 
   testCatalogValidatorRules() {
     const sampleCatalog = [
-      { sku: 'MOU-001', marca: 'VGN', modelo: 'Dragonfly F1 Pro', variante: 'White', cat: 'MOUSE', fob: 29.99 },
-      { sku: 'KEY-002', marca: 'AULA', modelo: 'F75 Gasket Keyboard', variante: 'Sea Salt', cat: 'TECLADO', fob: 45.50 }
+      { sku: 'MOU-001', marca: 'VGN', modelo: 'Dragonfly F1 Pro', variante: 'White', cat: 'MOUSE', fob: 29.99, img: 'data:image/png;base64,AAAA', grounded: true },
+      { sku: 'KEY-002', marca: 'AULA', modelo: 'F75 Gasket Keyboard', variante: 'Sea Salt', cat: 'TECLADO', fob: 45.50, img: 'data:image/png;base64,BBBB', grounded: true }
     ];
-    const audit = CatalogValidator.validateCatalog(sampleCatalog);
-    this.assert(audit.validItems === 2, 'CatalogValidator aprobó la totalidad de los productos válidos');
-    this.assert(audit.qualityScore === 100, 'CatalogValidator otorgó puntuación perfecta 100 de calidad');
+    const audit = CatalogValidator.runFullValidation(sampleCatalog);
+    this.assert(audit.accepted.length === 2, 'CatalogValidator aprobó la totalidad de los productos válidos');
+    this.assert(audit.stats.green === 2, 'CatalogValidator otorgó semáforo verde con evidencia completa');
+  },
+
+  testMissingImageIsNotGreen() {
+    const item = { sku: 'IMG-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: '-', grounded: true };
+    const result = CatalogValidator.runFullValidation([item]);
+    this.assert(result.review.length === 1 && item.status === 'YELLOW', 'Producto sin imagen queda amarillo y no verde');
+    this.assert(item.qualityReason.includes('Imagen'), 'La razón del semáforo informa la imagen faltante');
+  },
+
+  testUpstreamQualityCannotBePromoted() {
+    const item = {
+      sku: 'SRC-001', marca: 'AULA', modelo: 'F75', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: true,
+      sourceStatus: 'RED', sourceWarnings: ['Fuente marcó el producto como incierto']
+    };
+    const result = CatalogValidator.runFullValidation([item]);
+    this.assert(result.rejected.length === 1 && item.status === 'RED', 'La evidencia roja de origen no puede promocionarse a verde');
+    this.assert(item.warnings.includes('Fuente marcó el producto como incierto'), 'La razón de origen se conserva en el resultado final');
+  },
+
+  testGroundingBarrier() {
+    const item = { sku: 'GRD-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: false, groundingReason: 'FOB no encontrado' };
+    const result = CatalogValidator.runFullValidation([item]);
+    this.assert(result.accepted.length === 0 && item.status === 'YELLOW', 'FOB sin grounding no puede quedar verde');
+    this.assert(item.warnings.some(w => w.includes('FOB no encontrado')), 'La razón de grounding se conserva en la validación final');
+  },
+
+  testGlobalSkuCollisionAllocation() {
+    const existing = [{ sku: 'DUP-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO' }];
+    const batch = [
+      { sku: 'DUP-001', marca: 'VGN', modelo: 'F1', variante: 'Black', cat: 'MOUSE' },
+      { sku: '', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO' },
+      { sku: 'DUP-001', marca: 'AULA', modelo: 'F99', variante: 'White', cat: 'TECLADO' }
+    ];
+    SkuAllocator.allocateBatch(batch, existing);
+    this.assert(batch[1].sku === 'DUP-001', 'Producto equivalente conserva la identidad SKU global existente');
+    this.assert(new Set(batch.map(i => i.sku)).size === batch.length, 'Las colisiones reales generan SKUs distintos sin sobrescribir');
+    const repeated = [{ ...batch[0] }];
+    SkuAllocator.allocateBatch(repeated, existing);
+    this.assert(repeated[0].sku === batch[0].sku, 'La nueva identidad por colisión es determinista');
+  },
+
+  testIvaIsSeparateFromProductCost() {
+    const result = Calculator.calculateOrder([{ sku: 'IVA-001', fob: 100, qty: 1 }], {
+      flete: 0, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, ivaPct: 21, markup: 2, tipoCambio: 1000
+    });
+    this.assert(result.items[0].costoU === 100 && result.items[0].pvp === 200, 'IVA no infla costo unitario ni PVP');
+    this.assert(result.totals.costoNeto === 100 && result.totals.ivaUsd === 21 && result.totals.totalBrutoConIva === 121, 'IVA USD queda separado del costo neto y del bruto');
+    this.assert(result.totals.ivaArs === 21000, 'IVA ARS se conserva junto con el IVA USD');
+  },
+
+  testColorVariantRoundTripContract() {
+    const variant = FileImporter.getVariant({ Variante: 'White', Color: 'Black' });
+    const csv = FileImporter.exportCSV({ name: 'variant', items: [{ sku: 'V-1', cat: 'MOUSE', marca: 'VGN', modelo: 'F1', variante: variant, fob: 10, qty: 1, costoU: 10, ivaU: 2.1, subIva: 2.1 }] });
+    this.assert(variant === 'White' && csv === true, 'CSV/XLSX conserva el campo Color/Variante con prioridad explícita');
+  },
+
+  testUpdaterNotesArePlainText() {
+    const remote = '<img src=x onerror=alert(1)>\n### Notas';
+    this.assert(AppUpdater.formatNotes(remote).includes('<img'), 'Las notas remotas se conservan como texto, no como HTML ejecutable');
+    this.assert(AppUpdater.isValidVersion('1.7.2') && !AppUpdater.isValidVersion('1.7.2%22'), 'La versión remota se valida antes de construir enlaces');
   },
 
   testPreserveModelNamesWithoutGenericOverwrite() {
@@ -560,6 +633,12 @@ const Tests = {
     ];
     PdfParser.matchImagesToProductsGlobal(pageProds, pageImgs);
     this.assert(pageProds[1].img === 'data:image/png;base64,abc', 'Procesamiento espacial asigna foto al producto 2 sin abortar el loop de la página');
+  },
+
+  testInvalidImageIsNotAssigned() {
+    const products = [{ sku: 'P1', marca: 'AULA', modelo: 'AK820', variante: 'White', cat: 'TECLADO', fob: 25, pageNum: 1, x: 100, y: 100 }];
+    PdfParser.matchImagesToProductsGlobal(products, [{ pageNum: 1, x: 100, y: 80, width: 100, height: 100, dataUrl: 'not-a-data-url' }]);
+    this.assert(products[0].img === '-', 'Matching espacial no asigna URLs corruptas y representa la imagen faltante con -');
   },
 
   testKpiMinFobDecimalFormatting() {
@@ -686,9 +765,245 @@ const Tests = {
     this.assert(AppUpdater.isNewerVersion('1.5.6', '1.5.7') === false, 'Compara correctamente 1.5.6 < 1.5.7');
     this.assert(typeof AppUpdater.openInBrowser === 'function', 'AppUpdater.openInBrowser disponible');
     this.assert(typeof AppUpdater.showModal === 'function', 'AppUpdater.showModal disponible para emerger pop-ups');
+  },
+
+  // ── Slice 1: catalog-quality-contract ──
+
+  testContractEvaluateItem() {
+    // RED: evaluateItem() does not exist yet — this test will fail
+
+    const row = {
+      sku: 'TST-001', marca: 'AULA', modelo: 'F75', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+
+    const evals = CatalogValidator.evaluateItem(row);
+
+    // Must produce exactly 10 evaluations
+    this.assert(Array.isArray(evals), 'evaluateItem debe devolver un array');
+    this.assert(evals.length === 10, 'evaluateItem emite exactamente 10 evaluaciones R1-R10');
+
+    const codes = evals.map(e => e.code);
+    const expectedCodes = ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10'];
+    this.assert(JSON.stringify(codes) === JSON.stringify(expectedCodes),
+      'Los códigos de evaluación son R1-R10 en orden');
+
+    // Every evaluation has required fields
+    for (const e of evals) {
+      this.assert(typeof e.code === 'string' && e.code.startsWith('R'),
+        `Evaluación ${e.code} tiene campo code`);
+      this.assert(['CRITICAL','WARNING','PASS'].includes(e.severity),
+        `Evaluación ${e.code} tiene severity válida (${e.severity})`);
+      this.assert(['RED','YELLOW','GREEN'].includes(e.status),
+        `Evaluación ${e.code} tiene status válido (${e.status})`);
+      this.assert(typeof e.reason === 'string' && e.reason.length > 0,
+        `Evaluación ${e.code} tiene reason no vacío`);
+      this.assert(['REJECTED','IMPORTABLE'].includes(e.importability),
+        `Evaluación ${e.code} tiene importability válida (${e.importability})`);
+      this.assert(typeof e.evidence === 'object' && e.evidence !== null,
+        `Evaluación ${e.code} tiene evidencia estructurada`);
+      this.assert(typeof e.evidence.observed !== 'undefined',
+        `Evaluación ${e.code} tiene evidence.observed`);
+      this.assert(typeof e.evidence.source === 'string' && e.evidence.source.length > 0,
+        `Evaluación ${e.code} tiene evidence.source`);
+    }
+
+    // Clean row: all GREEN
+    const allGreen = evals.every(e => e.status === 'GREEN' && e.importability === 'IMPORTABLE');
+    this.assert(allGreen, 'Fila limpia produce todas GREEN/IMPORTABLE');
+
+    // TRIANGULATE: row with violations
+    const badRow = {
+      sku: 'BAD-001', marca: 'OTRO', modelo: '-', variante: '45.99',
+      cat: 'OTRO', fob: -5, img: '-', grounded: undefined, sourceStatus: 'GREEN'
+    };
+    const badEvals = CatalogValidator.evaluateItem(badRow);
+    this.assert(badEvals.length === 10, 'Fila con violaciones produce 10 evaluaciones');
+    this.assert(badEvals[0].status === 'RED' && badEvals[0].code === 'R1', 'R1 RED para FOB inválido');
+    this.assert(badEvals[1].status === 'RED' && badEvals[1].code === 'R2', 'R2 RED para modelo basura');
+    this.assert(badEvals[6].status === 'YELLOW' && badEvals[6].code === 'R7', 'R7 YELLOW para variante numérica');
+    this.assert(badEvals[8].status === 'YELLOW' && badEvals[8].code === 'R9', 'R9 YELLOW para imagen faltante');
+    this.assert(badEvals[9].status === 'RED' && badEvals[9].code === 'R10', 'R10 RED para grounding ausente');
+
+    // R10 false grounding → YELLOW (not RED)
+    const falseGroundedRow = {
+      sku: 'FGRD-01', marca: 'AULA', modelo: 'F75', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: false, groundingReason: 'FOB no encontrado', sourceStatus: 'GREEN'
+    };
+    const fgEvals = CatalogValidator.evaluateItem(falseGroundedRow);
+    const r10 = fgEvals.find(e => e.code === 'R10');
+    this.assert(r10.status === 'YELLOW' && r10.importability === 'IMPORTABLE',
+      'R10 YELLOW/IMPORTABLE para grounding falso (no ausente)');
+    this.assert(r10.reason.includes('FOB no encontrado'), 'R10 razón preserva groundingReason');
+  },
+
+  testContractViolationsByCode() {
+    // RED: aggregateViolations() does not exist yet — this test will fail
+
+    const evals = [
+      { code: 'R1', status: 'GREEN' }, { code: 'R2', status: 'GREEN' },
+      { code: 'R3', status: 'RED' },   { code: 'R4', status: 'GREEN' },
+      { code: 'R5', status: 'GREEN' }, { code: 'R6', status: 'GREEN' },
+      { code: 'R7', status: 'YELLOW' },{ code: 'R8', status: 'GREEN' },
+      { code: 'R9', status: 'YELLOW' },{ code: 'R10', status: 'GREEN' }
+    ];
+
+    const agg = CatalogValidator.aggregateViolations(evals);
+
+    this.assert(typeof agg === 'object' && agg !== null, 'aggregateViolations devuelve un objeto');
+    this.assert(agg.canonicalGroupCount === 10, 'canonicalGroupCount es exactamente 10');
+
+    const keys = Object.keys(agg.violationsByCode).sort();
+    this.assert(keys.length === 10, 'violationsByCode tiene exactamente 10 claves');
+    const hasAllCodes = ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10'].every(c => keys.includes(c));
+    this.assert(hasAllCodes, 'violationsByCode contiene todas las claves R1-R10');
+
+    // Non-GREEN counts
+    this.assert(agg.violationsByCode.R1 === 0, 'R1 tiene 0 violaciones (GREEN)');
+    this.assert(agg.violationsByCode.R3 === 1, 'R3 tiene 1 violación (RED)');
+    this.assert(agg.violationsByCode.R7 === 1, 'R7 tiene 1 violación (YELLOW)');
+    this.assert(agg.violationsByCode.R9 === 1, 'R9 tiene 1 violación (YELLOW)');
+
+    // Zero-preservation: all keys present even with zero counts
+    for (const code of ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10']) {
+      this.assert(typeof agg.violationsByCode[code] === 'number',
+        `violationsByCode.${code} está presente como número`);
+    }
+
+    // stats is separate from canonicalGroupCount
+    this.assert(typeof agg.stats === 'object', 'stats está separado de canonicalGroupCount');
+
+    // TRIANGULATE: all GREEN evaluates to zero violations
+    const allGreen = Array.from({length:10}, (_, i) => ({ code: 'R'+(i+1), status: 'GREEN' }));
+    const aggGreen = CatalogValidator.aggregateViolations(allGreen);
+    this.assert(aggGreen.canonicalGroupCount === 10, 'canonicalGroupCount=10 con todo GREEN');
+    for (const code of ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10']) {
+      this.assert(aggGreen.violationsByCode[code] === 0, `${code}=0 con todo GREEN`);
+    }
+
+    // TRIANGULATE: all RED evaluates to ten violations
+    const allRed = Array.from({length:10}, (_, i) => ({ code: 'R'+(i+1), status: 'RED' }));
+    const aggRed = CatalogValidator.aggregateViolations(allRed);
+    for (const code of ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10']) {
+      this.assert(aggRed.violationsByCode[code] === 1, `${code}=1 con todo RED`);
+      this.assert(aggRed.canonicalGroupCount === 10, 'canonicalGroupCount=10 con todo RED');
+    }
+  },
+
+  testContractGateOutcome() {
+    // Verify GateOutcome contract: absent gate → SKIPPED_ENVIRONMENT_GATED
+
+    const gateMod = (typeof QualityGate !== 'undefined') ? QualityGate : null;
+
+    if (!gateMod || typeof gateMod.GateOutcome !== 'function') {
+      this.assert(false, 'QualityGate.GateOutcome no está disponible');
+      return;
+    }
+
+    const outcome = gateMod.GateOutcome({ gate: 'full-corpus', reason: 'No manifest' });
+    this.assert(outcome.status === 'SKIPPED_ENVIRONMENT_GATED',
+      'GateOutcome produce SKIPPED_ENVIRONMENT_GATED');
+    this.assert(outcome.gate === 'full-corpus', 'GateOutcome preserva nombre de gate');
+    this.assert(typeof outcome.reason === 'string' && outcome.reason.length > 0,
+      'GateOutcome incluye razón no vacía');
+
+    // TRIANGULATE: different gate name
+    const outcome2 = gateMod.GateOutcome({ gate: 'signed-release', reason: 'No TAURI_SIGNED_SMOKE' });
+    this.assert(outcome2.status === 'SKIPPED_ENVIRONMENT_GATED',
+      'GateOutcome signed-release produce SKIPPED_ENVIRONMENT_GATED');
+    this.assert(outcome2.gate === 'signed-release', 'Preserva gate signed-release');
+    this.assert(outcome2.reason === 'No TAURI_SIGNED_SMOKE', 'Preserva razón explícita');
+
+    // GateOutcome is never a pass
+    this.assert(outcome.status !== 'PASS' && outcome.status !== 'GREEN',
+      'GateOutcome nunca es PASS/GREEN');
+    this.assert(outcome2.status !== 'PASS' && outcome2.status !== 'GREEN',
+      'GateOutcome nunca es PASS/GREEN');
+  },
+
+  testContractFixtureRoundTrip() {
+    // Load contract fixtures
+    let fixtures;
+    try {
+      const path = require('path');
+      const fs = require('fs');
+      const fixturePath = path.join(__dirname, '..', '..', 'scripts', 'quality', 'contract-fixtures.json');
+      const raw = fs.readFileSync(fixturePath, 'utf8');
+      fixtures = JSON.parse(raw).fixtures;
+    } catch (e) {
+      this.assert(false, `No se pudieron cargar los fixtures: ${e.message}`);
+      return;
+    }
+
+    this.assert(Array.isArray(fixtures) && fixtures.length === 10,
+      'Fixtures contiene exactamente 10 filas (una por R1-R10)');
+
+    // Evaluate each fixture
+    const allEvals = [];
+    for (const fix of fixtures) {
+      const evals = CatalogValidator.evaluateItem(fix);
+      this.assert(evals.length === 10, `Fixture ${fix.sku} produce 10 evaluaciones`);
+      allEvals.push(...evals);
+
+      // Verify the expected violation
+      const targetEval = evals.find(e => e.code === fix.expectedViolation);
+      this.assert(targetEval !== undefined, `Fixture ${fix.sku} tiene evaluación ${fix.expectedViolation}`);
+      this.assert(targetEval.status === fix.expectedStatus,
+        `${fix.sku}: ${fix.expectedViolation} status=${fix.expectedStatus} (actual=${targetEval.status})`);
+      this.assert(targetEval.severity === fix.expectedSeverity,
+        `${fix.sku}: ${fix.expectedViolation} severity=${fix.expectedSeverity} (actual=${targetEval.severity})`);
+      this.assert(typeof targetEval.reason === 'string' && targetEval.reason.length > 0,
+        `${fix.sku}: ${fix.expectedViolation} tiene reason no vacío`);
+      this.assert(typeof targetEval.evidence === 'object' && targetEval.evidence !== null,
+        `${fix.sku}: ${fix.expectedViolation} tiene evidencia`);
+
+      // Verificar importability
+      if (fix.expectedStatus === 'RED') {
+        this.assert(targetEval.importability === 'REJECTED',
+          `${fix.sku}: ${fix.expectedViolation} RED → REJECTED`);
+      }
+    }
+
+    // Aggregate: each R1-R10 should have exactly one non-GREEN
+    const agg = CatalogValidator.aggregateViolations(allEvals);
+    this.assert(agg.canonicalGroupCount === 10, 'canonicalGroupCount=10 en fixtures');
+    for (let i = 1; i <= 10; i++) {
+      const code = 'R' + i;
+      this.assert(agg.violationsByCode[code] === 1,
+        `${code}=1 violación en fixtures (actual=${agg.violationsByCode[code]})`);
+    }
+
+    // Clean row: 10 GREEN
+    const cleanRow = {
+      sku: 'CLN-001', marca: 'AULA', modelo: 'F75', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    const cleanEvals = CatalogValidator.evaluateItem(cleanRow);
+    const cleanAgg = CatalogValidator.aggregateViolations(cleanEvals);
+    this.assert(cleanAgg.canonicalGroupCount === 10, 'canonicalGroupCount=10 con fila limpia');
+    for (const code of ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10']) {
+      this.assert(cleanAgg.violationsByCode[code] === 0,
+        `${code}=0 con fila limpia`);
+    }
+
+    // Mixed row: R9 YELLOW + upstream RED preserved
+    const mixedRow = {
+      sku: 'MIX-001', marca: 'AULA', modelo: 'F75', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: '-', grounded: true,
+      sourceStatus: 'RED', sourceWarnings: ['Fuente marcó como incierto']
+    };
+    const mixedEvals = CatalogValidator.evaluateItem(mixedRow);
+    const r9Mixed = mixedEvals.find(e => e.code === 'R9');
+    this.assert(r9Mixed.status === 'YELLOW' && r9Mixed.importability === 'IMPORTABLE',
+      'R9 YELLOW/IMPORTABLE con imagen faltante en fila mixta');
+    // Upstream RED cannot be promoted
+    this.assert(mixedEvals.every(e => e.status !== 'GREEN'),
+      'Upstream RED impide que cualquier evaluación sea GREEN');
   }
 };
 
 if (typeof window !== 'undefined') window.Tests = Tests;
 if (typeof module !== 'undefined') module.exports = Tests;
-

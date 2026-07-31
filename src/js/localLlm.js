@@ -21,6 +21,16 @@ const LocalLlm = {
     if (options.model) this.model = options.model;
   },
 
+  async fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
   /**
    * Comprueba si el servidor local de IA está corriendo y respondiendo.
    */
@@ -29,14 +39,7 @@ const LocalLlm = {
     this.isChecking = true;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-      const res = await fetch(`${this.endpoint}/api/tags`, {
-        method: 'GET',
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+      const res = await this.fetchWithTimeout(`${this.endpoint}/api/tags`, { method: 'GET' }, 2000);
 
       if (res.ok) {
         const data = await res.json();
@@ -80,7 +83,7 @@ const LocalLlm = {
     }
 
     try {
-      const res = await fetch(`${this.endpoint}/api/generate`, {
+      const res = await this.fetchWithTimeout(`${this.endpoint}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -89,7 +92,7 @@ const LocalLlm = {
           stream: false,
           format: 'json'
         })
-      });
+      }, 120000);
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} de ${this.endpoint}`);

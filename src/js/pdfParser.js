@@ -161,7 +161,12 @@ const PdfParser = {
         cat: (rawItem.cat || 'OTRO').trim(),
         fob,
         pageNum,
-        isGroundedPrice
+        isGroundedPrice,
+        grounded: isGroundedPrice,
+        groundedFob: isGroundedPrice,
+        groundingReason: isGroundedPrice
+          ? 'FOB encontrado literalmente en el texto de la página'
+          : 'FOB no encontrado literalmente en el texto de la página'
       };
 
       if (typeof TextSanitizer !== 'undefined' && TextSanitizer.sanitizeItem) {
@@ -176,7 +181,7 @@ const PdfParser = {
       if (!isGroundedPrice && fob > 0) {
         item.warnings.push('⚠️ Precio FOB verificado por Grounding: No se encontró coincidencia literal en el texto de la página');
         item.confidence = Math.max(0, item.confidence - 15);
-        if (item.status === 'VALID') item.status = 'WARNING';
+        if (item.status === 'GREEN') item.status = 'YELLOW';
       }
 
       groundedList.push(item);
@@ -195,20 +200,27 @@ const PdfParser = {
       for (let i = 0; i < fnArray.length; i++) {
         const op = fnArray[i];
         if (op !== pdfjsLib.OPS.paintImageXObject && op !== pdfjsLib.OPS.paintInlineImageXObject) continue;
+        const opArgs = argsArray[i];
+        if (!opArgs || opArgs.length === 0) continue;
 
         let imgObj = null;
         if (op === pdfjsLib.OPS.paintInlineImageXObject) {
           // Imagen inline: el objeto viene directo en los argumentos
-          imgObj = argsArray[i][0];
+          imgObj = opArgs[0];
         } else {
           // paintImageXObject: pdf.js carga la imagen de forma ASINCRÓNICA.
           // El .get() sincrónico lanza excepción si aún no está resuelta → hay que esperar con callback.
-          const imageName = argsArray[i][0];
+          const imageName = opArgs[0];
           try {
             imgObj = await new Promise((resolve) => {
               let settled = false;
               const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, 2500);
               try {
+                if (!page.objs || typeof page.objs.get !== 'function') {
+                  clearTimeout(timer);
+                  resolve(null);
+                  return;
+                }
                 page.objs.get(imageName, (obj) => {
                   if (!settled) { settled = true; clearTimeout(timer); resolve(obj); }
                 });
@@ -232,8 +244,10 @@ const PdfParser = {
           }
         }
 
-        let x = ctm ? ctm[4] : 0;
-        let y = ctm ? viewport.height - ctm[5] : 0;
+        const imgW = Number(imgObj.width);
+        const imgH = Number(imgObj.height);
+        const x = ctm ? Number(ctm[4]) || 0 : 0;
+        const y = ctm ? viewport.height - (Number(ctm[5]) || 0) : 0;
 
           if (typeof document !== 'undefined') {
             const canvas = document.createElement('canvas');
@@ -307,7 +321,8 @@ const PdfParser = {
                   // Comprimir: limitar canvas a 150px max (thumbnails no necesitan más)
                   const MAX_DIM = 150;
                   let outW = canvas.width, outH = canvas.height;
-                  let finalDataUrl = dataUrl;
+                  let finalDataUrl = '';
+                  try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
                   if (canvas.width > MAX_DIM || canvas.height > MAX_DIM) {
                     const scale = MAX_DIM / Math.max(canvas.width, canvas.height);
                     outW = Math.round(canvas.width * scale);
@@ -317,18 +332,20 @@ const PdfParser = {
                     smallCanvas.height = outH;
                     const sctx = smallCanvas.getContext('2d');
                     sctx.drawImage(canvas, 0, 0, outW, outH);
-                    finalDataUrl = smallCanvas.toDataURL('image/jpeg', 0.85);
+                    try { finalDataUrl = smallCanvas.toDataURL('image/jpeg', 0.85); } catch (e) { finalDataUrl = ''; }
                   }
 
-                  const dominantColor = this.extractDominantColor(ctx, imgObj.width, imgObj.height);
-                  pageImages.push({
-                    pageNum, y, x,
-                    width: outW, height: outH,
-                    pdfWidth: imgW, pdfHeight: imgH,
-                    centerY: y + (imgH / 2),
-                    dataUrl: finalDataUrl,
-                    dominantColor
-                  });
+                  if (this.isValidImageDataUrl(finalDataUrl)) {
+                    const dominantColor = this.extractDominantColor(ctx, imgW, imgH);
+                    pageImages.push({
+                      pageNum, y, x,
+                      width: outW, height: outH,
+                      pdfWidth: imgW, pdfHeight: imgH,
+                      centerY: y + (imgH / 2),
+                      dataUrl: finalDataUrl,
+                      dominantColor
+                    });
+                  }
                 }
               }
             }
@@ -502,11 +519,16 @@ const PdfParser = {
    * Capa B: Canvas puro (siempre disponible). Capa A: LLM visión (si Ollama corre).
    * Retorna { valid, score, warnings } donde score 0-100.
    */
+  isValidImageDataUrl(value) {
+    if (typeof value !== 'string') return false;
+    return /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(value.trim());
+  },
+
   validateImageForProduct(img, product) {
     const warnings = [];
     let score = 100;
 
-    if (!img || !img.dataUrl) return { valid: false, score: 0, warnings: ['No image'] };
+    if (!img || !this.isValidImageDataUrl(img.dataUrl)) return { valid: false, score: 0, warnings: ['No image'] };
 
     // 1. Validación de aspect ratio por categoría
     const aspect = img.width / Math.max(1, img.height);
@@ -664,7 +686,9 @@ const PdfParser = {
       }
     }
 
-    if (uniqueXs.length <= 2) {
+    const hasSameRowColumns = priceAnchors.some((left, index) => priceAnchors.some((right, rightIndex) =>
+      rightIndex > index && Math.abs(left.y - right.y) <= 30 && Math.abs(left.x - right.x) >= 40));
+    if (uniqueXs.length === 1 || (uniqueXs.length <= 2 && !hasSameRowColumns)) {
       return this.extractPageProductsByTableRows(rawElements, priceAnchors, viewportHeight, pageNum, pageImages, brandFallback, customBrands, existingProducts, isPageNoise, isHeaderNoiseLine);
     }
 
@@ -769,24 +793,27 @@ const PdfParser = {
       const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
 
       // Búsqueda de Imagen STRICTLY dentro del Bounding Box de la Celda
-      let matchedImg = '';
+      let matchedImg = '-';
       if (pageImages && pageImages.length) {
         const candidateImgs = pageImages.filter(img => {
           if (img.pageNum !== pageNum) return false;
           if (img.y > anchor.y + 10 || img.y < anchor.y - 280) return false;
           if (img.x < cellMinX - 30 || img.x > cellMaxX + 30) return false;
+          if (!this.isValidImageDataUrl(img.dataUrl)) return false;
           return true;
         });
 
         if (candidateImgs.length) {
+          const productForImage = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
           const scored = candidateImgs.map(img => {
             const distX = Math.abs(img.x - anchor.x);
             const distY = anchor.y - img.y;
-            let penalty = 0;
+            const validation = this.validateImageForProduct(img, productForImage);
+            if (!validation.valid) return null;
 
             const dist = Math.hypot(distX * 1.5, Math.max(0, distY));
-            return { img, score: dist, penalty: 0 };
-          });
+            return { img, score: dist + (100 - validation.score) * 150 };
+          }).filter(Boolean);
 
           scored.sort((a, b) => a.score - b.score);
           if (scored[0]) {
@@ -803,6 +830,10 @@ const PdfParser = {
         variante: sanitized.variante,
         fob: anchor.price,
         img: matchedImg,
+        grounded: true,
+        groundedFob: true,
+        isGroundedPrice: true,
+        groundingReason: 'FOB extraído de un ancla literal del texto de la página',
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -945,7 +976,7 @@ const PdfParser = {
       const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
 
       // Buscar imagen dentro de los mismos límites Y de la celda CON validación visual
-      let matchedImg = '';
+      let matchedImg = '-';
       if (pageImages && pageImages.length) {
         const candidateImgs = pageImages.filter(img => {
           if (img.pageNum !== pageNum) return false;
@@ -973,7 +1004,7 @@ const PdfParser = {
           }
 
           if (bestImg) {
-            matchedImg = bestImg.dataUrl || '';
+            matchedImg = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
           }
         }
       }
@@ -986,6 +1017,10 @@ const PdfParser = {
         variante: sanitized.variante,
         fob: anchor.price,
         img: matchedImg,
+        grounded: true,
+        groundedFob: true,
+        isGroundedPrice: true,
+        groundingReason: 'FOB extraído de un ancla literal del texto de la tabla',
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -1135,20 +1170,25 @@ const PdfParser = {
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const catCode = cat.substring(0, 3).toUpperCase();
-      const brandCode = detectedBrand.substring(0, 3).toUpperCase();
-      const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
+       p.sku = (typeof SkuAllocator !== 'undefined') ? SkuAllocator.normalizeSku(p.sku) : p.sku;
+       p.marca = detectedBrand;
 
-      p.sku = sku;
-      p.marca = detectedBrand;
-
-      const evalScore = this.evaluateItemConfidence(p);
-      p.confidence = evalScore.confidence;
-      p.status = evalScore.status;
-      p.warnings = evalScore.warnings;
+       const sourceWarnings = Array.isArray(p.warnings) ? p.warnings : [];
+       const sourceStatus = p.status;
+       const sourceConfidence = Number.isFinite(p.confidence) ? p.confidence : null;
+       const evalScore = this.evaluateItemConfidence(p);
+       p.sourceStatus = sourceStatus || p.sourceStatus;
+       p.sourceConfidence = sourceConfidence === null ? p.sourceConfidence : sourceConfidence;
+       p.sourceWarnings = [...sourceWarnings];
+       p.confidence = sourceConfidence === null ? evalScore.confidence : Math.min(sourceConfidence, evalScore.confidence);
+       p.status = evalScore.status;
+       p.warnings = [...new Set([...sourceWarnings, ...evalScore.warnings])];
+       p.qualityReason = p.warnings[0] || 'Sin observaciones';
 
       products.push(p);
     }
+
+    if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(products, []);
 
     return products;
   },
@@ -1265,13 +1305,19 @@ const PdfParser = {
         modelo: finalModel,
         variante: finalVariant,
         fob: usdPrice,
-        img: '',
+         img: '-',
+         grounded: true,
+         groundedFob: true,
+         isGroundedPrice: true,
+         groundingReason: 'FOB extraído de un ancla literal del texto',
         rawText: ctx.rawText,
         pageNum: rows[i].pageNum,
         x: rows[i].x || 0,
         y: rows[i].y || 0
       });
     }
+
+    if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(products, []);
 
     // 2. ASIGNACIÓN GLOBAL BIPARTITA DE IMÁGENES POR PÁGINA (Previene robo de fotos e índices desfasados)
     this.matchImagesToProductsGlobal(products, allImages);
@@ -1281,7 +1327,9 @@ const PdfParser = {
       const evalScore = this.evaluateItemConfidence(p);
       p.confidence = evalScore.confidence;
       p.status = evalScore.status;
-      p.warnings = evalScore.warnings;
+       p.warnings = [...new Set([...(p.warnings || []), ...evalScore.warnings])];
+       p.sourceWarnings = p.sourceWarnings || [...(p.warnings || [])];
+       p.qualityReason = p.warnings[0] || 'Sin observaciones';
     }
 
     return products;
@@ -1324,36 +1372,42 @@ const PdfParser = {
   evaluateItemConfidence(item) {
     let confidence = 100;
     const warnings = [];
+    const critical = [];
 
-    // Evaluaciones
-    if (item.marca === 'OTRO') {
-      confidence -= 30;
-      warnings.push('Marca no identificada automáticamente (marcada como OTRO)');
-    }
+    if (!item.marca || item.marca === 'OTRO') critical.push('Marca no identificada');
+    if (!item.cat || item.cat === 'OTRO') critical.push('Categoría no identificada');
+    if (!item.modelo || item.modelo.length < 3) critical.push('Modelo vacío o demasiado corto');
 
-    if (item.cat === 'OTRO') {
-      confidence -= 20;
-      warnings.push('Categoría no identificada');
-    }
-
-    if (!item.modelo || item.modelo.length < 3) {
-      confidence -= 25;
-      warnings.push('Nombre de modelo inusualmente corto');
-    }
-
-    if (item.fob < 0.50 || item.fob > 350.00) {
+    if (!Number.isFinite(Number(item.fob)) || Number(item.fob) <= 0) {
+      critical.push('FOB inválido');
+    } else if (item.fob < 0.50 || item.fob > 350.00) {
       confidence -= 15;
-      warnings.push(`Precio FOB USD ($${item.fob.toFixed(2)}) inusual o fuera de rango habitual`);
+      warnings.push(`Precio FOB USD ($${Number(item.fob).toFixed(2)}) inusual o fuera de rango habitual`);
     }
 
-    let status = 'VALID'; // 🟢
-    if (confidence < 60) {
-      status = 'ERROR';   // 🔴
-    } else if (confidence < 85) {
-      status = 'WARNING'; // 🟡
+    if (!this.isValidImageDataUrl(item.img)) {
+      confidence -= 15;
+      warnings.push('Imagen faltante o inválida: requiere revisión');
     }
 
-    return { confidence: Math.max(0, confidence), status, warnings };
+    const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
+    if (grounded === false) {
+      confidence -= 25;
+      warnings.push(item.groundingReason || 'FOB sin evidencia literal suficiente');
+    } else if (grounded !== true) {
+      critical.push('Evidencia de grounding insuficiente');
+    }
+
+    let status = 'GREEN';
+    if (critical.length > 0) status = 'RED';
+    else if (confidence < 100 || warnings.length > 0) status = 'YELLOW';
+
+    return {
+      confidence: Math.max(0, confidence - critical.length * 30),
+      status,
+      warnings: [...critical, ...warnings],
+      critical
+    };
   },
 
   buildRowContext(rows, priceIdx) {
@@ -1570,11 +1624,15 @@ const PdfParser = {
   },
 
   matchImagesToProductsGlobal(products, allImages) {
-    if (!allImages || !allImages.length || !products || !products.length) return;
+    if (!products || !products.length) return;
+    products.forEach(product => {
+      if (!this.isValidImageDataUrl(product.img)) product.img = '-';
+    });
+    if (!allImages || !allImages.length) return;
     // Deduplicar imágenes (mismo dataUrl = misma imagen extraída dos veces)
     const seenUrls = new Set();
     const uniqueImages = allImages.filter(img => {
-      if (!img.dataUrl || seenUrls.has(img.dataUrl)) return false;
+      if (!this.isValidImageDataUrl(img.dataUrl) || seenUrls.has(img.dataUrl)) return false;
       seenUrls.add(img.dataUrl);
       return true;
     });
@@ -1644,7 +1702,7 @@ const PdfParser = {
         const winnerProd = pageProds[minPair.prodIdx];
         const winnerImg = pageImgs[minPair.imgIdx];
 
-        winnerProd.img = winnerImg.dataUrl;
+        winnerProd.img = this.isValidImageDataUrl(winnerImg.dataUrl) ? winnerImg.dataUrl : '-';
         if (minPair.validation && minPair.validation.warnings.length) {
           winnerProd.imgWarnings = minPair.validation.warnings;
         }
@@ -1657,4 +1715,3 @@ const PdfParser = {
 
 if (typeof window !== 'undefined') window.PdfParser = PdfParser;
 if (typeof module !== 'undefined') module.exports = PdfParser;
-

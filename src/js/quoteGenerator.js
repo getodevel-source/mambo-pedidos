@@ -28,7 +28,8 @@ const QuoteGenerator = {
       const sub = item.subPvp || (pvpU * item.qty);
       const pvpArs = item.pvpArs || Math.round(pvpU * (t.tipoCambio || 1400));
       const subArs = Math.round(sub * (t.tipoCambio || 1400));
-      const imgCell = item.img ? `<img src="${this.esc(item.img)}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">🖼️</span>`;
+      const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
+      const imgCell = hasImage ? `<img src="${this.esc(item.img)}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">-</span>`;
 
       itemsHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -155,6 +156,10 @@ const QuoteGenerator = {
               <span>Equivalente ARS:</span>
               <span>$${(t.facturacionArs || 0).toLocaleString()} ARS</span>
             </div>
+            <div class="total-row">
+              <span>IVA de costos de importación (informativo):</span>
+              <span>$${(t.ivaUsd || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} USD</span>
+            </div>
             <div class="total-row grand">
               <span>TOTAL FINAL:</span>
               <span>$${(t.facturacion || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} USD</span>
@@ -187,4 +192,3 @@ const QuoteGenerator = {
 
 if (typeof window !== 'undefined') window.QuoteGenerator = QuoteGenerator;
 if (typeof module !== 'undefined') module.exports = QuoteGenerator;
-

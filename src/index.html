@@ -5,11 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mambo Pedidos</title>
 <meta name="theme-color" content="#FF5A1F">
-<link rel="icon" type="image/x-icon" href="favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="header-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -355,7 +351,7 @@
         <div class="stat">
           <div class="stat-label">Costo Final <span class="info-tooltip" data-tooltip="Costo Puesto en País (Landed Cost): Costo real total acumulado con el 100% de los gastos pagados (FOB + Flete + Impuestos + Aduana + Despachante).">?</span></div>
           <div class="stat-value blue" id="pedCosto">$0</div>
-          <div class="stat-sub">Puesto en país</div>
+          <div class="stat-sub" id="pedCostoSub">Neto · Bruto con IVA $0 USD</div>
         </div>
         <div class="stat">
           <div class="stat-label">Facturación (PVP) <span class="info-tooltip" data-tooltip="Facturación Total Proyectada: El dinero bruto ingresado al vender la totalidad de las unidades al Precio de Venta al Público (PVP).">?</span></div>
@@ -796,10 +792,11 @@
 </div>
 
 <!-- Application Modules -->
-<script src="js/validations.js"></script>
-<script src="js/calculator.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/pdfParser.js"></script>
+  <script src="js/validations.js"></script>
+  <script src="js/calculator.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/skuAllocator.js"></script>
+  <script src="js/pdfParser.js"></script>
 <script src="js/textSanitizer.js"></script>
 <script src="js/localLlm.js"></script>
 <script src="js/aiCatalogEngine.js"></script>

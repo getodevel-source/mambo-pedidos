@@ -77,8 +77,9 @@ const Calculator = {
     const courierCost = config.logisticaModo === 'courier' ? totalQty * config.courier : 0;
     const despCost = config.logisticaModo === 'importador' ? config.desp : 0;
 
-    const totalCosto = cif + derechos + tasa + perc + despCost + courierCost + (config.incluirIva ? ivaUsd : 0);
-    const factorCosto = totalFob > 0 ? totalCosto / totalFob : 0;
+    // El IVA es recuperable/repercutible y nunca forma parte del costo del producto.
+    const totalCostoNeto = cif + derechos + tasa + perc + despCost + courierCost;
+    const factorCosto = totalFob > 0 ? totalCostoNeto / totalFob : 0;
 
     const calculatedItems = items.map(item => {
       const fob = item.fob || 0;
@@ -89,6 +90,8 @@ const Calculator = {
       const subFob = fob * qty;
       const subPvp = pvp * qty;
       const subCosto = costoU * qty;
+      const subIva = totalFob > 0 ? ivaUsd * (subFob / totalFob) : 0;
+      const ivaU = qty > 0 ? subIva / qty : 0;
       const subMargen = subPvp - subCosto;
       const margenPct = pvp > 0 ? Math.round(((pvp - costoU) / pvp) * 100) : 0;
       const itemRoiPct = costoU > 0 ? Math.round(((pvp - costoU) / costoU) * 100) : 0;
@@ -104,19 +107,23 @@ const Calculator = {
         subFob,
         subPvp,
         subCosto,
+        ivaU,
+        subIva,
         subMargen,
         margenPct,
         roiPct: itemRoiPct,
         costoUArs,
         pvpArs,
+        ivaUArs: Math.round(ivaU * tc),
+        subIvaArs: Math.round(subIva * tc),
         subFobArs
       };
     });
 
     const totalFacturacion = calculatedItems.reduce((s, r) => s + r.subPvp, 0);
-    const totalMargen = totalFacturacion - totalCosto;
+    const totalMargen = totalFacturacion - totalCostoNeto;
     const margenGeneralPct = totalFacturacion > 0 ? Math.round((totalMargen / totalFacturacion) * 100) : 0;
-    const roiGeneralPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 100) : 0;
+    const roiGeneralPct = totalCostoNeto > 0 ? Math.round((totalMargen / totalCostoNeto) * 100) : 0;
 
     const warnings = [];
     const cautions = [];
@@ -152,6 +159,7 @@ const Calculator = {
     } else {
       cautions.push('⚓ Régimen de Importación General (Despachante de Aduana / Despacho oficial)');
     }
+    cautions.push(`ℹ️ Transporte ${config.transporteModo}: informativo; el flete se calcula por ${config.fleteModo === 'peso' ? 'peso' : 'porcentaje FOB'}.`);
 
     return {
       config,
@@ -170,8 +178,12 @@ const Calculator = {
         percUsd: perc,
         ivaUsd: ivaUsd,
         ivaArs: Math.round(ivaUsd * tc),
-        costo: totalCosto,
-        costoArs: Math.round(totalCosto * tc),
+        costo: totalCostoNeto,
+        costoNeto: totalCostoNeto,
+        costoArs: Math.round(totalCostoNeto * tc),
+        costoNetoArs: Math.round(totalCostoNeto * tc),
+        totalBrutoConIva: totalCostoNeto + ivaUsd,
+        totalBrutoConIvaArs: Math.round((totalCostoNeto + ivaUsd) * tc),
         facturacion: totalFacturacion,
         facturacionArs: Math.round(totalFacturacion * tc),
         margen: totalMargen,
@@ -201,7 +213,7 @@ const Calculator = {
 
     const certsSet = new Set();
     const itemCalculations = items.map(item => {
-      const q = item.qty || 1;
+      const q = Math.max(0, Number(item.qty) || 0);
       const subFob = (item.fob || 0) * q;
       const weightFrac = totalFob > 0 ? (subFob / totalFob) : (totalQty > 0 ? q / totalQty : 0);
       const itemFlete = fleteTotal * weightFrac;
@@ -240,7 +252,7 @@ const Calculator = {
       const ivaAddUsd = baseImp * ncmRule.ivaAdd;
       const percGanUsd = baseImp * ncmRule.percGan;
       const iibbUsd = baseImp * ncmRule.iibb;
-      const totalTributosItemUsd = derechosUsd + tasaUsd + ivaUsd + ivaAddUsd + percGanUsd + iibbUsd;
+       const totalTributosItemUsd = derechosUsd + tasaUsd + ivaAddUsd + percGanUsd + iibbUsd;
 
       return {
         ...item,
@@ -252,8 +264,9 @@ const Calculator = {
         ivaUsd,
         ivaAddUsd,
         percGanUsd,
-        iibbUsd,
-        totalTributosItemUsd,
+         iibbUsd,
+         totalTributosItemUsd,
+         totalTributosItemConIvaUsd: totalTributosItemUsd + ivaUsd,
         certs: ncmRule.certs
       };
     });
@@ -270,9 +283,11 @@ const Calculator = {
     });
 
     const totalGastosFijosDestinoUsd = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd + totalCertsCostUsd;
-    const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.totalTributosItemUsd, 0);
+    const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd, 0);
+    const totalIvaAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.ivaUsd, 0);
 
     const totalPuertaUsd = cifTotal + totalTributosAduanaUsd + totalGastosFijosDestinoUsd;
+    const totalPuertaConIvaUsd = totalPuertaUsd + totalIvaAduanaUsd;
     const totalPuertaArs = totalPuertaUsd * tc;
 
     // Asignación final de costo unitario exactamente puesto en puerta
@@ -300,6 +315,9 @@ const Calculator = {
         seguroTotalUsd: seguroTotal,
         cifTotalUsd: cifTotal,
         totalTributosAduanaUsd,
+        totalIvaAduanaUsd,
+        ivaUsd: totalIvaAduanaUsd,
+        ivaArs: totalIvaAduanaUsd * tc,
         depositoFiscalUsd,
         despachanteUsd,
         simDigitalizacionUsd,
@@ -307,6 +325,8 @@ const Calculator = {
         totalCertsCostUsd,
         totalGastosFijosDestinoUsd,
         totalPuertaUsd,
+        totalPuertaConIvaUsd,
+        totalPuertaConIvaArs: totalPuertaConIvaUsd * tc,
         totalPuertaArs,
         tipoCambio: tc
       }
@@ -328,4 +348,3 @@ const Calculator = {
 
 if (typeof window !== 'undefined') window.Calculator = Calculator;
 if (typeof module !== 'undefined') module.exports = Calculator;
-

@@ -10,7 +10,8 @@
     "build:windows": "tauri build --target x86_64-pc-windows-msvc",
     "build:linux": "tauri build --target x86_64-unknown-linux-gnu",
     "bump": "node scripts/bump-version.js",
-    "check:version": "node scripts/bump-version.js --check"
+    "check:version": "node scripts/bump-version.js --check",
+    "test": "node scripts/run-tests.js"
   },
   "keywords": [
     "mambo",

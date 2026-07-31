@@ -3,14 +3,19 @@
 // ============================================
 
 const FileImporter = {
+  getVariant(row = {}) {
+    return (row['Color/Variante'] || row.Variante || row.variante || row.Color || row.color || '').toString().trim();
+  },
+
   // Generar SKU único si falta en la fila
-  generateUniqueSku(catalog, marca, cat) {
+  generateUniqueSku(catalog, marca, cat, modelo = '', variante = '') {
+    if (typeof SkuAllocator !== 'undefined') {
+      return SkuAllocator.allocateBatch([{ marca, cat, modelo, variante }], catalog)[0].sku;
+    }
     const prefix = (marca || 'NEW').substring(0, 3).toUpperCase();
     const catCode = (cat || 'OTRO').substring(0, 3).toUpperCase();
     let n = 1;
-    while (catalog.find(c => c.sku === `${prefix}-${catCode}-${String(n).padStart(4, '0')}`)) {
-      n++;
-    }
+    while (catalog.find(c => c.sku === `${prefix}-${catCode}-${String(n).padStart(4, '0')}`)) n++;
     return `${prefix}-${catCode}-${String(n).padStart(4, '0')}`;
   },
 
@@ -29,14 +34,15 @@ const FileImporter = {
 
             const marca = (row.Marca || row.marca || '').toString().trim();
             const cat = (row.Categoría || row.Cat || row.cat || '').toString().trim() || 'OTRO';
-            const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat);
+            const variante = this.getVariant(row);
+            const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
 
             items.push({
               sku,
               cat,
               marca,
               modelo,
-              variante: (row.Color || row.color || row.Variante || '').toString().trim(),
+              variante,
               fob,
             });
           }
@@ -62,14 +68,15 @@ const FileImporter = {
 
       const marca = (row.Marca || row.marca || '').toString().trim();
       const cat = (row.Categoría || row.Cat || row.cat || '').toString().trim() || 'OTRO';
-      const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat);
+      const variante = this.getVariant(row);
+      const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
 
       items.push({
         sku,
         cat,
         marca,
         modelo,
-        variante: (row.Color || row.color || '').toString().trim(),
+        variante,
         fob,
       });
     }
@@ -79,8 +86,8 @@ const FileImporter = {
 
   exportCSV(pedido) {
     if (!pedido || !pedido.items.length) return false;
-    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad'];
-    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty]);
+    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad', 'Costo neto unit USD', 'IVA unit USD', 'IVA subtotal USD'];
+    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty, r.costoU || 0, r.ivaU || 0, r.subIva || 0]);
     const csv = [headers, ...rows].map(row => row.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
     this.download('\uFEFF' + csv, `${pedido.name || 'Pedido'}.csv`, 'text/csv;charset=utf-8;');
     return true;
@@ -88,8 +95,8 @@ const FileImporter = {
 
   exportXLSX(pedido) {
     if (!pedido || !pedido.items.length) return false;
-    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad'];
-    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty]);
+    const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad', 'Costo neto unit USD', 'IVA unit USD', 'IVA subtotal USD'];
+    const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty, r.costoU || 0, r.ivaU || 0, r.subIva || 0]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Pedido');
@@ -116,7 +123,8 @@ const FileImporter = {
       'FOB Unit (USD)',
       'FOB Subtotal (USD)',
       'Costo Puesto Unit (USD)',
-      'Costo Puesto Total (USD)'
+      'Costo Neto Puesto Total (USD)',
+      'IVA Subtotal (USD)'
     ];
 
     const totalWeight = pedido.costs ? (parseFloat(pedido.costs.pesoKg) || 0) : 0;
@@ -142,7 +150,8 @@ const FileImporter = {
         r.fob.toFixed(2),
         subFob.toFixed(2),
         unitCost.toFixed(2),
-        subCost.toFixed(2)
+        subCost.toFixed(2),
+        (r.subIva || 0).toFixed(2)
       ];
     });
 
@@ -159,7 +168,8 @@ const FileImporter = {
       '',
       (t.fob || 0).toFixed(2),
       '',
-      (t.costo || 0).toFixed(2)
+      (t.costoNeto || t.costo || 0).toFixed(2),
+      (t.ivaUsd || 0).toFixed(2)
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -176,7 +186,8 @@ const FileImporter = {
       { wch: 16 }, // FOB Unit
       { wch: 18 }, // FOB Sub
       { wch: 20 }, // Costo Unit
-      { wch: 20 }  // Costo Sub
+      { wch: 20 }, // Costo Sub
+      { wch: 18 }  // IVA Sub
     ];
 
     const wb = XLSX.utils.book_new();
@@ -208,12 +219,13 @@ const FileImporter = {
       ['Nombre del Pedido', pedido.name || 'Sin nombre', ''],
       ['Total Unidades', t.qty || 0, ''],
       ['Inversión Total FOB (China/Origen)', (t.fob || 0).toFixed(2), ((t.fob || 0) * tc).toFixed(2)],
-      ['Costo Total Puesto (CIF + Gastos)', (t.costo || 0).toFixed(2), ((t.costo || 0) * tc).toFixed(2)],
+      ['Costo Neto Puesto (sin IVA)', (t.costoNeto || t.costo || 0).toFixed(2), ((t.costoNeto || t.costo || 0) * tc).toFixed(2)],
+      ['IVA separado / repercutible', (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
+      ['Total Bruto con IVA', (t.totalBrutoConIva || (t.costo || 0) + (t.ivaUsd || 0)).toFixed(2), ((t.totalBrutoConIva || (t.costo || 0) + (t.ivaUsd || 0)) * tc).toFixed(2)],
       ['Facturación Total Proyectada (PVP)', (t.facturacion || 0).toFixed(2), ((t.facturacion || 0) * tc).toFixed(2)],
       ['Ganancia Neta Limpia', (t.margen || 0).toFixed(2), ((t.margen || 0) * tc).toFixed(2)],
       ['Margen Neto Sobre Venta (%)', `${(t.margenPct || 0).toFixed(1)}%`, ''],
-      ['Retorno de Inversión (ROI %)', `${(t.roi || 0).toFixed(1)}%`, ''],
-      ['IVA Estimado Total', (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
+      ['Retorno de Inversión (ROI %)', `${(t.roiPct || 0).toFixed(1)}%`, ''],
       ['Tipo de Cambio Aplicado ($/USD)', `$${tc} ARS`, '']
     ];
 
@@ -227,7 +239,7 @@ const FileImporter = {
       'Unidades', 'FOB Unit (USD)', 'FOB Subtotal (USD)',
       'Costo Unit Puesto (USD)', 'Costo Subtotal (USD)',
       'PVP Unit (USD)', 'PVP Unit (ARS)', 'Facturación Subtotal (USD)',
-      'Ganancia Limpia Subtotal (USD)', 'Margen %'
+      'Ganancia Limpia Subtotal (USD)', 'IVA Subtotal (USD)', 'Margen %'
     ];
 
     const prodRows = pedido.items.map((r, idx) => {
@@ -246,7 +258,7 @@ const FileImporter = {
         q, r.fob.toFixed(2), subFob.toFixed(2),
         unitCost.toFixed(2), subCost.toFixed(2),
         pvpUsd.toFixed(2), Math.round(pvpArs), subFact.toFixed(2),
-        subProfit.toFixed(2), `${marginPct}%`
+        subProfit.toFixed(2), (r.subIva || 0).toFixed(2), `${marginPct}%`
       ];
     });
 
@@ -254,7 +266,7 @@ const FileImporter = {
     wsProd['!cols'] = [
       { wch: 8 }, { wch: 16 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 12 },
       { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 20 },
-      { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 25 }, { wch: 12 }
+      { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 25 }, { wch: 12 }, { wch: 18 }
     ];
     XLSX.utils.book_append_sheet(wb, wsProd, 'Detalle de Productos');
 
@@ -270,7 +282,7 @@ const FileImporter = {
       ['Derechos de Importación', `${c.derechos || 16}% CIF`, (t.derechosUsd || 0).toFixed(2), ((t.derechosUsd || 0) * tc).toFixed(2)],
       ['Tasa Estadística Aduanera', `${c.tasa || 3}% CIF`, (t.tasaUsd || 0).toFixed(2), ((t.tasaUsd || 0) * tc).toFixed(2)],
       ['Percepción Ganancias', `${c.perc || 6}% CIF`, (t.percUsd || 0).toFixed(2), ((t.percUsd || 0) * tc).toFixed(2)],
-      ['IVA Estimado Aprox', `${c.ivaPct || 21}%`, (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
+      ['IVA separado / repercutible', `${c.ivaPct !== undefined ? c.ivaPct : 21}%`, (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
       ['Honorarios Despachante', `$${despUsd} USD`, despUsd.toFixed(2), (despUsd * tc).toFixed(2)],
       ['Procesamiento Courier Fijo', `$${c.courier || 8} USD / unidad`, ((c.courier || 8) * (t.qty || 0)).toFixed(2), ((c.courier || 8) * (t.qty || 0) * tc).toFixed(2)]
     ];
@@ -296,4 +308,3 @@ const FileImporter = {
 
 if (typeof window !== 'undefined') window.FileImporter = FileImporter;
 if (typeof module !== 'undefined') module.exports = FileImporter;
-

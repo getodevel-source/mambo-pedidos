@@ -97,13 +97,11 @@ async function auditRealCatalogFolder() {
 
       const processed = finalized.map(p => TextSanitizer.sanitizeItem(p, []));
 
-      // Auditar con CatalogValidator producto por producto contra las 6 reglas
-      const audit = CatalogValidator.validateCatalog(processed);
+      // Auditar con el contrato actual de semáforo y grounding.
+      const audit = CatalogValidator.runFullValidation(processed);
       const fileErrors = [];
-      audit.results.forEach(res => {
-        if (!res.isValid) {
-          fileErrors.push(`[SKU #${res.index + 1} - ${res.modelo}] Violaciones: ${res.violations.join(' | ')}`);
-        }
+      audit.rejected.forEach(res => {
+        fileErrors.push(`[${res.sku} - ${res.modelo}] Violaciones: ${(res.warnings || []).join(' | ')}`);
       });
 
       totalProducts += processed.length;
@@ -115,6 +113,7 @@ async function auditRealCatalogFolder() {
         brand: detectedBrand,
         productsCount: processed.length,
         errorsCount: fileErrors.length,
+        reviewCount: audit.review.length,
         errors: fileErrors
       });
 

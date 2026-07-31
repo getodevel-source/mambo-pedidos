@@ -50,12 +50,28 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install npm dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Check synchronized version
+        run: npm run check:version
+
+      - name: Run JavaScript tests
+        run: npm test
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Setup signing key
         shell: bash
+        env:
+          TAURI_KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          key=$(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" | tr -d '\r\n ')
+          if [ -z "$TAURI_KEY_SECRET" ] || [ -z "$TAURI_KEY_PASSWORD_SECRET" ]; then
+            echo "ERROR: TAURI signing secrets are required for release builds."
+            exit 1
+          fi
+          key=$(printf '%s' "$TAURI_KEY_SECRET" | tr -d '\r\n ')
           echo "TAURI_SIGNING_PRIVATE_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Resolve tag name

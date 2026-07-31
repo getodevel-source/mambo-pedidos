@@ -47,3 +47,5 @@ npm-debug.log
 
 # CodeGraph
 .codegraph/
+# Local AI runtime state
+.atl/

@@ -21,7 +21,7 @@ const AppUpdater = {
 
   async syncVersionFromRust() {
     try {
-      const ver = await this._invoke('get_app_version', {});
+      const ver = await this.withTimeout(this._invoke('get_app_version', {}), 5000, 'Timeout leyendo versión');
       if (ver && typeof ver === 'string' && ver.length >= 3) {
         this.CURRENT_VERSION = ver;
         const badge = document.getElementById('appVersionBadge');
@@ -51,6 +51,14 @@ const AppUpdater = {
     return Promise.reject(new Error('Tauri IPC no disponible'));
   },
 
+  withTimeout(promise, timeoutMs, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  },
+
   /**
    * Resuelve el objeto updater del plugin oficial de Tauri 2.0.
    * El plugin expone su API a través de window.__TAURI__.updater o
@@ -60,7 +68,7 @@ const AppUpdater = {
   async _tauriCheck() {
     // La API oficial del plugin-updater en Tauri 2.0 se invoca via IPC commands:
     // "plugin:updater|check" → devuelve { available, currentVersion, version, date, body }
-    const result = await this._invoke('plugin:updater|check', {});
+    const result = await this.withTimeout(this._invoke('plugin:updater|check', {}), 15000, 'Timeout verificando actualización oficial');
     return result;
   },
 
@@ -87,7 +95,7 @@ const AppUpdater = {
 
       const currentVer = this.getCurrentVersion();
 
-      if (updateInfo?.available && this.isNewerVersion(updateInfo.version, currentVer)) {
+      if (updateInfo?.available && this.isValidVersion(updateInfo.version) && this.isNewerVersion(updateInfo.version, currentVer)) {
         this.latestVersion = updateInfo.version;
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;
@@ -115,16 +123,24 @@ const AppUpdater = {
       await this.syncVersionFromRust();
       const activeVer = this.getCurrentVersion();
 
-      const res = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
-        headers: { 'Accept': 'application/vnd.github.v3+json' },
-        cache: 'no-store'
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let res;
+      try {
+        res = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
+          headers: { 'Accept': 'application/vnd.github.v3+json' },
+          cache: 'no-store',
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!res.ok) throw new Error(`GitHub API HTTP ${res.status}`);
 
       const release = await res.json();
       const latestVersion = release.tag_name?.replace(/^v/, '') || '';
 
-      if (latestVersion && this.isNewerVersion(latestVersion, activeVer)) {
+      if (this.isValidVersion(latestVersion) && this.isNewerVersion(latestVersion, activeVer)) {
         this.latestVersion = latestVersion;
         this.latestNotes = release.body || 'Correcciones y mejoras generales.';
 
@@ -158,6 +174,10 @@ const AppUpdater = {
     return false;
   },
 
+  isValidVersion(version) {
+    return typeof version === 'string' && /^\d+\.\d+\.\d+$/.test(version);
+  },
+
   showSidebarBadge(version) {
     const badge = document.getElementById('updateSidebarBadge');
     const verSpan = document.getElementById('updateSidebarVersion');
@@ -176,12 +196,7 @@ const AppUpdater = {
   },
 
   formatNotes(text) {
-    if (!text) return 'Se publicaron arreglos y optimizaciones.';
-    return text
-      .replace(/^### (.*$)/gim, '<strong style="color: #818cf8; display: block; margin-top: 6px;">$1</strong>')
-      .replace(/^\* (.*$)/gim, '• $1')
-      .replace(/^- (.*$)/gim, '• $1')
-      .replace(/\n/g, '<br>');
+    return text ? String(text) : 'Se publicaron arreglos y optimizaciones.';
   },
 
   showModal(version, notes) {
@@ -192,7 +207,7 @@ const AppUpdater = {
     const linkAnchor = document.getElementById('updateModalLinkAnchor');
 
     if (verEl) verEl.textContent = `Versión v${version} disponible (tenés la v${this.CURRENT_VERSION})`;
-    if (notesEl) notesEl.innerHTML = this.formatNotes(notes);
+    if (notesEl) notesEl.textContent = this.formatNotes(notes);
     if (linkAnchor) {
       const releaseUrl = `${this.REPO_URL}/releases/tag/v${version}`;
       linkAnchor.href = releaseUrl;
@@ -215,25 +230,15 @@ const AppUpdater = {
   },
 
   openInBrowser(url) {
-    const targetUrl = url || this._directInstallerUrl() || (this.latestVersion ? `${this.REPO_URL}/releases/tag/v${this.latestVersion}` : `${this.REPO_URL}/releases/latest`);
+    const targetUrl = url || (this.latestVersion ? `${this.REPO_URL}/releases/tag/v${this.latestVersion}` : `${this.REPO_URL}/releases/latest`);
     this.openExternal(targetUrl);
-  },
-
-  /**
-   * URL de descarga DIRECTA del instalador Windows (saltea la página de GitHub).
-   * Si el plugin de updater falla, al menos el .exe empieza a bajar de una.
-   */
-  _directInstallerUrl() {
-    if (!this.latestVersion) return null;
-    const v = this.latestVersion;
-    return `${this.REPO_URL}/releases/download/v${v}/Mambo.Pedidos_${v}_x64-setup.exe`;
   },
 
   /**
    * Punto de entrada del botón "Instalar Actualización".
    * Usa el plugin nativo de Tauri 2.0: descarga el artefacto firmado,
    * verifica la firma criptográfica minisign, reemplaza in-place y relanza.
-   * Fallback: descarga manual desde GitHub si el plugin falla.
+   * No existe fallback de descarga: el updater oficial firmado es el único camino de instalación.
    */
   async startDirectDownload() {
     const progressWrap = document.getElementById('updateProgressWrap');
@@ -306,21 +311,28 @@ const AppUpdater = {
 
       return;
     } catch (pluginErr) {
-      console.warn('Plugin updater failed, falling back to manual download:', pluginErr.message || pluginErr);
+      console.error('Updater oficial firmado falló:', pluginErr.message || pluginErr);
     }
 
-    // Fallback: abrir descarga manual en navegador
-    if (progressText) progressText.textContent = '⚠️ Abriendo descarga en navegador...';
+    if (progressText) progressText.textContent = '❌ No se pudo instalar la actualización firmada.';
     if (progressBarInner) progressBarInner.style.width = '100%';
-    if (btn) { btn.disabled = false; btn.textContent = '🌐 Abrir descarga manual'; }
-    toast('ℹ️ Abriendo página de descarga en el navegador.', 'info');
-    this.openInBrowser();
-    this.closeModal();
+    if (btn) { btn.disabled = false; btn.textContent = 'Reintentar actualización'; }
+    toast('❌ La actualización no se instaló porque falló la verificación oficial.', 'error');
   },
 
   openExternal(url) {
-    if (!url) return;
+    if (!url || !this.isAllowedExternalUrl(url)) return;
     this._invoke('open_external_url', { url }).catch(() => { window.open(url, '_blank'); });
+  },
+
+  isAllowedExternalUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol) &&
+        ['github.com', 'www.github.com', 'instagram.com', 'www.instagram.com'].includes(parsed.hostname);
+    } catch (e) {
+      return false;
+    }
   }
 };
 

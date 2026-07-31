@@ -1,0 +1,91 @@
+schema: spec-driven
+
+project: mambo-pedidos
+workspace: MamboApp
+artifact_store: hybrid
+execution_mode: auto
+delivery_strategy: auto-chain
+review_budget_lines: 400
+
+context: |
+  Application: Mambo Pedidos desktop catalog and order manager.
+  Stack: Tauri 2.0, Rust 1.70+, vanilla HTML/CSS/ES6 JavaScript, PDF.js 3.11, PapaParse, and SheetJS.
+  Architecture: Static frontend modules orchestrated by app.js, with Rust/Tauri commands and plugins for native integration.
+  Data flow: PDF spatial extraction and optional local LLM enrichment feed deterministic catalog validation and traffic-light quality states.
+  Persistence: Tauri Store backed by a transparent LocalStorage fallback; product images are currently stored in catalog records as data URLs.
+  Delivery: GitHub Actions builds signed Windows, Linux, and macOS artifacts through the Tauri updater pipeline.
+  Conventions: CommonJS-compatible JavaScript modules, browser globals for the static runtime, custom Node test harnesses, and Rust unit tests.
+  Initial quality scope: real-PDF Tauri imports, warning-group verification, physical CSV/XLSX round-trips, signed updater validation, image storage separation, SKU migration, and UI/persistence E2E coverage.
+
+strict_tdd: true
+
+testing:
+  strict_tdd: true
+  detected: "2026-07-30"
+  test_runner:
+    command: "npm test"
+    framework: "Custom Node.js assertion suite in src/js/tests.js"
+    result: "110/110 passing"
+  test_layers:
+    unit:
+      available: true
+      tool: "npm test; cargo test --manifest-path src-tauri/Cargo.toml"
+    integration:
+      available: true
+      tool: "node scripts/test-spatial-import.js; node scripts/test-catalog-batch.js"
+      notes: "Real PDFs are read from C:\\Mambo\\Catalogos; the current harnesses run in Node, not inside a Tauri WebView."
+    e2e:
+      available: false
+      tool: "—"
+      notes: "No Playwright, Cypress, Selenium, or equivalent project test setup detected."
+  coverage:
+    available: false
+    command: "—"
+  quality_tools:
+    linter:
+      available: false
+      command: "—"
+    type_checker:
+      available: false
+      command: "—"
+    formatter:
+      available: false
+      command: "—"
+  verification_commands:
+    javascript: "npm test"
+    rust: "cargo test --manifest-path src-tauri/Cargo.toml"
+    version: "npm run check:version"
+    build: "npm run build"
+    real_pdf_spatial: "node scripts/test-spatial-import.js"
+    real_pdf_audit: "node scripts/test-catalog-batch.js"
+
+rules:
+  proposal:
+    - Define explicit scope and non-goals for each change.
+    - Include a rollback plan for storage, migration, updater, or release changes.
+    - Keep the initial quality scope as separate, reviewable work units.
+  specs:
+    - Use Given/When/Then scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Make every warning group and integration outcome mechanically verifiable.
+  design:
+    - Follow the existing static frontend plus Tauri/Rust boundary unless a change explicitly justifies a boundary change.
+    - Document persistence, migration, and release-security decisions with rationale.
+    - Include sequence diagrams for PDF, file, updater, or native integration flows.
+  tasks:
+    - Group tasks by independently verifiable work unit.
+    - Forecast the 400-line review budget and use chained slices when required.
+    - Keep tests and their implementation in the same reviewable unit.
+  apply:
+    tdd: true
+    guidelines:
+      - Preserve existing browser-global and CommonJS-compatible module conventions.
+      - Do not commit signing keys or bypass updater signature verification.
+    test_command: "npm test"
+  verify:
+    test_command: "npm test && cargo test --manifest-path src-tauri/Cargo.toml && npm run check:version"
+    build_command: "npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive persistence or migration deltas.
+    - Preserve the OpenSpec archive as the change audit trail.

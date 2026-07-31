@@ -190,10 +190,19 @@ ${chunkText}
         variante: item.variante || '',
         cat: (item.cat || 'OTRO').toUpperCase(),
         fob,
+        img: item.img || '-',
         confidence: Math.min(100, confidence),
+        sourceConfidence: Math.min(100, confidence),
+        sourceStatus: status,
+        sourceWarnings: [...warnings],
         status,
         warnings,
-        isGroundedFob
+        isGroundedFob,
+        groundedFob: isGroundedFob,
+        grounded: isGroundedFob,
+        groundingReason: isGroundedFob
+          ? 'FOB encontrado literalmente en el texto del bloque'
+          : 'FOB no encontrado literalmente en el texto del bloque'
       };
     });
   },
