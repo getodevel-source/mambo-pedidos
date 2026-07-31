@@ -54,6 +54,7 @@ global.FileImporter = require(jsPath('fileImporter.js'));
 global.QuoteGenerator = require(jsPath('quoteGenerator.js'));
 global.AppUpdater = require(jsPath('updater.js'));
 global.UINotifications = require(jsPath('ui/notifications.js'));
+global.Reliability = require(jsPath('reliability.js'));
 global.QualityGate = require(path.join(__dirname, 'quality', 'gate.js'));
 global.SpreadsheetHarness = require(path.join(__dirname, 'quality', 'spreadsheet-harness.js'));
 global.UpdaterSmoke = require(path.join(__dirname, 'quality', 'updater-smoke.js'));

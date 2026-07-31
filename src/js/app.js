@@ -549,12 +549,28 @@ function loadDemoCatalog() {
 
 // Setup Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
+  // Layer 1: Install global error boundary
+  if (typeof Reliability !== 'undefined') Reliability.installErrorBoundary();
+
   fetchLiveDolarRates(false);
   await AppStorage.init();
   const saved = await AppStorage.loadCatalog();
   if (saved && saved.items && saved.items.length) {
+    // Layer 2: Validate integrity on load
+    if (typeof Reliability !== 'undefined') {
+      const integrity = Reliability.validateCatalogIntegrity(saved.items);
+      if (integrity.issues.length > 0) {
+        console.warn(`Integridad de catálogo: ${integrity.issues.length} problemas, ${integrity.repaired} reparados`);
+      }
+      const selResult = Reliability.cleanOrphanedSelection(saved.sel || {}, saved.items);
+      if (selResult.removed.length > 0) {
+        console.warn(`Selección: ${selResult.removed.length} SKUs huérfanos removidos`);
+      }
+      selection = selResult.cleaned;
+    } else {
+      selection = saved.sel || {};
+    }
     catalog = saved.items;
-    selection = saved.sel || {};
     showCatalogContent();
     renderCatalog();
     toast('📚 ' + catalog.length + ' productos restaurados', 'info');

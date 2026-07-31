@@ -76,6 +76,10 @@ const AppStorage = {
 
   // Helpers específicos
   async saveCatalog(items, selection) {
+    // Layer 3: Backup before save
+    if (typeof Reliability !== 'undefined') {
+      Reliability.createBackup({ items, sel: selection });
+    }
     await this.setItem(this.KEYS.CATALOG, { items, sel: selection });
   },
 

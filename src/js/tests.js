@@ -78,6 +78,7 @@ const Tests = {
     this.testAppUpdaterModule();
     this.testUpdaterConfigValidation();
     this.testInfraImprovements();
+    this.testReliabilityLayers();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -851,6 +852,73 @@ const Tests = {
     this.assert(typeof PdfParser.buildImageEvidence === 'function', 'buildImageEvidence disponible');
     const wideImg = PdfParser.buildImageEvidence('test', 1, { width: 1000, height: 10, x: 0, y: 0, dataUrl: 'data:image/png;base64,AA' }, 'SKU', 'matched');
     this.assert(wideImg !== null, 'buildImageEvidence funciona con imagen panorámica');
+  },
+
+  testReliabilityLayers() {
+    // Layer 1: Error boundary
+    this.assert(typeof Reliability.installErrorBoundary === 'function', 'L1: installErrorBoundary existe');
+    this.assert(typeof Reliability.safeCall === 'function', 'L1: safeCall existe');
+    const safeFn = Reliability.safeCall(() => { throw new Error('boom'); }, 'test', 'fallback');
+    this.assert(safeFn() === 'fallback', 'L1: safeCall retorna fallback en error');
+    const safeOk = Reliability.safeCall(() => 42, 'test', 0);
+    this.assert(safeOk() === 42, 'L1: safeCall retorna valor normal sin error');
+    this.assert(Array.isArray(Reliability.getErrorLog()), 'L1: getErrorLog retorna array');
+    this.assert(Reliability.getErrorLog().length > 0, 'L1: error fue registrado en log');
+
+    // Layer 2: Data integrity
+    const goodCatalog = [
+      { sku: 'A-001', modelo: 'K552', fob: 35, marca: 'Redragon', cat: 'TECLADO' },
+      { sku: 'A-002', modelo: 'G203', fob: 22, marca: 'Logitech', cat: 'MOUSE' }
+    ];
+    const goodResult = Reliability.validateCatalogIntegrity(goodCatalog);
+    this.assert(goodResult.valid === true, 'L2: catálogo válido pasa integridad');
+    this.assert(goodResult.issues.length === 0, 'L2: sin issues en catálogo limpio');
+
+    const badCatalog = [
+      { sku: 'B-001', modelo: 'K552', fob: -5, marca: 'Redragon', cat: 'TECLADO' },
+      { sku: 'B-001', modelo: 'G203', fob: 22, marca: 'Logitech', cat: 'MOUSE' },
+      { sku: '', modelo: '', fob: 'abc', marca: 'AULA', cat: 'TECLADO' }
+    ];
+    const badResult = Reliability.validateCatalogIntegrity(badCatalog);
+    this.assert(badResult.issues.length >= 3, `L2: detecta múltiples issues (got ${badResult.issues.length})`);
+    this.assert(badResult.issues.some(i => i.type === 'duplicate_sku'), 'L2: detecta SKU duplicado');
+    this.assert(badResult.issues.some(i => i.type === 'invalid_fob'), 'L2: detecta FOB inválido');
+    this.assert(badResult.repaired > 0, 'L2: repara FOB inválido');
+
+    // Orphaned selection cleanup
+    const sel = { 'A-001': 5, 'GONE-001': 3, 'A-002': 2 };
+    const selResult = Reliability.cleanOrphanedSelection(sel, goodCatalog);
+    this.assert(Object.keys(selResult.cleaned).length === 2, 'L2: selección limpia tiene 2 SKUs');
+    this.assert(selResult.removed.includes('GONE-001'), 'L2: SKU huérfano removido');
+    this.assert(selResult.cleaned['A-001'] === 5, 'L2: SKU válido preservado');
+
+    // Layer 3: Backup & recovery
+    this.assert(typeof Reliability.createBackup === 'function', 'L3: createBackup existe');
+    this.assert(typeof Reliability.recoverFromBackup === 'function', 'L3: recoverFromBackup existe');
+    const validPrimary = { items: [{ sku: 'X' }], sel: {} };
+    const noRecovery = Reliability.recoverFromBackup(validPrimary);
+    this.assert(noRecovery.recovered === false, 'L3: no recovery con primary válido');
+
+    // Layer 4: Import schema validation
+    const goodHeaders = ['SKU', 'Marca', 'Modelo', 'Categoría', 'FOB USD', 'Color/Variante'];
+    const schemaOk = Reliability.validateImportSchema(goodHeaders, 'catalog');
+    this.assert(schemaOk.valid === true, 'L4: schema válido con columnas requeridas');
+    this.assert(schemaOk.missing.length === 0, 'L4: sin columnas faltantes');
+    this.assert(schemaOk.detected.length >= 1, 'L4: columnas detectadas');
+
+    const badHeaders = ['SKU', 'Marca', 'Precio'];
+    const schemaBad = Reliability.validateImportSchema(badHeaders, 'catalog');
+    this.assert(schemaBad.valid === false, 'L4: schema inválido sin Modelo');
+    this.assert(schemaBad.missing.includes('Modelo'), 'L4: reporta Modelo faltante');
+
+    // Encoding detection
+    const utf8Bom = new Uint8Array([0xEF, 0xBB, 0xBF, 0x41]);
+    const enc1 = Reliability.detectEncoding(utf8Bom);
+    this.assert(enc1.encoding === 'utf-8' && enc1.hasBOM === true, 'L4: detecta UTF-8 BOM');
+
+    const noBom = new Uint8Array([0x41, 0x42, 0x43]);
+    const enc2 = Reliability.detectEncoding(noBom);
+    this.assert(enc2.encoding === 'utf-8' && enc2.hasBOM === false, 'L4: sin BOM → utf-8');
   },
 
   // ── Slice 1: catalog-quality-contract ──
