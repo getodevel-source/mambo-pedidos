@@ -89,6 +89,9 @@ const Tests = {
     this.testUpdaterSmokeGate();
     this.testUpdaterManifestValidation();
     this.testUpdaterTamperRejection();
+    this.testImageRefAndAudit();
+    this.testImageMigrationReceipt();
+    this.testImageIdempotenceAndOrphans();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1309,6 +1312,109 @@ const Tests = {
 
     const sigBad = UpdaterSmoke.verifySignatureStructure('', manifest.publicKey);
     this.assert(sigBad.verified === false, 'Firma vacía → rechazada');
+  },
+
+  // ── Slice 5: Image Storage References ──
+
+  testImageRefAndAudit() {
+    // buildImageRef with valid data URL
+    const ref = AppStorage.buildImageRef('data:image/png;base64,iVBORw0KGgo=', 'SKU-001');
+    this.assert(ref !== null, 'buildImageRef devuelve objeto con data URL válida');
+    this.assert(typeof ref.id === 'string' && ref.id.startsWith('img_'), 'ImageRef tiene id con prefijo img_');
+    this.assert(typeof ref.relativePath === 'string' && ref.relativePath.startsWith('images/'), 'ImageRef tiene relativePath');
+    this.assert(ref.mime === 'png', `ImageRef mime es png (got "${ref.mime}")`);
+    this.assert(typeof ref.sha256 === 'string' && ref.sha256.length > 0, 'ImageRef tiene sha256');
+    this.assert(ref.sourceSku === 'SKU-001', 'ImageRef preserva sourceSku');
+
+    // buildImageRef with invalid input
+    this.assert(AppStorage.buildImageRef('-', 'SKU-X') === null, 'buildImageRef null con "-"');
+    this.assert(AppStorage.buildImageRef('', 'SKU-X') === null, 'buildImageRef null con vacío');
+    this.assert(AppStorage.buildImageRef(null, 'SKU-X') === null, 'buildImageRef null con null');
+
+    // Audit: mixed catalog
+    const catalog = [
+      { sku: 'A-001', img: 'data:image/png;base64,AAAA' },
+      { sku: 'A-002', img: '-' },
+      { sku: 'A-003', img: 'not-a-data-url' },
+      { sku: 'A-004', img: 'data:image/png;base64,AAAA' },
+      { sku: 'A-005', img: 'data:image/jpeg;base64,BBBB' }
+    ];
+    const audit = AppStorage.auditInlineImages(catalog);
+    this.assert(audit.summary.total === 5, `Audit total=5 (got ${audit.summary.total})`);
+    this.assert(audit.inline.length === 2, `Audit inline=2 (got ${audit.inline.length})`);
+    this.assert(audit.missing.length === 1, `Audit missing=1 (got ${audit.missing.length})`);
+    this.assert(audit.invalid.length === 1, `Audit invalid=1 (got ${audit.invalid.length})`);
+    this.assert(audit.duplicates.length === 1, `Audit duplicates=1 (got ${audit.duplicates.length})`);
+    this.assert(audit.summary.uniqueImages === 2, `Audit uniqueImages=2 (got ${audit.summary.uniqueImages})`);
+
+    // Duplicate references the first SKU
+    this.assert(audit.duplicates[0].firstSku === 'A-001', 'Duplicado referencia al primer SKU');
+  },
+
+  testImageMigrationReceipt() {
+    const catalog = [
+      { sku: 'M-001', img: 'data:image/png;base64,CCCC' },
+      { sku: 'M-002', img: '-' },
+      { sku: 'M-003', img: 'data:image/png;base64,DDDD' }
+    ];
+    const audit = AppStorage.auditInlineImages(catalog);
+    const receipt = AppStorage.buildMigrationReceipt(audit, 'image-ref-v1');
+
+    this.assert(receipt.schema === 'image-ref-v1', 'Receipt tiene schema');
+    this.assert(typeof receipt.inputIdentity === 'string', 'Receipt tiene inputIdentity');
+    this.assert(receipt.counts.total === 3, 'Receipt counts.total=3');
+    this.assert(receipt.mappings.length === 3, `Receipt tiene 3 mappings (got ${receipt.mappings.length})`);
+    this.assert(receipt.committed === false, 'Receipt no está committed inicialmente');
+
+    // Mapped entries have imageRef
+    const mapped = receipt.mappings.filter(m => m.status === 'mapped');
+    this.assert(mapped.length === 2, `Receipt tiene 2 mapped (got ${mapped.length})`);
+    this.assert(mapped[0].imageRef !== null, 'Mapped entry tiene imageRef');
+
+    // Unresolved entry has reason
+    const unresolved = receipt.mappings.filter(m => m.status === 'unresolved');
+    this.assert(unresolved.length === 1, 'Receipt tiene 1 unresolved');
+    this.assert(typeof unresolved[0].reason === 'string', 'Unresolved tiene reason');
+
+    // SKU change preserves image ref (ref is SKU-independent)
+    const ref1 = AppStorage.buildImageRef('data:image/png;base64,CCCC', 'M-001');
+    const ref2 = AppStorage.buildImageRef('data:image/png;base64,CCCC', 'M-999-RENAMED');
+    this.assert(ref1.id === ref2.id, 'ImageRef ID es independiente del SKU');
+    this.assert(ref1.sha256 === ref2.sha256, 'ImageRef sha256 es independiente del SKU');
+  },
+
+  testImageIdempotenceAndOrphans() {
+    const catalog = [
+      { sku: 'I-001', img: 'data:image/png;base64,EEEE' },
+      { sku: 'I-002', img: 'data:image/png;base64,FFFF' }
+    ];
+    const audit = AppStorage.auditInlineImages(catalog);
+    const receipt1 = AppStorage.buildMigrationReceipt(audit);
+    const receipt2 = AppStorage.buildMigrationReceipt(audit);
+
+    // Same input → idempotent
+    const idem = AppStorage.checkIdempotence(receipt1, receipt2);
+    this.assert(idem.idempotent === true, 'Mismo input → idempotente (no-op)');
+    this.assert(idem.reason.includes('no-op'), 'Razón menciona no-op');
+
+    // No previous receipt → not idempotent
+    const first = AppStorage.checkIdempotence(null, receipt1);
+    this.assert(first.idempotent === false, 'Sin receipt previo → no idempotente');
+
+    // Changed input → not idempotent
+    const changedCatalog = [...catalog, { sku: 'I-003', img: 'data:image/png;base64,GGGG' }];
+    const changedAudit = AppStorage.auditInlineImages(changedCatalog);
+    const changedReceipt = AppStorage.buildMigrationReceipt(changedAudit);
+    const changed = AppStorage.checkIdempotence(receipt1, changedReceipt);
+    this.assert(changed.idempotent === false, 'Input cambiado → no idempotente');
+
+    // Orphans are audit-visible, never auto-deleted
+    this.assert(Array.isArray(audit.orphans), 'Audit tiene array de orphans');
+    this.assert(audit.orphans.length === 0, 'Sin orphans en catalog limpio');
+
+    // AP-3a gate
+    const gate = QualityGate.GateOutcome({ gate: 'image-migration', reason: 'AP-3a approval required' });
+    this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'AP-3a gate produce SKIPPED');
   }
 };
 

@@ -129,7 +129,139 @@ const AppStorage = {
 
   async loadBrands() {
     return await this.getItem(this.KEYS.BRANDS, []);
+  },
+
+  // ── Slice 5: Image Storage References ──
+
+  /**
+   * Build a stable ImageRef from a data URL payload.
+   * @param {string} dataUrl - The inline image data URL
+   * @param {string} sku - The product SKU (for provenance, NOT for lookup)
+   * @returns {Object|null} ImageRef {id, relativePath, mime, sha256, width, height} or null
+   */
+  buildImageRef(dataUrl, sku) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !/^data:image\//i.test(dataUrl)) return null;
+    const mimeMatch = dataUrl.match(/^data:image\/(\w+);/i);
+    const mime = mimeMatch ? mimeMatch[1].toLowerCase() : 'unknown';
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/i, '');
+    let sha256 = '';
+    try {
+      if (typeof require === 'function') {
+        const crypto = require('crypto');
+        sha256 = crypto.createHash('sha256').update(Buffer.from(base64, 'base64')).digest('hex');
+      } else {
+        // Browser fallback: simple hash for ID generation
+        let h = 0;
+        for (let i = 0; i < base64.length; i++) { h = ((h << 5) - h + base64.charCodeAt(i)) | 0; }
+        sha256 = Math.abs(h).toString(16).padStart(8, '0');
+      }
+    } catch (e) { sha256 = 'error'; }
+    const id = `img_${sha256.substring(0, 16)}`;
+    return {
+      id,
+      relativePath: `images/${id}.${mime === 'jpeg' ? 'jpg' : mime}`,
+      mime,
+      sha256,
+      width: 0,
+      height: 0,
+      sourceSku: sku || ''
+    };
+  },
+
+  /**
+   * Read-only audit of inline images in a catalog.
+   * Categories: inline (valid data URL), missing (no image or '-'),
+   * invalid (malformed data URL), duplicate (same sha256), orphan (ref without product).
+   * @param {Array} items - Catalog items
+   * @returns {Object} { inline: [], missing: [], invalid: [], duplicates: [], orphans: [], summary: {} }
+   */
+  auditInlineImages(items) {
+    const audit = { inline: [], missing: [], invalid: [], duplicates: [], orphans: [], summary: {} };
+    if (!Array.isArray(items)) return audit;
+
+    const seenHashes = new Map();
+    for (const item of items) {
+      const sku = (item.sku || '').toString();
+      const img = item.img;
+      if (!img || img === '-' || typeof img !== 'string') {
+        audit.missing.push({ sku, reason: 'No image payload' });
+        continue;
+      }
+      if (!/^data:image\/(?:png|jpe?g|webp|gif);/i.test(img)) {
+        audit.invalid.push({ sku, reason: 'Malformed data URL', preview: img.substring(0, 40) });
+        continue;
+      }
+      const ref = this.buildImageRef(img, sku);
+      if (!ref) {
+        audit.invalid.push({ sku, reason: 'Failed to build ImageRef' });
+        continue;
+      }
+      if (seenHashes.has(ref.sha256)) {
+        audit.duplicates.push({ sku, sha256: ref.sha256, firstSku: seenHashes.get(ref.sha256) });
+      } else {
+        seenHashes.set(ref.sha256, sku);
+        audit.inline.push({ sku, ref });
+      }
+    }
+
+    audit.summary = {
+      total: items.length,
+      inline: audit.inline.length,
+      missing: audit.missing.length,
+      invalid: audit.invalid.length,
+      duplicates: audit.duplicates.length,
+      orphans: audit.orphans.length,
+      uniqueImages: seenHashes.size
+    };
+    return audit;
+  },
+
+  /**
+   * Build a deterministic migration receipt from an audit.
+   * @param {Object} audit - Result of auditInlineImages
+   * @param {string} schemaVersion - e.g. 'image-ref-v1'
+   * @returns {Object} MigrationReceipt
+   */
+  buildMigrationReceipt(audit, schemaVersion) {
+    const mappings = [];
+    for (const entry of audit.inline) {
+      mappings.push({ sku: entry.sku, imageRef: entry.ref, status: 'mapped' });
+    }
+    for (const entry of audit.missing) {
+      mappings.push({ sku: entry.sku, imageRef: null, status: 'unresolved', reason: entry.reason });
+    }
+    for (const entry of audit.invalid) {
+      mappings.push({ sku: entry.sku, imageRef: null, status: 'failed', reason: entry.reason });
+    }
+    for (const entry of audit.duplicates) {
+      mappings.push({ sku: entry.sku, imageRef: null, status: 'duplicate', firstSku: entry.firstSku });
+    }
+    return {
+      schema: schemaVersion || 'image-ref-v1',
+      inputIdentity: `audit:${audit.summary.total}items:${audit.summary.uniqueImages}unique`,
+      counts: Object.assign({}, audit.summary),
+      mappings,
+      committed: false,
+      orphans: audit.orphans
+    };
+  },
+
+  /**
+   * Check idempotence: if a receipt with the same inputIdentity exists, migration is a no-op.
+   * @param {Object} existingReceipt - Previously stored receipt (or null)
+   * @param {Object} newReceipt - Newly computed receipt
+   * @returns {{ idempotent: boolean, reason: string }}
+   */
+  checkIdempotence(existingReceipt, newReceipt) {
+    if (!existingReceipt) {
+      return { idempotent: false, reason: 'No previous receipt; first migration' };
+    }
+    if (existingReceipt.inputIdentity === newReceipt.inputIdentity) {
+      return { idempotent: true, reason: 'Same input identity; migration is a no-op' };
+    }
+    return { idempotent: false, reason: `Input changed: "${existingReceipt.inputIdentity}" → "${newReceipt.inputIdentity}"` };
   }
 };
 
-window.AppStorage = AppStorage;
+if (typeof window !== 'undefined') window.AppStorage = AppStorage;
+if (typeof module !== 'undefined') module.exports = AppStorage;
