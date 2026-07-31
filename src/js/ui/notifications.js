@@ -4,6 +4,8 @@
 // ============================================
 
 const UINotifications = {
+  _cancelRequested: false,
+
   toast(msg, type = '') {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -13,6 +15,7 @@ const UINotifications = {
   },
 
   showProgress(pct, statusText = 'Procesando archivos...', subText = '') {
+    this._cancelRequested = false;
     const p = document.getElementById('progress');
     const b = document.getElementById('progressBar');
     if (p && b) {
@@ -33,6 +36,36 @@ const UINotifications = {
     if (progressPct) progressPct.textContent = `${cleanPct}%`;
     if (progressTitle && statusText) progressTitle.textContent = statusText;
     if (progressSub && subText) progressSub.textContent = subText;
+  },
+
+  /**
+   * Update progress for a specific file within a batch.
+   * @param {number} fileIndex - 0-based file index
+   * @param {number} totalFiles - Total files in batch
+   * @param {string} fileName - Current file name
+   * @param {number} filePct - Progress within current file (0-100)
+   */
+  showFileProgress(fileIndex, totalFiles, fileName, filePct) {
+    const overallPct = Math.round(((fileIndex + (filePct || 0) / 100) / totalFiles) * 100);
+    const shortName = fileName && fileName.length > 30 ? '...' + fileName.slice(-27) : fileName;
+    this.showProgress(overallPct, `Archivo ${fileIndex + 1} de ${totalFiles}`, shortName || '');
+  },
+
+  /**
+   * Request cancellation of the current operation.
+   */
+  requestCancel() {
+    this._cancelRequested = true;
+    const progressTitle = document.getElementById('progressTitleText');
+    if (progressTitle) progressTitle.textContent = 'Cancelando...';
+  },
+
+  /**
+   * Check if cancellation was requested.
+   * @returns {boolean}
+   */
+  isCancelRequested() {
+    return this._cancelRequested;
   },
 
   hideProgress() {

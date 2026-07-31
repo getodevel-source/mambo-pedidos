@@ -69,8 +69,27 @@ const LocalLlm = {
       available: this.isAvailable,
       endpoint: this.endpoint,
       model: this.model,
-      lastError: this.lastError
+      lastError: this.lastError,
+      label: this.isAvailable
+        ? `IA local activa (${this.model})`
+        : this.lastError
+          ? `IA local no disponible: ${this.lastError}`
+          : 'IA local no detectada'
     };
+  },
+
+  /**
+   * Update a DOM badge with the current LLM health status.
+   * Call after checkHealth() to make the status visible to the user.
+   * @param {string} [elementId='llmStatusBadge'] - DOM element id
+   */
+  updateStatusBadge(elementId = 'llmStatusBadge') {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const status = this.getStatus();
+    el.textContent = status.label;
+    el.title = `Endpoint: ${status.endpoint} | Modelo: ${status.model}`;
+    el.style.color = status.available ? 'var(--green, #4caf50)' : 'var(--text-muted, #888)';
   },
 
   /**

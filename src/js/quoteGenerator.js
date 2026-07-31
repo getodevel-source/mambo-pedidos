@@ -6,6 +6,23 @@
 
 const QuoteGenerator = {
 
+  /**
+   * Format a number as currency with configurable locale and currency code.
+   * @param {number} value
+   * @param {Object} [opts] - { locale, currency, decimals }
+   * @returns {string}
+   */
+  formatCurrency(value, opts = {}) {
+    const locale = opts.locale || 'es-AR';
+    const currency = opts.currency || 'USD';
+    const decimals = opts.decimals !== undefined ? opts.decimals : 2;
+    try {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value || 0);
+    } catch (e) {
+      return `$${(value || 0).toFixed(decimals)}`;
+    }
+  },
+
   // Genera un documento HTML imprimible/convertible a PDF
   generatePrintableQuote(pedido, companyInfo = {}) {
     if (!pedido || !pedido.items || !pedido.items.length) {

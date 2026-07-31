@@ -162,11 +162,22 @@ ${chunkText}
         const fobStr = fob.toString();
         const fobFormatted = fob.toFixed(2);
         const fobComa = fobFormatted.replace('.', ',');
+        const fobInt = Math.round(fob).toString();
 
         if (cleanRaw.includes(fobStr) || cleanRaw.includes(fobFormatted) || cleanRaw.includes(fobComa)) {
           isGroundedFob = true;
+        } else if (fob === Math.round(fob) && cleanRaw.includes(fobInt)) {
+          // Integer match: FOB 45.00 matches "45" in text
+          isGroundedFob = true;
         } else {
-          warnings.push(`⚠️ Precio FOB $${fob} USD no encontrado literalmente en el texto crudo del documento (Posible alucinación ajustada)`);
+          // Regex fallback: match $XX.XX or $XX,XX with optional whitespace
+          const escaped = fobFormatted.replace('.', '\\.');
+          const priceRe = new RegExp('\\$\\s*' + escaped + '|\\$\\s*' + fobComa.replace(',', '\\,'), 'i');
+          if (priceRe.test(cleanRaw)) {
+            isGroundedFob = true;
+          } else {
+            warnings.push(`⚠️ Precio FOB $${fob} USD no encontrado literalmente en el texto crudo del documento (Posible alucinación ajustada)`);
+          }
         }
       }
 

@@ -234,7 +234,10 @@ const PdfParser = {
         }
 
         if (!imgObj || !imgObj.width || !imgObj.height) continue;
-        if (imgObj.width < 25 || imgObj.height < 25) continue;
+        if (imgObj.width < 30 || imgObj.height < 30) continue;
+        // Aspect ratio guard: extreme ratios (>10:1) are likely decorative lines/bars, not product photos
+        const aspectRatio = Math.max(imgObj.width, imgObj.height) / Math.max(1, Math.min(imgObj.width, imgObj.height));
+        if (aspectRatio > 10) continue;
 
         let ctm = null;
         for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
@@ -1626,7 +1629,19 @@ const PdfParser = {
   matchImagesToProductsGlobal(products, allImages) {
     if (!products || !products.length) return;
     products.forEach(product => {
-      if (!this.isValidImageDataUrl(product.img)) product.img = '-';
+      if (!this.isValidImageDataUrl(product.img)) {
+        product.img = '-';
+        // Wire absent evidence for R9 contract
+        if (!product.imageEvidence) {
+          product.imageEvidence = this.buildImageEvidence(
+            product._pdfIdentity || 'unknown',
+            product.pageNum || 0,
+            null,
+            product.sku || '',
+            'none'
+          );
+        }
+      }
     });
     if (!allImages || !allImages.length) return;
     // Deduplicar imágenes (mismo dataUrl = misma imagen extraída dos veces)
@@ -1706,6 +1721,14 @@ const PdfParser = {
         if (minPair.validation && minPair.validation.warnings.length) {
           winnerProd.imgWarnings = minPair.validation.warnings;
         }
+        // Wire image evidence for R9 contract (Slice 2)
+        winnerProd.imageEvidence = this.buildImageEvidence(
+          winnerProd._pdfIdentity || 'unknown',
+          pNum,
+          winnerImg,
+          winnerProd.sku || '',
+          'matched'
+        );
         assignedProds.add(minPair.prodIdx);
         assignedImgs.add(minPair.imgIdx);
       }
