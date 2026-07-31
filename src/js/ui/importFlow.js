@@ -320,11 +320,15 @@ const ImportFlow = {
     let skippedCount = 0;
 
     for (const item of selectedItems) {
-      const existing = catalog.find(c => typeof SkuAllocator !== 'undefined'
-        ? SkuAllocator.isEquivalent(c, item)
-        : ((c.marca || '').toLowerCase().trim() === (item.marca || '').toLowerCase().trim() &&
-           (c.modelo || '').toLowerCase().trim() === (item.modelo || '').toLowerCase().trim() &&
-           (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim()));
+      // #11: Never dedup items with empty modelo — they are not "equivalent" to each other
+      const hasModelo = (item.modelo || '').trim().length > 0;
+      const existing = hasModelo
+        ? catalog.find(c => typeof SkuAllocator !== 'undefined'
+          ? SkuAllocator.isEquivalent(c, item)
+          : ((c.marca || '').toLowerCase().trim() === (item.marca || '').toLowerCase().trim() &&
+             (c.modelo || '').toLowerCase().trim() === (item.modelo || '').toLowerCase().trim() &&
+             (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim()))
+        : undefined;
 
       if (existing) {
         if (Math.abs(existing.fob - item.fob) >= 0.01) {

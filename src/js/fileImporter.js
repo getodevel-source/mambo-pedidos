@@ -74,6 +74,17 @@ const FileImporter = {
         header: true,
         skipEmptyLines: true,
         complete: r => {
+          // #2: Mojibake detection — check headers for encoding artifacts
+          const headers = r.meta.fields || [];
+          const mojibakePattern = /[Ã¡-ÃºÂ¿Â¡ÃƒÃ‚]/;
+          const hasMojibake = headers.some(h => mojibakePattern.test(h));
+          if (hasMojibake) {
+            console.warn(`CSV encoding: headers contienen mojibake (probable Latin-1/Windows-1252 leído como UTF-8). Headers: ${headers.join(', ')}. Considerá re-exportar el archivo como UTF-8.`);
+            if (typeof toast === 'function') {
+              toast('⚠️ CSV con encoding incorrecto (Latin-1). Columnas pueden no reconocerse. Re-exportá como UTF-8.', 'error');
+            }
+          }
+
           const items = [];
           let skippedNoModel = 0;
           let skippedNoFob = 0;
@@ -123,6 +134,19 @@ const FileImporter = {
 
     const ws = wb.Sheets[bestSheetName];
     const json = XLSX.utils.sheet_to_json(ws);
+
+    // #12: Merged cells / formula sheet detection
+    if (json.length > 0) {
+      const keys = Object.keys(json[0]);
+      const emptyKeys = keys.filter(k => /^__EMPTY|^_\d+$/.test(k));
+      if (emptyKeys.length > keys.length * 0.5) {
+        console.warn(`XLSX: hoja "${bestSheetName}" tiene celdas mergeadas o headers no reconocidos (${emptyKeys.length}/${keys.length} columnas son __EMPTY). Keys: ${keys.join(', ')}. El archivo puede tener formato inesperado.`);
+        if (typeof toast === 'function') {
+          toast(`⚠️ XLSX "${bestSheetName}": estructura no reconocida (celdas mergeadas). Verificá el formato del archivo.`, 'error');
+        }
+      }
+    }
+
     const items = [];
     let skippedNoModel = 0;
     let skippedNoFob = 0;

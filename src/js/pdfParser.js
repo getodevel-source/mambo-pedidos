@@ -20,6 +20,7 @@ const PdfParser = {
       // Pre-detectar marca desde el filename para usar como fallback durante la extracción
       const filenameBrand = this.detectBrandFromFilename(file.name, customBrands) || '';
       const failedPages = [];
+      let imageOnlyPages = 0;
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         if (typeof onProgress === 'function') {
@@ -29,6 +30,9 @@ const PdfParser = {
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
         const viewport = page.getViewport({ scale: 1.0 });
+
+        // #9: Track per-page text density for scanned PDF detection
+        const pageTextLen = content.items.reduce((sum, item) => sum + (item.str || '').length, 0);
 
         if (pageNum <= 3) {
           fullTextForBrand += content.items.map(item => item.str).join(' ') + ' ';
@@ -57,6 +61,10 @@ const PdfParser = {
             allProducts.push(...verified);
           }
         }
+        // #9: Flag pages with almost no text and no products as likely scanned
+        if (pageTextLen < 10 && pageProducts.length === 0) {
+          imageOnlyPages++;
+        }
         } catch (pageErr) {
           failedPages.push({ page: pageNum, error: (pageErr.message || String(pageErr)).substring(0, 100) });
           console.warn(`PDF página ${pageNum} falló: ${pageErr.message || pageErr}. Continuando con las demás.`);
@@ -65,6 +73,13 @@ const PdfParser = {
 
       if (failedPages.length > 0) {
         console.warn(`PDF: ${failedPages.length} de ${pdf.numPages} páginas fallaron: ${failedPages.map(p => p.page).join(', ')}. ${allProducts.length} productos extraídos de las páginas OK.`);
+      }
+      // #9: Warn if many pages appear to be scanned images
+      if (imageOnlyPages > 0 && pdf.numPages > 3 && imageOnlyPages / pdf.numPages > 0.5) {
+        console.warn(`PDF: ${imageOnlyPages} de ${pdf.numPages} páginas parecen escaneadas (sin texto seleccionable). OCR requerido para extracción completa.`);
+        if (typeof toast === 'function') {
+          toast(`⚠️ ${imageOnlyPages}/${pdf.numPages} páginas sin texto (escaneadas). OCR necesario para el catálogo completo.`, 'error');
+        }
       }
 
       const cleanText = fullTextForBrand.replace(/\s+/g, '');
@@ -1636,10 +1651,21 @@ const PdfParser = {
       { cat: 'TECLADO', re: /\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i, conf: 60 }
     ];
 
+    // #6: Short ambiguous tokens that cause false positives
+    const AMBIGUOUS_TOKENS = new Set(['a5', 'l7', 'g3', 'x3', 'r1', 'mat', 'a5v3']);
+
     for (const p of patterns) {
       const match = t.match(p.re);
       if (match) {
-        return Object.assign(evidence, { category: p.cat, confidence: p.conf, source: 'text-keyword', matchedPattern: match[0] });
+        const matched = match[0].toLowerCase().trim();
+        let conf = p.conf;
+        let source = 'text-keyword';
+        // Short ambiguous tokens get reduced confidence + warning
+        if (AMBIGUOUS_TOKENS.has(matched)) {
+          conf = Math.min(conf, 40);
+          source = 'text-keyword-ambiguous';
+        }
+        return Object.assign(evidence, { category: p.cat, confidence: conf, source, matchedPattern: match[0] });
       }
     }
 
