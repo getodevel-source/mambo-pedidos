@@ -19,11 +19,13 @@ const PdfParser = {
 
       // Pre-detectar marca desde el filename para usar como fallback durante la extracción
       const filenameBrand = this.detectBrandFromFilename(file.name, customBrands) || '';
+      const failedPages = [];
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         if (typeof onProgress === 'function') {
           try { onProgress(pageNum, pdf.numPages); } catch (e) {}
         }
+        try {
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
         const viewport = page.getViewport({ scale: 1.0 });
@@ -55,6 +57,14 @@ const PdfParser = {
             allProducts.push(...verified);
           }
         }
+        } catch (pageErr) {
+          failedPages.push({ page: pageNum, error: (pageErr.message || String(pageErr)).substring(0, 100) });
+          console.warn(`PDF página ${pageNum} falló: ${pageErr.message || pageErr}. Continuando con las demás.`);
+        }
+      }
+
+      if (failedPages.length > 0) {
+        console.warn(`PDF: ${failedPages.length} de ${pdf.numPages} páginas fallaron: ${failedPages.map(p => p.page).join(', ')}. ${allProducts.length} productos extraídos de las páginas OK.`);
       }
 
       const cleanText = fullTextForBrand.replace(/\s+/g, '');

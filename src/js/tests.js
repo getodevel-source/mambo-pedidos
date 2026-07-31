@@ -81,6 +81,7 @@ const Tests = {
     this.testReliabilityLayers();
     this.testCategoryEvidence();
     this.testImportReliability();
+    this.testFuzzyColumnMatching();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -1002,6 +1003,34 @@ const Tests = {
 
     const wrongType = Reliability.validateFileType('datos.csv', 'pdf');
     this.assert(wrongType.valid === false, 'CSV cuando se espera PDF → inválido');
+  },
+
+  testFuzzyColumnMatching() {
+    // normalizeHeader: accents, case, whitespace
+    this.assert(FileImporter.normalizeHeader('Categoría') === 'categoria', 'normalizeHeader strip accents');
+    this.assert(FileImporter.normalizeHeader('  MODELO  ') === 'modelo', 'normalizeHeader trim + lowercase');
+    this.assert(FileImporter.normalizeHeader('FOB  USD') === 'fob usd', 'normalizeHeader collapse spaces');
+
+    // resolveField: exact match
+    const row1 = { 'Modelo': 'K552', 'FOB USD': '35.50', 'Marca': 'Redragon' };
+    this.assert(FileImporter.resolveField(row1, 'modelo') === 'K552', 'resolveField exact Modelo');
+    this.assert(FileImporter.resolveField(row1, 'fob') === '35.50', 'resolveField exact FOB USD');
+
+    // resolveField: alias match (different column names)
+    const row2 = { 'Product Name': 'G203', 'Price': '22.99', 'Brand': 'Logitech', 'Category': 'MOUSE' };
+    this.assert(FileImporter.resolveField(row2, 'modelo') === 'G203', 'resolveField alias "Product Name" → modelo');
+    this.assert(FileImporter.resolveField(row2, 'fob') === '22.99', 'resolveField alias "Price" → fob');
+    this.assert(FileImporter.resolveField(row2, 'marca') === 'Logitech', 'resolveField alias "Brand" → marca');
+    this.assert(FileImporter.resolveField(row2, 'categoria') === 'MOUSE', 'resolveField alias "Category" → categoria');
+
+    // resolveField: accent-insensitive
+    const row3 = { 'Categoría': 'TECLADO', 'Código': 'SKU-001' };
+    this.assert(FileImporter.resolveField(row3, 'categoria') === 'TECLADO', 'resolveField accent-insensitive Categoría');
+    this.assert(FileImporter.resolveField(row3, 'sku') === 'SKU-001', 'resolveField accent-insensitive Código');
+
+    // resolveField: missing field returns empty
+    this.assert(FileImporter.resolveField(row1, 'cantidad') === '', 'resolveField missing → empty string');
+    this.assert(FileImporter.resolveField(null, 'modelo') === '', 'resolveField null row → empty');
   },
 
   // ── Slice 1: catalog-quality-contract ──

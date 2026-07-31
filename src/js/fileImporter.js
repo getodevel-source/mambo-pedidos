@@ -3,8 +3,57 @@
 // ============================================
 
 const FileImporter = {
+  // Column aliases for fuzzy matching (normalized lowercase, accent-stripped)
+  COLUMN_ALIASES: {
+    modelo: ['modelo', 'model', 'product name', 'producto', 'nombre', 'descripcion', 'description', 'item name'],
+    marca: ['marca', 'brand', 'fabricante', 'manufacturer', 'fabricante'],
+    categoria: ['categoria', 'categoría', 'cat', 'category', 'tipo', 'type', 'rubro'],
+    fob: ['fob usd', 'fob unit usd', 'fob', 'precio', 'price', 'usd', 'unit price', 'precio usd', 'valor'],
+    sku: ['sku', 'codigo', 'código', 'code', 'id', 'referencia', 'ref', 'part number', 'pn'],
+    variante: ['color/variante', 'variante', 'color', 'variacion', 'variación', 'variant', 'color/variation'],
+    cantidad: ['cantidad', 'qty', 'quantity', 'units', 'unidades', 'stock', 'cant']
+  },
+
+  /**
+   * Normalize a column header for fuzzy matching.
+   * Strips accents, lowercases, trims whitespace.
+   */
+  normalizeHeader(header) {
+    return String(header || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  },
+
+  /**
+   * Resolve a field value from a row using fuzzy column matching.
+   * @param {Object} row - The parsed row object
+   * @param {string} field - Logical field name (modelo, marca, categoria, fob, sku, variante, cantidad)
+   * @returns {string} The resolved value (trimmed), or ''
+   */
+  resolveField(row, field) {
+    if (!row || !field) return '';
+    const aliases = this.COLUMN_ALIASES[field];
+    if (!aliases) return '';
+
+    // Build a normalized map of the row's keys
+    const normalizedRow = {};
+    for (const key of Object.keys(row)) {
+      normalizedRow[this.normalizeHeader(key)] = row[key];
+    }
+
+    for (const alias of aliases) {
+      const normalized = this.normalizeHeader(alias);
+      if (normalizedRow[normalized] !== undefined && normalizedRow[normalized] !== null) {
+        return String(normalizedRow[normalized]).trim();
+      }
+    }
+    return '';
+  },
+
   getVariant(row = {}) {
-    return (row['Color/Variante'] || row.Variante || row.variante || row.Color || row.color || '').toString().trim();
+    return this.resolveField(row, 'variante') || (row['Color/Variante'] || row.Variante || row.variante || row.Color || row.color || '').toString().trim();
   },
 
   // Generar SKU único si falta en la fila
@@ -26,25 +75,24 @@ const FileImporter = {
         skipEmptyLines: true,
         complete: r => {
           const items = [];
+          let skippedNoModel = 0;
+          let skippedNoFob = 0;
           for (const row of r.data) {
-            const modelo = (row.Modelo || row.modelo || '').toString().trim();
-            if (!modelo) continue;
-            const fob = parseFloat(row['FOB USD'] || row['FOB unit USD'] || row.fob || 0);
-            if (!fob) continue;
+            const modelo = this.resolveField(row, 'modelo');
+            if (!modelo) { skippedNoModel++; continue; }
+            const fobRaw = this.resolveField(row, 'fob');
+            const fob = parseFloat(fobRaw) || 0;
+            if (!fob) { skippedNoFob++; continue; }
 
-            const marca = (row.Marca || row.marca || '').toString().trim();
-            const cat = (row.Categoría || row.Cat || row.cat || '').toString().trim() || 'OTRO';
+            const marca = this.resolveField(row, 'marca');
+            const cat = this.resolveField(row, 'categoria') || 'OTRO';
             const variante = this.getVariant(row);
-            const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
+            const sku = this.resolveField(row, 'sku') || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
 
-            items.push({
-              sku,
-              cat,
-              marca,
-              modelo,
-              variante,
-              fob,
-            });
+            items.push({ sku, cat, marca, modelo, variante, fob });
+          }
+          if (skippedNoModel > 0 || skippedNoFob > 0) {
+            console.warn(`CSV import: ${skippedNoModel} filas sin Modelo, ${skippedNoFob} sin FOB (de ${r.data.length} totales). Headers detectados: ${(r.meta.fields || []).join(', ')}`);
           }
           resolve(items);
         },
@@ -56,29 +104,46 @@ const FileImporter = {
   async processExcelFile(file, catalog = []) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
+
+    // Multi-sheet detection: find the sheet with the most data rows
+    let bestSheetName = wb.SheetNames[0];
+    let bestRowCount = 0;
+    for (const name of wb.SheetNames) {
+      const sheet = wb.Sheets[name];
+      if (!sheet) continue;
+      const rows = XLSX.utils.sheet_to_json(sheet);
+      if (rows.length > bestRowCount) {
+        bestRowCount = rows.length;
+        bestSheetName = name;
+      }
+    }
+    if (wb.SheetNames.length > 1) {
+      console.info(`XLSX: ${wb.SheetNames.length} hojas detectadas. Usando "${bestSheetName}" (${bestRowCount} filas).`);
+    }
+
+    const ws = wb.Sheets[bestSheetName];
     const json = XLSX.utils.sheet_to_json(ws);
     const items = [];
+    let skippedNoModel = 0;
+    let skippedNoFob = 0;
 
     for (const row of json) {
-      const modelo = (row.Modelo || row.modelo || '').toString().trim();
-      if (!modelo) continue;
-      const fob = parseFloat(row['FOB USD'] || row['FOB unit USD'] || row.fob || 0);
-      if (!fob) continue;
+      const modelo = this.resolveField(row, 'modelo');
+      if (!modelo) { skippedNoModel++; continue; }
+      const fobRaw = this.resolveField(row, 'fob');
+      const fob = parseFloat(fobRaw) || 0;
+      if (!fob) { skippedNoFob++; continue; }
 
-      const marca = (row.Marca || row.marca || '').toString().trim();
-      const cat = (row.Categoría || row.Cat || row.cat || '').toString().trim() || 'OTRO';
+      const marca = this.resolveField(row, 'marca');
+      const cat = this.resolveField(row, 'categoria') || 'OTRO';
       const variante = this.getVariant(row);
-      const sku = (row.SKU || row.sku || '').toString().trim() || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
+      const sku = this.resolveField(row, 'sku') || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
 
-      items.push({
-        sku,
-        cat,
-        marca,
-        modelo,
-        variante,
-        fob,
-      });
+      items.push({ sku, cat, marca, modelo, variante, fob });
+    }
+
+    if (skippedNoModel > 0 || skippedNoFob > 0) {
+      console.warn(`XLSX import: ${skippedNoModel} filas sin Modelo, ${skippedNoFob} sin FOB (de ${json.length} totales). Hoja: "${bestSheetName}"`);
     }
 
     return items;

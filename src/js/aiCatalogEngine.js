@@ -139,7 +139,13 @@ ${chunkText}
     }
 
     // Fallback determinístico directo si el servidor local no está disponible
-    return this.fallbackDeterministicChunkParser(chunkText, customBrands);
+    const fallbackItems = this.fallbackDeterministicChunkParser(chunkText, customBrands);
+    // Tag items so the UI can show a "basic parser" badge
+    for (const item of fallbackItems) {
+      item.sourceEngine = 'deterministic';
+      item.engineWarning = 'IA local no disponible — extraído con parser básico. Calidad reducida.';
+    }
+    return fallbackItems;
   },
 
   /**
