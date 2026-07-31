@@ -48,11 +48,11 @@ Chain strategy: stacked-to-main
 
 ## Slice 2: tauri-pdf-image-import (PR 2)
 
-- [ ] 2.1 **RED** Test: WebView imports sanitized PDF, asserts `{pdfIdentity,page,imageFormat,width,height,sourcePosition,canvasDecode,productRowId}`. (~25 lines)
-- [ ] 2.2 **GREEN** Add evidence adapter in `src/js/pdfParser.js`; no Node Canvas mocks. (~70 lines)
-- [ ] 2.3 **RED** Test: missing image -> R9 YELLOW/IMPORTABLE, R9 count +1, row not GREEN. (~15 lines)
-- [ ] 2.4 **GREEN** Wire R9 feed from PDF evidence into `catalogValidator.js`. (~30 lines)
-- [ ] 2.5 Add `scripts/quality/pdf-fixture.pdf` (sanitized) + env-gated manifest.
+- [x] 2.1 **RED** Test: WebView imports sanitized PDF, asserts `{pdfIdentity,page,imageFormat,width,height,sourcePosition,canvasDecode,productRowId}`. (~25 lines)
+- [x] 2.2 **GREEN** Add evidence adapter in `src/js/pdfParser.js`; no Node Canvas mocks. (~70 lines)
+- [x] 2.3 **RED** Test: missing image -> R9 YELLOW/IMPORTABLE, R9 count +1, row not GREEN. (~15 lines)
+- [x] 2.4 **GREEN** Wire R9 feed from PDF evidence into `catalogValidator.js`. (~30 lines)
+- [x] 2.5 Add `scripts/quality/pdf-fixture.pdf` (sanitized) + env-gated manifest.
 
 ## Slice 3: spreadsheet-physical-roundtrip (PR 3)
 

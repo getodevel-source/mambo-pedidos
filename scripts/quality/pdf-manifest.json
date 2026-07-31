@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "description": "Approved PDF fixtures for Tauri WebView image evidence (Slice 2). Full-corpus evidence requires QUALITY_GATE_FULL_CORPUS=1.",
+  "gates": {
+    "tauri-fixture": {
+      "env": "QUALITY_GATE_TAURI_FIXTURE",
+      "description": "Run sanitized fixture PDFs inside Tauri WebView with real Canvas decode"
+    },
+    "full-corpus": {
+      "env": "QUALITY_GATE_FULL_CORPUS",
+      "description": "Run full catalog corpus from C:\\Mambo\\Catalogos (13 PDFs)"
+    }
+  },
+  "fixtures": [
+    {
+      "id": "fixture-001",
+      "file": "pdf-fixture.pdf",
+      "sha256": "a8395de70e27f4a1188188dc257014cdeddd94a07870bf85edf00181960b6066",
+      "description": "Sanitized single-page PDF with one product image (keyboard)",
+      "expectedProducts": 1,
+      "expectedImages": 1,
+      "expectedEvidence": {
+        "canvasDecode": "success",
+        "association": "matched",
+        "imageFormat": "png"
+      }
+    }
+  ],
+  "fullCorpus": {
+    "path": "C:\\Mambo\\Catalogos",
+    "pdfCount": 13,
+    "gate": "full-corpus",
+    "notes": "Requires real catalog PDFs on disk. Not checked into repository."
+  }
+}

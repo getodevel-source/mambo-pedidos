@@ -1710,6 +1710,44 @@ const PdfParser = {
         assignedImgs.add(minPair.imgIdx);
       }
     }
+  },
+
+  /**
+   * Build structured image evidence for the R1-R10 contract (Slice 2).
+   * Records PDF identity, page, decode result, dimensions, position, and association.
+   * @param {string} pdfIdentity - SHA-256 or stable identifier of the source PDF
+   * @param {number} pageNum - 1-based page number
+   * @param {Object|null} rawImage - Extracted image {width,height,x,y,dataUrl} or null
+   * @param {string} productRowId - SKU or row identity this evidence belongs to
+   * @param {string} association - 'matched' | 'none' | 'ambiguous'
+   * @returns {Object} Structured evidence for evaluateItem R9
+   */
+  buildImageEvidence(pdfIdentity, pageNum, rawImage, productRowId, association) {
+    if (!rawImage) {
+      return {
+        pdfIdentity: pdfIdentity || 'unknown',
+        page: pageNum || 0,
+        imageFormat: null,
+        width: 0,
+        height: 0,
+        sourcePosition: null,
+        canvasDecode: 'absent',
+        productRowId: productRowId || '',
+        association: association || 'none'
+      };
+    }
+    const fmt = (rawImage.dataUrl || '').match(/^data:image\/(\w+)/);
+    return {
+      pdfIdentity: pdfIdentity || 'unknown',
+      page: pageNum || 0,
+      imageFormat: fmt ? fmt[1] : 'unknown',
+      width: rawImage.width || 0,
+      height: rawImage.height || 0,
+      sourcePosition: { x: rawImage.x || 0, y: rawImage.y || 0 },
+      canvasDecode: this.isValidImageDataUrl(rawImage.dataUrl) ? 'success' : 'failed',
+      productRowId: productRowId || '',
+      association: association || 'none'
+    };
   }
 };
 

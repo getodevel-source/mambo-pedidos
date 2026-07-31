@@ -415,12 +415,26 @@ const CatalogValidator = {
     ));
 
     // ── R9: Imagen válida ──
+    const imgEv = item.imageEvidence || null;
+    let r9Observed, r9Source, r9Reason;
+    if (imgEv) {
+      r9Observed = `pdf:${imgEv.pdfIdentity}|page:${imgEv.page}|decode:${imgEv.canvasDecode}|assoc:${imgEv.association}`;
+      r9Source = `pdf-evidence:${imgEv.productRowId}`;
+      r9Reason = hasImage
+        ? `Imagen verificada en PDF (página ${imgEv.page}, decode ${imgEv.canvasDecode})`
+        : `Imagen ausente en PDF (página ${imgEv.page}, decode ${imgEv.canvasDecode}): requiere revisión`;
+    } else {
+      r9Observed = hasImage ? 'data:image/...' : 'faltante/inválida';
+      r9Source = 'img';
+      r9Reason = hasImage ? 'Imagen válida' : 'Imagen faltante o inválida: requiere revisión';
+    }
     evals.push(this._makeEval('R9',
       hasImage ? 'PASS' : 'WARNING',
       hasImage ? 'GREEN' : 'YELLOW',
       'IMPORTABLE',
-      { observed: hasImage ? 'data:image/...' : 'faltante/inválida', expected: 'data:image/png|jpeg|webp|gif', source: 'img' },
-      hasImage ? 'Imagen válida' : 'Imagen faltante o inválida: requiere revisión'
+      Object.assign({ observed: r9Observed, expected: 'data:image/png|jpeg|webp|gif', source: r9Source },
+        imgEv ? { canvasDecode: imgEv.canvasDecode, pdfIdentity: imgEv.pdfIdentity, page: imgEv.page, association: imgEv.association } : {}),
+      r9Reason
     ));
 
     // ── R10: Evidencia de grounding ──

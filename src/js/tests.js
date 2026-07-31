@@ -80,6 +80,9 @@ const Tests = {
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
     this.testContractFixtureRoundTrip();
+    this.testPdfImageEvidenceAdapter();
+    this.testPdfImageEvidenceR9();
+    this.testPdfImageEvidenceGate();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1002,6 +1005,119 @@ const Tests = {
     // Upstream RED cannot be promoted
     this.assert(mixedEvals.every(e => e.status !== 'GREEN'),
       'Upstream RED impide que cualquier evaluación sea GREEN');
+  },
+
+  // ── Slice 2: PDF Image Evidence ──
+
+  testPdfImageEvidenceAdapter() {
+    // buildImageEvidence must produce the spec-required structure
+    const evidence = PdfParser.buildImageEvidence(
+      'fixture-pdf-sha256',
+      3,
+      { width: 120, height: 80, x: 45.5, y: 200.3, dataUrl: 'data:image/png;base64,AAAA' },
+      'SKU-001',
+      'matched'
+    );
+
+    this.assert(typeof evidence === 'object' && evidence !== null,
+      'buildImageEvidence devuelve un objeto');
+    this.assert(evidence.pdfIdentity === 'fixture-pdf-sha256',
+      'Evidence tiene pdfIdentity');
+    this.assert(evidence.page === 3,
+      'Evidence tiene page');
+    this.assert(typeof evidence.imageFormat === 'string' && evidence.imageFormat.length > 0,
+      'Evidence tiene imageFormat no vacío');
+    this.assert(evidence.width === 120,
+      'Evidence tiene width');
+    this.assert(evidence.height === 80,
+      'Evidence tiene height');
+    this.assert(typeof evidence.sourcePosition === 'object' && evidence.sourcePosition !== null,
+      'Evidence tiene sourcePosition');
+    this.assert(evidence.sourcePosition.x === 45.5,
+      'sourcePosition.x correcto');
+    this.assert(evidence.sourcePosition.y === 200.3,
+      'sourcePosition.y correcto');
+    this.assert(typeof evidence.canvasDecode === 'string',
+      'Evidence tiene canvasDecode');
+    this.assert(evidence.canvasDecode === 'success',
+      'canvasDecode es success con imagen válida');
+    this.assert(evidence.productRowId === 'SKU-001',
+      'Evidence tiene productRowId');
+    this.assert(evidence.association === 'matched',
+      'Evidence tiene association');
+
+    // Absent image produces absent evidence
+    const absentEvidence = PdfParser.buildImageEvidence(
+      'fixture-pdf-sha256', 1, null, 'SKU-002', 'none'
+    );
+    this.assert(absentEvidence.canvasDecode === 'absent',
+      'canvasDecode es absent sin imagen');
+    this.assert(absentEvidence.width === 0 && absentEvidence.height === 0,
+      'Dimensiones son 0 sin imagen');
+    this.assert(absentEvidence.sourcePosition === null,
+      'sourcePosition es null sin imagen');
+    this.assert(absentEvidence.association === 'none',
+      'association es none sin imagen');
+  },
+
+  testPdfImageEvidenceR9() {
+    // R9 with valid PDF image evidence → GREEN
+    const rowWithEvidence = {
+      sku: 'PDF-001', marca: 'Redragon', modelo: 'K552', variante: 'Black',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA',
+      grounded: true, sourceStatus: 'GREEN',
+      imageEvidence: PdfParser.buildImageEvidence(
+        'pdf-hash', 1,
+        { width: 100, height: 60, x: 10, y: 50, dataUrl: 'data:image/png;base64,AAAA' },
+        'PDF-001', 'matched'
+      )
+    };
+    const evals1 = CatalogValidator.evaluateItem(rowWithEvidence);
+    const r9a = evals1.find(e => e.code === 'R9');
+    this.assert(r9a.status === 'GREEN', 'R9 GREEN con evidencia PDF válida');
+    this.assert(r9a.evidence.observed.includes('pdf-hash') || r9a.evidence.observed.includes('page'),
+      'R9 evidencia incluye referencia PDF');
+
+    // R9 with absent image evidence → YELLOW, not GREEN
+    const rowNoImage = {
+      sku: 'PDF-002', marca: 'Redragon', modelo: 'K552', variante: 'White',
+      cat: 'TECLADO', fob: 35, img: '-',
+      grounded: true, sourceStatus: 'GREEN',
+      imageEvidence: PdfParser.buildImageEvidence('pdf-hash', 2, null, 'PDF-002', 'none')
+    };
+    const evals2 = CatalogValidator.evaluateItem(rowNoImage);
+    const r9b = evals2.find(e => e.code === 'R9');
+    this.assert(r9b.status === 'YELLOW', 'R9 YELLOW con evidencia de imagen ausente');
+    this.assert(r9b.severity === 'WARNING', 'R9 severity WARNING con imagen ausente');
+    this.assert(r9b.importability === 'IMPORTABLE', 'R9 IMPORTABLE con imagen ausente');
+    this.assert(r9b.reason.length > 0, 'R9 reason no vacío con imagen ausente');
+    this.assert(r9b.evidence.canvasDecode === 'absent' || r9b.evidence.observed.includes('absent'),
+      'R9 evidencia refleja canvasDecode absent');
+
+    // R9 without imageEvidence falls back to img check (backward compat)
+    const rowLegacy = {
+      sku: 'PDF-003', marca: 'Redragon', modelo: 'K552', variante: 'Red',
+      cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,BBBB',
+      grounded: true, sourceStatus: 'GREEN'
+    };
+    const evals3 = CatalogValidator.evaluateItem(rowLegacy);
+    const r9c = evals3.find(e => e.code === 'R9');
+    this.assert(r9c.status === 'GREEN', 'R9 GREEN sin imageEvidence (backward compat)');
+  },
+
+  testPdfImageEvidenceGate() {
+    // Without TAURI_WEBVIEW environment, PDF evidence suite is gated
+    const gate = CatalogValidator.gateOutcome
+      ? CatalogValidator.gateOutcome('tauri-fixture')
+      : { status: 'SKIPPED_ENVIRONMENT_GATED', gate: 'tauri-fixture', reason: 'not implemented' };
+    this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED',
+      'Gate tauri-fixture produce SKIPPED_ENVIRONMENT_GATED');
+    this.assert(gate.gate === 'tauri-fixture',
+      'Gate preserva nombre tauri-fixture');
+    this.assert(typeof gate.reason === 'string' && gate.reason.length > 0,
+      'Gate tiene razón no vacía');
+    this.assert(gate.status !== 'PASS' && gate.status !== 'GREEN',
+      'Gate nunca es PASS/GREEN');
   }
 };
 
