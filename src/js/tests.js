@@ -79,6 +79,7 @@ const Tests = {
     this.testUpdaterConfigValidation();
     this.testInfraImprovements();
     this.testReliabilityLayers();
+    this.testCategoryEvidence();
     this.testContractEvaluateItem();
     this.testContractViolationsByCode();
     this.testContractGateOutcome();
@@ -919,6 +920,42 @@ const Tests = {
     const noBom = new Uint8Array([0x41, 0x42, 0x43]);
     const enc2 = Reliability.detectEncoding(noBom);
     this.assert(enc2.encoding === 'utf-8' && enc2.hasBOM === false, 'L4: sin BOM → utf-8');
+  },
+
+  testCategoryEvidence() {
+    // Text keyword detection with evidence
+    const mouse = PdfParser.detectCategoryWithEvidence('Logitech G203 Lightsync Gaming Mouse', 'Logitech');
+    this.assert(mouse.category === 'MOUSE', `Detecta MOUSE (got "${mouse.category}")`);
+    this.assert(mouse.confidence >= 85, `Confidence >= 85 (got ${mouse.confidence})`);
+    this.assert(mouse.source === 'text-keyword', `Source es text-keyword (got "${mouse.source}")`);
+    this.assert(mouse.matchedPattern.length > 0, 'matchedPattern no vacío');
+
+    // Keyboard detection
+    const kb = PdfParser.detectCategoryWithEvidence('AULA F75 Mechanical Keyboard', 'AULA');
+    this.assert(kb.category === 'TECLADO', `Detecta TECLADO (got "${kb.category}")`);
+    this.assert(kb.source === 'text-keyword', 'TECLADO por text-keyword, no brand-fallback');
+
+    // Brand fallback (low confidence)
+    const fallback = PdfParser.detectCategoryWithEvidence('Producto genérico sin keywords', 'AULA');
+    this.assert(fallback.category === 'TECLADO', `Brand fallback → TECLADO (got "${fallback.category}")`);
+    this.assert(fallback.confidence === 50, `Brand fallback confidence = 50 (got ${fallback.confidence})`);
+    this.assert(fallback.source === 'brand-fallback', `Source es brand-fallback (got "${fallback.source}")`);
+
+    // OTRO with diagnostic
+    const otro = PdfParser.detectCategoryWithEvidence('Cable USB tipo C', '');
+    this.assert(otro.category === 'OTRO', `Sin match → OTRO (got "${otro.category}")`);
+    this.assert(otro.confidence === 0, 'OTRO confidence = 0');
+    this.assert(otro.source === 'no-match', `Source es no-match (got "${otro.source}")`);
+    this.assert(typeof otro.analyzedText === 'string', 'analyzedText presente para diagnóstico');
+
+    // Backward compatibility: detectCategory still returns string
+    this.assert(PdfParser.detectCategory('Gaming Mouse RGB', '') === 'MOUSE', 'detectCategory backward compat');
+    this.assert(PdfParser.detectCategory('unknown thing', '') === 'OTRO', 'detectCategory OTRO backward compat');
+
+    // Brand-exclusive (high confidence)
+    const kz = PdfParser.detectCategoryWithEvidence('ZSN Pro X', 'KZ');
+    this.assert(kz.category === 'AURICULAR', `KZ → AURICULAR (got "${kz.category}")`);
+    this.assert(kz.confidence === 95, `Brand-exclusive confidence = 95 (got ${kz.confidence})`);
   },
 
   // ── Slice 1: catalog-quality-contract ──

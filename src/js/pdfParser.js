@@ -1586,40 +1586,69 @@ const PdfParser = {
   },
 
   detectCategory(text, brand) {
+    const result = this.detectCategoryWithEvidence(text, brand);
+    return result.category;
+  },
+
+  /**
+   * Detect category with structured evidence for diagnostics.
+   * @param {string} text - Product text to analyze
+   * @param {string} brand - Detected brand (for fallback)
+   * @returns {{ category: string, confidence: number, source: string, matchedPattern: string, analyzedText: string }}
+   */
+  detectCategoryWithEvidence(text, brand) {
     const t = (text || '').toLowerCase();
+    const evidence = { category: 'OTRO', confidence: 0, source: 'none', matchedPattern: '', analyzedText: t.substring(0, 100) };
 
-    // 1. Marcas de categoría ÚNICA (solo fabrican un tipo de producto)
-    if (brand === 'Polaroid') return 'CAMARA';
-    if (brand === 'KZ') return 'AURICULAR';
-    if (brand === 'Haimu') return 'SWITCH';
-    if (brand === 'Philips') return 'CUIDADO_PERSONAL';
+    // 1. Marcas de categoría ÚNICA
+    const singleBrand = { 'Polaroid': 'CAMARA', 'KZ': 'AURICULAR', 'Haimu': 'SWITCH', 'Philips': 'CUIDADO_PERSONAL' };
+    if (brand && singleBrand[brand]) {
+      return Object.assign(evidence, { category: singleBrand[brand], confidence: 95, source: 'brand-exclusive', matchedPattern: brand });
+    }
 
-    // 2. Detección por TEXTO (siempre antes que la marca para marcas multi-categoría)
-    if (/\b(numpad|numeric keypad|keypad|np20|ak33 numpad)\b/i.test(t)) return 'NUMPAD';
-    if (/\b(controller|gamepad|joystick|mando|sn30|ultimate 2c|ultimate c|ultimate 3|vader|g7 se|t4 kaleid|g8 galileo)\b/i.test(t)) return 'CONTROLLER';
-    if (/\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i.test(t)) return 'AURICULAR';
-    if (/\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|blackshark|g435|g733|g335|zone wired|zone wireless)\b/i.test(t)) return 'HEADSET';
-    if (/\b(mousepad|mouse pad|deskmat|desk mat|playmat|tablemat|glass pad|poron pad|cordura pad|control pad|speed pad|cloth pad|glide pad|extended pad|rgb pad|custom pad|anti-slip mat|goliathus|firefly|sphex|large pad|xl pad)\b|\bmat\b/i.test(t)) return 'MOUSEPAD';
-    if (/\b(mouse|mice|raton|paw\d{4}|aj139\w*|aj159\w*|aj199\w*|ax5\w*|a5|l7|g3|sc200|sc580|x3|r1|x11\w*|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|naga|g305|g203|pebble|m100r|m90|b100|m170|m185|m220|m240|m275|m280|m310|m317|m325|m330|m500|m505|m510|m525|m650|m720|m750|mx\s*master|mx\s*anywhere|g102|g203|g304|g305|g402|g403|g502|g600|g602|g603|g604|g700|g703|g900|g903|gpro)\b/i.test(t)) return 'MOUSE';
-    if (/\b(monitor|display|144hz|240hz|360hz|oled monitor)\b/i.test(t)) return 'MONITOR';
-    if (/\b(webcam|camera|streamcam|brio|c920|c922|c930|kiyo|c270|c310)\b/i.test(t)) return 'CAMARA';
-    if (/\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak680|ak650|mk87|mad\s*60|mad\s*68|titan\s*68|atk\s*68|atk\s*rs|atk\s*v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ornata|ace\s*68|ace\s*75|mix\s*87|jet\s*75|fizz|kumara|v75x|v100pro|rs6|68rx|68\s*v3|g915|g815|g713|g613|g512|g413|g213|k845|k840|mx\s*keys|pop\s*keys|mount\s*tai)\b/i.test(t)) return 'TECLADO';
-    if (/\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch|magnetic switch|hall effect|he switch)\b/i.test(t)) return 'SWITCH';
-    if (/\b(microphone|mic|condenser|streaming mic)\b/i.test(t)) return 'ACCESORIO';
-    if (/\b(keycap|key\s*cap|wrist\s*rest|hand\s*rest|grip\s*tape|dongle|charging\s*puck|base\s*station|coiled\s*cable|digital\s*pencil|crayon|presentation\s*remote|steering\s*wheel|shifter|pedals|mouse\s*feet|skates|glides|bungee|mouse\s*bungee|light\s*strip|phone\s*cooler|cushion|pillow|almohad|backpack|power\s*supply|thunderbolt|finger\s*sleeve|studs?|head\s*cushion|lumbar)\b/i.test(t)) return 'ACCESORIO';
-    if (/\b(speaker|leviathan|nommo|soundbar)\b/i.test(t)) return 'SPEAKER';
-    if (/\b(chair|enki|iskur|fujin|gaming\s*chair)\b/i.test(t)) return 'SILLA_GAMING';
-    if (/\b(fan|kunai|hanbo|computer\s*case|tomahawk|aio\s*cooler|cpu\s*cooler)\b/i.test(t)) return 'ACCESORIO';
-    if (/\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i.test(t)) return 'TECLADO';
+    // 2. Detección por TEXTO (keyword patterns with confidence tiers)
+    const patterns = [
+      { cat: 'NUMPAD', re: /\b(numpad|numeric keypad|keypad|np20|ak33 numpad)\b/i, conf: 90 },
+      { cat: 'CONTROLLER', re: /\b(controller|gamepad|joystick|mando|sn30|ultimate 2c|ultimate c|ultimate 3|vader|g7 se|t4 kaleid|g8 galileo)\b/i, conf: 90 },
+      { cat: 'AURICULAR', re: /\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i, conf: 90 },
+      { cat: 'HEADSET', re: /\b(headset|headphone|gaming headset|v9 turbo|a7v3|k7v2|a5v3|cloud ii|barracuda|kraken|blackshark|g435|g733|g335|zone wired|zone wireless)\b/i, conf: 90 },
+      { cat: 'MOUSEPAD', re: /\b(mousepad|mouse pad|deskmat|desk mat|playmat|tablemat|glass pad|poron pad|cordura pad|control pad|speed pad|cloth pad|glide pad|extended pad|rgb pad|custom pad|anti-slip mat|goliathus|firefly|sphex|large pad|xl pad)\b/i, conf: 90 },
+      { cat: 'MOUSE', re: /\b(mouse|mice|raton|paw\d{4}|aj139\w*|aj159\w*|aj199\w*|ax5\w*|a5|l7|g3|sc200|sc580|x3|r1|x11\w*|v989|f1 pro|dragonfly|f2 master|viper|deathadder|basilisk|cobra|orochi|naga|g305|g203|pebble|m100r|m90|b100|m170|m185|m220|m240|m275|m280|m310|m317|m325|m330|m500|m505|m510|m525|m650|m720|m750|mx\s*master|mx\s*anywhere|g102|g203|g304|g305|g402|g403|g502|g600|g602|g603|g604|g700|g703|g900|g903|gpro)\b/i, conf: 85 },
+      { cat: 'MONITOR', re: /\b(monitor|display|144hz|240hz|360hz|oled monitor)\b/i, conf: 85 },
+      { cat: 'CAMARA', re: /\b(webcam|camera|streamcam|brio|c920|c922|c930|kiyo|c270|c310)\b/i, conf: 85 },
+      { cat: 'TECLADO', re: /\b(keyboard|teclado|f75|f99|f108|k87|k68|ak820|ak870|ak980|ak680|ak650|mk87|mad\s*60|mad\s*68|titan\s*68|atk\s*68|atk\s*rs|atk\s*v|rk61|rk87|r65|r75|mars75|mars68|blackwidow|huntsman|ornata|ace\s*68|ace\s*75|mix\s*87|jet\s*75|fizz|kumara|v75x|v100pro|rs6|68rx|68\s*v3|g915|g815|g713|g613|g512|g413|g213|k845|k840|mx\s*keys|pop\s*keys|mount\s*tai)\b/i, conf: 85 },
+      { cat: 'SWITCH', re: /\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|seasalt switch|flamingo switch|magnetic switch|hall effect|he switch)\b/i, conf: 85 },
+      { cat: 'ACCESORIO', re: /\b(microphone|mic|condenser|streaming mic)\b/i, conf: 80 },
+      { cat: 'ACCESORIO', re: /\b(keycap|key\s*cap|wrist\s*rest|hand\s*rest|grip\s*tape|dongle|charging\s*puck|base\s*station|coiled\s*cable|digital\s*pencil|crayon|presentation\s*remote|steering\s*wheel|shifter|pedals|mouse\s*feet|skates|glides|bungee|mouse\s*bungee|light\s*strip|phone\s*cooler|cushion|pillow|almohad|backpack|power\s*supply|thunderbolt|finger\s*sleeve|studs?|head\s*cushion|lumbar)\b/i, conf: 80 },
+      { cat: 'SPEAKER', re: /\b(speaker|leviathan|nommo|soundbar)\b/i, conf: 85 },
+      { cat: 'SILLA_GAMING', re: /\b(chair|enki|iskur|fujin|gaming\s*chair)\b/i, conf: 85 },
+      { cat: 'ACCESORIO', re: /\b(fan|kunai|hanbo|computer\s*case|tomahawk|aio\s*cooler|cpu\s*cooler)\b/i, conf: 75 },
+      { cat: 'TECLADO', re: /\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i, conf: 60 }
+    ];
 
-    // 3. Brand fallback como ÚLTIMO recurso (solo si el texto no dio nada)
-    if (brand === '8BitDo' || brand === 'Flydigi' || brand === 'GameSir') return 'CONTROLLER';
-    if (brand === 'Attack Shark') return 'MOUSE';
-    if (brand === 'Madlions' || brand === 'MCHOSE' || brand === 'Royal Kludge') return 'TECLADO';
-    if (brand === 'ATK' || brand === 'AULA' || brand === 'AJAZZ') return 'TECLADO';
-    if (brand === 'Irok' || brand === 'Mars') return 'TECLADO';
+    for (const p of patterns) {
+      const match = t.match(p.re);
+      if (match) {
+        return Object.assign(evidence, { category: p.cat, confidence: p.conf, source: 'text-keyword', matchedPattern: match[0] });
+      }
+    }
 
-    return 'OTRO';
+    // 3. Brand fallback como ÚLTIMO recurso
+    const brandFallback = {
+      '8BitDo': 'CONTROLLER', 'Flydigi': 'CONTROLLER', 'GameSir': 'CONTROLLER',
+      'Attack Shark': 'MOUSE',
+      'Madlions': 'TECLADO', 'MCHOSE': 'TECLADO', 'Royal Kludge': 'TECLADO',
+      'ATK': 'TECLADO', 'AULA': 'TECLADO', 'AJAZZ': 'TECLADO',
+      'Irok': 'TECLADO', 'Mars': 'TECLADO'
+    };
+    if (brand && brandFallback[brand]) {
+      return Object.assign(evidence, { category: brandFallback[brand], confidence: 50, source: 'brand-fallback', matchedPattern: brand });
+    }
+
+    // 4. OTRO with diagnostic
+    evidence.source = 'no-match';
+    evidence.matchedPattern = '';
+    return evidence;
   },
 
   guessCategory(modelo, variante) {
