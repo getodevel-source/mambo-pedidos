@@ -277,8 +277,14 @@ function recalc() {
 // handleProductImageFile, triggerCleanBackground → src/js/ui/modals.js
 
 let liveDolarData = null;
+let _dolarLastFetch = 0;
+const DOLAR_CACHE_MS = 5 * 60 * 1000;
 
 async function fetchLiveDolarRates(userInitiated = false) {
+  // Cache: skip re-fetch within 5 minutes unless user explicitly requested
+  if (!userInitiated && liveDolarData && (Date.now() - _dolarLastFetch) < DOLAR_CACHE_MS) {
+    return;
+  }
   if (userInitiated) toast('🔄 Consultando DólarAPI en vivo...', 'info');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -290,12 +296,16 @@ async function fetchLiveDolarRates(userInitiated = false) {
     data.forEach(item => {
       liveDolarData[item.casa] = item;
     });
+    _dolarLastFetch = Date.now();
 
     renderDolarBadges();
     if (userInitiated) toast('✅ Cotizaciones Dólar actualizadas', 'success');
   } catch (err) {
     console.warn('Error al obtener cotizaciones de dólar:', err);
-    if (userInitiated) toast('⚠️ No se pudo conectar con la API de Dólar', 'error');
+    if (userInitiated) {
+      const stale = liveDolarData ? ` (última: ${new Date(_dolarLastFetch).toLocaleTimeString('es-AR')})` : '';
+      toast(`⚠️ No se pudo conectar con la API de Dólar${stale}`, 'error');
+    }
   } finally {
     clearTimeout(timeoutId);
   }

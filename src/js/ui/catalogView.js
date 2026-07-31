@@ -9,6 +9,19 @@ const CatalogView = {
   pageSize: 50,
   activeCategoryChip: '',
   catalogViewMode: 'table',
+  _searchTimer: null,
+
+  /**
+   * Debounced catalog render for search/filter inputs.
+   * Waits 250ms after the last keystroke before re-rendering.
+   */
+  debouncedRender() {
+    if (this._searchTimer) clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(() => {
+      this._searchTimer = null;
+      this.renderCatalog();
+    }, 250);
+  },
 
   showCatalogContent() {
     document.getElementById('catalogEmpty').style.display = 'none';
@@ -366,6 +379,7 @@ if (typeof window !== 'undefined') {
   window.adjustQty = (sku, delta) => CatalogView.adjustQty(sku, delta);
   window.setCatChip = (cat, el) => CatalogView.setCatChip(cat, el);
   window.renderCatalog = () => CatalogView.renderCatalog();
+  window.debouncedRenderCatalog = () => CatalogView.debouncedRender();
   window.toggleItem = (sku, on) => CatalogView.toggleItem(sku, on);
   window.setQty = (sku, val) => CatalogView.setQty(sku, val);
   window.toggleSelectAll = (on) => CatalogView.toggleSelectAll(on);

@@ -238,7 +238,7 @@
       <div class="table-wrap">
         <div class="table-toolbar">
           <div class="table-toolbar-left" style="flex-wrap: wrap; gap: 8px; align-items: center;">
-            <input type="text" class="input search" id="catSearch" placeholder="Buscar SKU, marca, modelo..." oninput="renderCatalog()">
+            <input type="text" class="input search" id="catSearch" placeholder="Buscar SKU, marca, modelo..." oninput="debouncedRenderCatalog()">
             <select class="select" id="catFilterMarca" onchange="renderCatalog()">
               <option value="">Todas las marcas</option>
             </select>
@@ -247,9 +247,9 @@
             </select>
             <div style="display: inline-flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-muted);">
               <span>Min $:</span>
-              <input type="number" id="catFilterMinPrice" class="input" placeholder="0" style="width: 70px; height: 36px; padding: 6px 10px;" oninput="renderCatalog()">
+              <input type="number" id="catFilterMinPrice" class="input" placeholder="0" style="width: 70px; height: 36px; padding: 6px 10px;" oninput="debouncedRenderCatalog()">
               <span>Max $:</span>
-              <input type="number" id="catFilterMaxPrice" class="input" placeholder="Max" style="width: 75px; height: 36px; padding: 6px 10px;" oninput="renderCatalog()">
+              <input type="number" id="catFilterMaxPrice" class="input" placeholder="Max" style="width: 75px; height: 36px; padding: 6px 10px;" oninput="debouncedRenderCatalog()">
             </div>
           </div>
           <div class="table-toolbar-right" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
