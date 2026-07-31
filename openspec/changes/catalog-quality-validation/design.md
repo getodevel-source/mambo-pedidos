@@ -53,4 +53,4 @@ Modify `src/js/{catalogValidator,pdfParser,aiCatalogEngine,fileImporter,storage,
 
 ## Rollout and Open Questions
 
-No product approval is granted. AP-1 (image policy), AP-2 (fixture/full-corpus policy), AP-3a (image apply), and AP-3b (SKU apply) remain unresolved; apply is blocked until their RED evidence passes. `Decision needed before apply: Yes`; `Chained PRs recommended: Yes`; `400-line budget risk: High`.
+AP-1 (image policy) and AP-2 (fixture/full-corpus policy) remain unresolved. **AP-3a (image apply) approved 2026-07-31. AP-3b (SKU apply) approved 2026-07-31.** Image and SKU migrations are unblocked. `Decision needed before apply: No`; `Chained PRs recommended: Yes`; `400-line budget risk: High`.

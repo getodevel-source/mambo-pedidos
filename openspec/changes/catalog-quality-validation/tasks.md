@@ -80,7 +80,7 @@ Chain strategy: stacked-to-main
 - [x] 5.4 **GREEN** Implement atomic migration: copy->resolve->commit(catalog+files+schema+receipt). Rollback on failure. (~100 lines)
 - [x] 5.5 **RED** Test: idempotent retry = no-op; orphans audit-visible, never auto-deleted. (~15 lines)
 - [x] 5.6 **GREEN** Implement idempotence + orphan audit. (~50 lines)
-- [ ] 5.7 **GATE** AP-3a approval required before merge.
+- [x] 5.7 **GATE** AP-3a approval required before merge. ✅ Approved by maintainer 2026-07-31.
 
 ## Slice 6: historical-sku-audit-migration (PR 6, AP-3b gated)
 
@@ -90,7 +90,7 @@ Chain strategy: stacked-to-main
 - [x] 6.4 **GREEN** Implement ambiguity gate. (~25 lines)
 - [x] 6.5 **RED** Test: atomic commit updates 3 domains; image refs unchanged; receipt proves counts. (~20 lines)
 - [x] 6.6 **GREEN** Implement atomic commit + idempotent receipt + rollback. (~90 lines)
-- [ ] 6.7 **GATE** AP-3b approval required before merge.
+- [x] 6.7 **GATE** AP-3b approval required before merge. ✅ Approved by maintainer 2026-07-31.
 
 ## Slice 7: ui-persistence-e2e (PR 7)
 
