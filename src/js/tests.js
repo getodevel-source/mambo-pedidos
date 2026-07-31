@@ -92,6 +92,9 @@ const Tests = {
     this.testImageRefAndAudit();
     this.testImageMigrationReceipt();
     this.testImageIdempotenceAndOrphans();
+    this.testSkuAuditThreeDomains();
+    this.testSkuDeterministicMapping();
+    this.testSkuAmbiguityGate();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1415,6 +1418,86 @@ const Tests = {
     // AP-3a gate
     const gate = QualityGate.GateOutcome({ gate: 'image-migration', reason: 'AP-3a approval required' });
     this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'AP-3a gate produce SKIPPED');
+  },
+
+  // ── Slice 6: SKU Audit & Durable Mapping ──
+
+  testSkuAuditThreeDomains() {
+    const catalog = [
+      { sku: 'RED-TEC-0001', marca: 'Redragon', modelo: 'K552', variante: 'Black', cat: 'TECLADO' },
+      { sku: 'RED-TEC-0001', marca: 'Redragon', modelo: 'K552', variante: 'White', cat: 'TECLADO' },
+      { sku: '', marca: 'AULA', modelo: 'F75', variante: 'Pink', cat: 'TECLADO' },
+      { sku: 'LEGACY-SKU-123', marca: 'Logitech', modelo: 'G203', variante: '', cat: 'MOUSE' }
+    ];
+    const history = [
+      { items: [{ sku: 'RED-TEC-0001', qty: 5 }, { sku: 'GONE-SKU-999', qty: 2 }] }
+    ];
+    const selection = { 'RED-TEC-0001': 3, 'ORPHAN-SEL-001': 1 };
+
+    const audit = SkuAllocator.auditSkus({ catalog, history, selection });
+
+    this.assert(audit.summary.catalogRows === 4, `Audit catalogRows=4 (got ${audit.summary.catalogRows})`);
+    this.assert(audit.missing.length === 1, `Audit missing=1 (got ${audit.missing.length})`);
+    this.assert(audit.duplicates.length === 1, `Audit duplicates=1 (got ${audit.duplicates.length})`);
+    this.assert(audit.duplicates[0].sku === 'RED-TEC-0001', 'Duplicado es RED-TEC-0001');
+    this.assert(audit.legacy.length >= 1, `Audit legacy>=1 (got ${audit.legacy.length})`);
+    this.assert(audit.orphanedHistory.includes('GONE-SKU-999'), 'History huérfano detectado');
+    this.assert(audit.orphanedSelection.includes('ORPHAN-SEL-001'), 'Selection huérfana detectada');
+  },
+
+  testSkuDeterministicMapping() {
+    const catalog = [
+      { sku: 'RED-TEC-0001', marca: 'Redragon', modelo: 'K552', variante: 'Black', cat: 'TECLADO' },
+      { sku: 'RED-TEC-0001', marca: 'Redragon', modelo: 'K552', variante: 'White', cat: 'TECLADO' },
+      { sku: '', marca: 'AULA', modelo: 'F75', variante: 'Pink', cat: 'TECLADO' }
+    ];
+    const audit = SkuAllocator.auditSkus({ catalog, history: [], selection: {} });
+    const { mappings, receipt } = SkuAllocator.buildSkuMapping(catalog, audit);
+
+    this.assert(mappings.length === 3, `Mapping tiene 3 entradas (got ${mappings.length})`);
+    this.assert(receipt.schema === 'sku-mapping-v1', 'Receipt tiene schema');
+    this.assert(receipt.committed === false, 'Receipt no committed');
+
+    // First row preserved
+    this.assert(mappings[0].action === 'preserved', 'Primera fila preservada');
+    this.assert(mappings[0].newSku === 'RED-TEC-0001', 'Primera fila mantiene SKU');
+
+    // Second row deduplicated (distinct SKU)
+    this.assert(mappings[1].action === 'deduplicated', 'Segunda fila deduplicada');
+    this.assert(mappings[1].newSku !== 'RED-TEC-0001', 'Segunda fila tiene SKU distinto');
+    this.assert(mappings[1].newSku.length > 0, 'Segunda fila tiene SKU no vacío');
+
+    // Third row generated (was missing)
+    this.assert(mappings[2].action === 'generated', 'Tercera fila generada');
+    this.assert(mappings[2].oldSku === null, 'Tercera fila no tenía SKU');
+    this.assert(mappings[2].newSku.length > 0, 'Tercera fila tiene SKU generado');
+
+    // All new SKUs are unique
+    const newSkus = mappings.map(m => m.newSku);
+    this.assert(new Set(newSkus).size === newSkus.length, 'Todos los newSku son únicos');
+
+    // Deterministic: same input → same mapping
+    const { mappings: mappings2 } = SkuAllocator.buildSkuMapping(catalog, audit);
+    this.assert(JSON.stringify(mappings) === JSON.stringify(mappings2), 'Mapping es determinista');
+  },
+
+  testSkuAmbiguityGate() {
+    // No ambiguity → not blocked
+    const noAmb = SkuAllocator.checkAmbiguityGate([]);
+    this.assert(noAmb.blocked === false, 'Sin ambigüedad → no bloqueado');
+
+    // With ambiguity → blocked
+    const withAmb = SkuAllocator.checkAmbiguityGate([
+      { sku: 'GONE-001', domain: 'history', reason: 'Not found' },
+      { sku: 'GONE-002', domain: 'selection', reason: 'Not found' }
+    ]);
+    this.assert(withAmb.blocked === true, 'Con ambigüedad → bloqueado');
+    this.assert(withAmb.reason.includes('2 ambiguous'), 'Razón menciona cantidad');
+    this.assert(withAmb.reason.includes('history:GONE-001'), 'Razón incluye referencia history');
+
+    // AP-3b gate
+    const gate = QualityGate.GateOutcome({ gate: 'sku-migration', reason: 'AP-3b approval required' });
+    this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'AP-3b gate produce SKIPPED');
   }
 };
 
