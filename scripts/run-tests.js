@@ -54,6 +54,7 @@ global.FileImporter = require(jsPath('fileImporter.js'));
 global.QuoteGenerator = require(jsPath('quoteGenerator.js'));
 global.AppUpdater = require(jsPath('updater.js'));
 global.QualityGate = require(path.join(__dirname, 'quality', 'gate.js'));
+global.SpreadsheetHarness = require(path.join(__dirname, 'quality', 'spreadsheet-harness.js'));
 global.esc = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 global.Tests = require(jsPath('tests.js'));
 

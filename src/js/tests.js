@@ -83,6 +83,9 @@ const Tests = {
     this.testPdfImageEvidenceAdapter();
     this.testPdfImageEvidenceR9();
     this.testPdfImageEvidenceGate();
+    this.testSpreadsheetCatalogRoundTrip();
+    this.testSpreadsheetOrderRoundTrip();
+    this.testSpreadsheetRouteAssertion();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -1118,6 +1121,86 @@ const Tests = {
       'Gate tiene razón no vacía');
     this.assert(gate.status !== 'PASS' && gate.status !== 'GREEN',
       'Gate nunca es PASS/GREEN');
+  },
+
+  // ── Slice 3: Spreadsheet Physical Round-Trip ──
+
+  testSpreadsheetCatalogRoundTrip() {
+    const result = SpreadsheetHarness.catalogRoundTrip();
+
+    // CSV assertions
+    this.assert(result.csv !== null, 'CSV catalog file created and read');
+    this.assert(result.csv.rows.length === 3, `CSV catalog has 3 rows (got ${result.csv ? result.csv.rows.length : 0})`);
+    this.assert(result.csv.fields.includes('SKU'), 'CSV fields include SKU');
+    this.assert(result.csv.fields.includes('FOB unit USD'), 'CSV fields include FOB unit USD');
+
+    // XLSX assertions
+    this.assert(result.xlsx !== null, 'XLSX catalog file created and read');
+    this.assert(result.xlsx.rows.length === 3, `XLSX catalog has 3 rows (got ${result.xlsx ? result.xlsx.rows.length : 0})`);
+    this.assert(result.xlsx.sheetName === 'Catalog', 'XLSX sheet name is Catalog');
+
+    // Semantic field preservation
+    const csvRow0 = result.csv ? result.csv.rows[0] : {};
+    this.assert(csvRow0.SKU === 'RED-TEC-0001', `CSV SKU preserved (got "${csvRow0.SKU}")`);
+    this.assert(csvRow0.Marca === 'Redragon', `CSV Marca preserved (got "${csvRow0.Marca}")`);
+    this.assert(csvRow0.Modelo === 'K552', `CSV Modelo preserved (got "${csvRow0.Modelo}")`);
+    this.assert(Math.abs(parseFloat(csvRow0['FOB unit USD']) - 35.50) < 0.001, 'CSV FOB preserved');
+    this.assert(csvRow0['Color/Variante'] === 'Black', `CSV Variante preserved (got "${csvRow0['Color/Variante']}")`);
+
+    const xlsxRow0 = result.xlsx ? result.xlsx.rows[0] : {};
+    this.assert(xlsxRow0.SKU === 'RED-TEC-0001', `XLSX SKU preserved (got "${xlsxRow0.SKU}")`);
+    this.assert(xlsxRow0['Categoría'] === 'TECLADO', `XLSX Categoría preserved (got "${xlsxRow0['Categoría']}")`);
+    this.assert(Math.abs(Number(xlsxRow0['FOB unit USD']) - 35.50) < 0.001, 'XLSX FOB preserved');
+
+    // No errors
+    this.assert(result.errors.length === 0,
+      `Catalog round-trip sin errores (${result.errors.length}: ${result.errors.join('; ')})`);
+
+    SpreadsheetHarness.cleanup(result.tmpDir);
+  },
+
+  testSpreadsheetOrderRoundTrip() {
+    const result = SpreadsheetHarness.orderRoundTrip();
+
+    this.assert(result.csv !== null, 'CSV order file created and read');
+    this.assert(result.csv.rows.length === 2, `CSV order has 2 rows (got ${result.csv ? result.csv.rows.length : 0})`);
+    this.assert(result.xlsx !== null, 'XLSX order file created and read');
+    this.assert(result.xlsx.rows.length === 2, `XLSX order has 2 rows (got ${result.xlsx ? result.xlsx.rows.length : 0})`);
+
+    // IVA semantics preserved
+    const csvRow0 = result.csv ? result.csv.rows[0] : {};
+    this.assert(Math.abs(parseFloat(csvRow0['IVA unit USD']) - 8.05) < 0.001, 'CSV IVA unit USD preserved');
+    this.assert(Math.abs(parseFloat(csvRow0['IVA subtotal USD']) - 80.50) < 0.001, 'CSV IVA subtotal preserved');
+    this.assert(Math.abs(parseFloat(csvRow0['Costo neto unit USD']) - 38.25) < 0.001, 'CSV Costo neto preserved');
+    this.assert(parseInt(csvRow0.Cantidad) === 10, `CSV Cantidad preserved (got "${csvRow0.Cantidad}")`);
+
+    const xlsxRow0 = result.xlsx ? result.xlsx.rows[0] : {};
+    this.assert(Math.abs(Number(xlsxRow0['IVA unit USD']) - 8.05) < 0.001, 'XLSX IVA unit USD preserved');
+    this.assert(Math.abs(Number(xlsxRow0['IVA subtotal USD']) - 80.50) < 0.001, 'XLSX IVA subtotal preserved');
+
+    this.assert(result.errors.length === 0,
+      `Order round-trip sin errores (${result.errors.length}: ${result.errors.join('; ')})`);
+
+    SpreadsheetHarness.cleanup(result.tmpDir);
+  },
+
+  testSpreadsheetRouteAssertion() {
+    const catalog = SpreadsheetHarness.assertRoute('catalogo_redragon.csv');
+    this.assert(catalog.route === 'catalog', `Route "catalogo_redragon.csv" → catalog (got "${catalog.route}")`);
+    this.assert(catalog.correct === true, 'Catalog route is correct');
+
+    const order = SpreadsheetHarness.assertRoute('pedido_logitech.xlsx');
+    this.assert(order.route === 'order', `Route "pedido_logitech.xlsx" → order (got "${order.route}")`);
+    this.assert(order.correct === true, 'Order route is correct');
+
+    const unknown = SpreadsheetHarness.assertRoute('datos.csv');
+    this.assert(unknown.route === 'unknown', `Route "datos.csv" → unknown (got "${unknown.route}")`);
+    this.assert(unknown.correct === false, 'Unknown route flagged as incorrect');
+
+    // Gate for external corpus
+    const gate = QualityGate.GateOutcome({ gate: 'spreadsheet-external', reason: 'Full corpus not available' });
+    this.assert(gate.status === 'SKIPPED_ENVIRONMENT_GATED', 'Spreadsheet external gate produces SKIPPED');
+    this.assert(gate.gate === 'spreadsheet-external', 'Gate preserves spreadsheet-external name');
   }
 };
 
