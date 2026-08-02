@@ -34,6 +34,9 @@ const Tests = {
     this.testImageShapeGateCompatible();
     this.testImageLowResThumbnail();
     this.testMatcherTightenedGates();
+    this.testGarbageModeloRecovery();
+    this.testZeroIdentityRowDropped();
+    this.testMarketRangeAndReclassification();
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
@@ -443,6 +446,8 @@ const Tests = {
     this.assert(resMouse.valid === false, 'Shape Gate rechazó imagen ancha (teclado) asignada a un MOUSE');
     const resCtrl = PdfParser.validateImageForProduct(wideImage, { cat: 'CONTROLLER', modelo: 'Ultimate 2C', variante: 'Black' });
     this.assert(resCtrl.valid === false, 'Shape Gate rechazó imagen ancha (teclado) asignada a un CONTROLLER');
+    const resHeadset = PdfParser.validateImageForProduct(wideImage, { cat: 'HEADSET', modelo: 'Kraken V3', variante: 'Black' });
+    this.assert(resHeadset.valid === false, 'Shape Gate rechazó imagen ancha (teclado) asignada a un HEADSET');
     // Tall/narrow image on a wide product must be REJECTED
     const tallImage = { dataUrl: 'data:image/png;base64,AAAA', width: 60, height: 120 };
     const resKb = PdfParser.validateImageForProduct(tallImage, { cat: 'TECLADO', modelo: 'AK820 Pro', variante: 'White' });
@@ -477,6 +482,52 @@ const Tests = {
     const prodY = [{ sku: 'P2', marca: 'RAZER', modelo: 'Goliathus', variante: 'Black', cat: 'MOUSEPAD', fob: 15, pageNum: 1, x: 100, y: 400 }];
     PdfParser.matchImagesToProductsGlobal(prodY, [{ pageNum: 1, x: 100, y: 100, width: 200, height: 80, dataUrl: 'data:image/png;base64,kbd' }]);
     this.assert(prodY[0].img === '-', 'Matcher global no asigna imágenes a 300px verticales (gate 250)');
+  },
+
+  testGarbageModeloRecovery() {
+    // Generic noise word as modelo + real model in variante -> recover the model
+    const r1 = TextSanitizer.sanitizeItem({ modelo: 'Item', variante: 'DQ6', marca: 'Kz', cat: 'AURICULAR', fob: 14.5 });
+    this.assert(r1.modelo === 'DQ6', `sanitizeItem recupera modelo desde variante (Item+DQ6 -> DQ6, got "${r1.modelo}")`);
+    const r2 = TextSanitizer.sanitizeItem({ modelo: 'Earphones', variante: 'AS10', marca: 'Kz', cat: 'AURICULAR', fob: 38 });
+    this.assert(r2.modelo === 'AS10', `sanitizeItem recupera modelo (Earphones+AS10 -> AS10, got "${r2.modelo}")`);
+    // pdfParser sanitizer must also promote variante when modelo cleans to empty
+    const r3 = PdfParser.sanitizeProductNames('Price List', 'DQ6', 'Kz', []);
+    this.assert(/DQ6/i.test(r3.modelo) && !/item/i.test(r3.modelo), `sanitizeProductNames promueve variante a modelo (got "${r3.modelo}")`);
+    // Guard: a product with brand+category identity but no model keeps its placeholder (not dropped)
+    const r4 = TextSanitizer.sanitizeItem({ modelo: '', variante: '', marca: 'Logitech', cat: 'MOUSE', fob: 20 });
+    this.assert(r4 && /Logitech/i.test(r4.modelo), 'sanitizeItem conserva placeholder para producto con identidad pero sin modelo');
+  },
+
+  testZeroIdentityRowDropped() {
+    // A row with no model, no variant, no brand, no category is pure noise (e.g. RMB price column) -> dropped
+    const r = TextSanitizer.sanitizeItem({ modelo: '', variante: '', marca: 'OTRO', cat: '', fob: 15.2 });
+    this.assert(r === null, 'sanitizeItem descarta filas sin identidad (ruido de columna de precio)');
+    const r2 = TextSanitizer.sanitizeItem({ modelo: '103.50', variante: '', marca: 'OTRO', cat: '', fob: 15.2 });
+    this.assert(r2 === null, 'sanitizeItem descarta filas cuyo modelo es solo un precio');
+  },
+
+  testMarketRangeAndReclassification() {
+    // Premium products must not trigger R3 price-range violations
+    const premium = [
+      { sku: 'MP-001', modelo: 'Goliathus Extended', variante: 'Black', marca: 'Razer', cat: 'MOUSEPAD', fob: 150 },
+      { sku: 'HS-001', modelo: 'Kraken Pro Wireless', variante: 'Black', marca: 'Razer', cat: 'HEADSET', fob: 436 },
+      { sku: 'AC-001', modelo: 'Power Supply Katana 1200W', variante: '', marca: 'Razer', cat: 'ACCESORIO', fob: 481 },
+      { sku: 'AC-002', modelo: 'Silicone Eartips', variante: 'black', marca: 'KZ', cat: 'ACCESORIO', fob: 0.29 }
+    ];
+    const noRange = premium.every(p => !CatalogValidator.validateItem(p).critical.some(c => /fuera de rango/.test(c)));
+    this.assert(noRange, 'Rangos de precio aceptan productos premium reales (MOUSEPAD $150, HEADSET $436, ACCESORIO $481, eartips $0.29)');
+
+    // Brand lock: KZ may be ACCESORIO (eartips) without R4 rejection
+    const lock = CatalogValidator.validateItem({ sku: 'KZ-001', modelo: 'Silicone Eartips', variante: 'black', marca: 'KZ', cat: 'ACCESORIO', fob: 0.29 });
+    this.assert(!lock.critical.some(c => /no fabrica/.test(c)), 'Brand lock de KZ permite ACCESORIO (eartips no son R4-reject)');
+
+    // Sub-$1 KZ "auricular" reclassified to ACCESORIO by the sanitizer
+    const tips = TextSanitizer.sanitizeItem({ modelo: 'Silicone Eartips pairs', variante: 'black', marca: 'Kz', cat: 'AURICULAR', fob: 0.29 });
+    this.assert(tips.cat === 'ACCESORIO', `Eartips sub-$1 se reclasifican a ACCESORIO (got ${tips.cat})`);
+
+    // Numeric modelo recovered from variante
+    const num = TextSanitizer.sanitizeItem({ modelo: '68', variante: 'Magnetic Black V3', marca: 'Atk', cat: 'TECLADO', fob: 76 });
+    this.assert(!/^\d+$/.test(num.modelo), `Modelo numérico se recupera desde variante (got "${num.modelo}")`);
   },
 
   testGlobalBipartiteMatching() {

@@ -69,6 +69,18 @@ const TextSanitizer = {
       modelo = '';
     }
 
+    // 1b. Generic product/noise word as modelo -> empty it so the reverse audit (step 6)
+    //     can recover the real model from variante (e.g. modelo="Item" variante="DQ6" -> "DQ6").
+    if (/^(item|list|earphones?|products?|producto|none|n\/a|undefined|null|[-.])$/i.test(modelo.trim())) {
+      modelo = '';
+    }
+
+    // 1c. Purely numeric modelo (a size/key count/price, e.g. "68") is noise -> empty it
+    //     so the real model is recovered from variante in the reverse audit.
+    if (/^\$?\d+([\.,]\d+)?$/.test(modelo.trim())) {
+      modelo = '';
+    }
+
     // 2. Limpieza de Variante / Color
     if (variante) {
       if (this.PRICE_DECIMAL_REGEX.test(variante) || /^[\d\.,\s]+$/.test(variante) || this.HEADER_NOISE_REGEX.test(variante)) {
@@ -115,6 +127,17 @@ const TextSanitizer = {
     // If brand prior says TECLADO but price < $1, it's a switch component
     if (cat === 'TECLADO' && fob > 0 && fob < 1) {
       cat = 'SWITCH';
+    }
+    // A "headphone/earphone" under $1 is not a driver — it's eartips/foam/cable -> accessory
+    if (cat === 'AURICULAR' && fob > 0 && fob < 1) {
+      cat = 'ACCESORIO';
+    }
+
+    // 4c. Zero-identity row: no model (or numeric-only), no variant, no brand, no category
+    //     -> pure noise (e.g. a stray RMB price column parsed as a product row). Drop it.
+    const modeloIsNoise = (!modelo || modelo.length < 2 || /^\$?\d+([\.,]\d+)?$/.test(modelo));
+    if (modeloIsNoise && !variante && (!marca || marca === 'OTRO') && (!cat || cat === 'OTRO')) {
+      return null;
     }
 
     // 5. Cross-field audit: fix contamination between modelo, variante, marca

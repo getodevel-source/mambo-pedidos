@@ -23,15 +23,15 @@ const CatalogValidator = {
   PRICE_RANGES: {
     MOUSE:            { min: 1,    max: 300,  warn: 200 },
     TECLADO:          { min: 1,    max: 400,  warn: 300 },
-    HEADSET:          { min: 2,    max: 350,  warn: 250 },
+    HEADSET:          { min: 2,    max: 500,  warn: 400 },
     AURICULAR:        { min: 1,    max: 200,  warn: 150 },
     CONTROLLER:       { min: 3,    max: 350,  warn: 250 },
-    MOUSEPAD:         { min: 1,    max: 100,  warn: 80 },
+    MOUSEPAD:         { min: 1,    max: 250,  warn: 200 },
     SWITCH:           { min: 0.05, max: 15,   warn: 10 },
     CAMARA:           { min: 5,    max: 800,  warn: 500 },
     SPEAKER:          { min: 5,    max: 500,  warn: 400 },
     SILLA_GAMING:     { min: 30,   max: 1000, warn: 800 },
-    ACCESORIO:        { min: 0.5,  max: 300,  warn: 200 },
+    ACCESORIO:        { min: 0.1,  max: 600,  warn: 450 },
     NUMPAD:           { min: 2,    max: 80,   warn: 60 },
     MONITOR:          { min: 30,   max: 2000, warn: 1500 },
     CUIDADO_PERSONAL: { min: 2,    max: 300,  warn: 200 },
@@ -39,7 +39,7 @@ const CatalogValidator = {
 
   // ── Marcas de categoría única (si el producto no es de esta categoría → REJECT) ──
   BRAND_LOCK: {
-    'KZ':           ['AURICULAR'],
+    'KZ':           ['AURICULAR', 'ACCESORIO'],
     'Haimu':        ['SWITCH'],
     'Polaroid':     ['CAMARA'],
     '8BitDo':       ['CONTROLLER', 'ACCESORIO', 'TECLADO', 'NUMPAD'],

@@ -597,7 +597,7 @@ const PdfParser = {
     //     product family. Compact products (mouse/headset/controller) cannot have a
     //     wide keyboard/mousepad photo; wide products (keyboard/mousepad) cannot have
     //     a tall narrow photo. Kills cross-family mismatches at the source.
-    const COMPACT_CATS = ['MOUSE', 'AURICULAR', 'CONTROLLER', 'SWITCH'];
+    const COMPACT_CATS = ['MOUSE', 'AURICULAR', 'HEADSET', 'CONTROLLER', 'SWITCH'];
     const WIDE_CATS = ['TECLADO', 'MOUSEPAD'];
     if (COMPACT_CATS.includes(cat) && aspect > 1.9) {
       return { valid: false, score: 0, warnings: [`🚫 Imagen ancha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
@@ -1243,6 +1243,14 @@ const PdfParser = {
     if (brand && brand !== 'OTRO') {
       const reBrand2 = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
       modelo = modelo.replace(reBrand2, '').replace(/\s+/g, ' ').replace(/^[\-\s,:\.]+|[\-\s,:\.]+$/g, '').trim();
+    }
+
+    // If modelo cleaned to empty but variante holds a real (non-numeric) model, promote it.
+    // Fixes catalogs where the model code lands in variante and modelo is header noise
+    // (e.g. raw "Price List DQ6" -> modelo="" variante="DQ6" -> modelo="DQ6").
+    if (!modelo && variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
+      modelo = variante;
+      variante = '';
     }
 
     return { modelo: modelo || (brand !== 'OTRO' ? `${brand} Item` : 'Producto'), variante };
