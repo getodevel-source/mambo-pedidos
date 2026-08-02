@@ -14,7 +14,8 @@
     "test": "node scripts/run-tests.js",
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
     "audit": "node scripts/quality-pipeline.js --verbose",
-    "audit:quick": "node scripts/quality-pipeline.js"
+    "audit:quick": "node scripts/quality-pipeline.js",
+    "audit:full": "node scripts/audit-app.js --json audit-app-report.json"
   },
   "keywords": [
     "mambo",
@@ -29,8 +30,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.0.0",
+    "canvas": "^3.2.3",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
+    "jsdom": "^29.1.1",
     "pdfjs-dist": "^3.11.174"
   },
   "dependencies": {

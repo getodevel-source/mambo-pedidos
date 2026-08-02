@@ -56,6 +56,7 @@ npm-debug.log
 # Generated quality/audit reports (run scripts to regenerate)
 quality-report.json
 extraction-audit-report.json
+audit-app-report.json
 
 # Agent session exports
 qwen-code-export-*.json
