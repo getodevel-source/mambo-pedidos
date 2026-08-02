@@ -60,3 +60,7 @@ audit-app-report.json
 
 # Agent session exports
 qwen-code-export-*.json
+
+# Ground-truth renders (regenerable; ~24MB of PNGs)
+ground-truth/*.png
+ground-truth/crops/
