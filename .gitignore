@@ -52,3 +52,10 @@ npm-debug.log
 .codegraph/
 # Local AI runtime state
 .atl/
+
+# Generated quality/audit reports (run scripts to regenerate)
+quality-report.json
+extraction-audit-report.json
+
+# Agent session exports
+qwen-code-export-*.json
