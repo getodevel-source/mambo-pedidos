@@ -92,9 +92,15 @@ const ImportFlow = {
     ImportFlow.renderImportPreviewModal(window._previewValidation);
   },
 
+  _searchDebounceTimer: null,
+
   setPreviewSearch(val) {
     ImportFlow.previewSearch = (val || '').toLowerCase().trim();
-    ImportFlow.renderImportPreviewModal(window._previewValidation);
+    // Debounce re-render to avoid lag with 500+ products
+    clearTimeout(ImportFlow._searchDebounceTimer);
+    ImportFlow._searchDebounceTimer = setTimeout(() => {
+      ImportFlow.renderImportPreviewModal(window._previewValidation);
+    }, 250);
   },
 
   renderImportPreviewModal(validation) {
@@ -278,7 +284,8 @@ const ImportFlow = {
     toast('🧹 Sanitizando productos...', 'info');
     try {
       if (typeof TextSanitizer !== 'undefined') {
-        ImportFlow.pendingPreviewItems = TextSanitizer.autoCorrectItems(ImportFlow.pendingPreviewItems, customBrandsList);
+        // Use shared fix logic (single source of truth)
+        TextSanitizer.fixItemsInPlace(ImportFlow.pendingPreviewItems, customBrandsList);
       }
       const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
       validation.rejected.forEach(p => { p._selected = false; });

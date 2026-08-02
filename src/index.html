@@ -148,6 +148,12 @@
         <div class="page-sub" id="catalogSubtitle">Cargá PDFs de tus proveedores para empezar</div>
       </div>
       <div class="page-actions" id="catalogActions" style="display: none;">
+        <button class="btn btn-sm btn-secondary" onclick="exportCatalogJSON()" title="Exportar catálogo como JSON para auditoría">
+          📥 Exportar JSON
+        </button>
+        <button class="btn btn-sm" style="background:rgba(250,204,21,0.15);color:#facc15;border:1px solid rgba(250,204,21,0.3)" onclick="runFixCatalog()" title="Corrige contaminación de campos en el catálogo actual">
+          🔧 Auto-fix
+        </button>
         <button class="btn btn-danger btn-sm" onclick="resetCatalog()">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> Limpiar todo
         </button>
@@ -603,6 +609,7 @@
       </div>
       <div class="pv-footer-actions">
         <button class="btn btn-secondary" onclick="closeImportPreviewModal()">Cancelar</button>
+        <button class="btn btn-sm" style="background:rgba(250,204,21,0.15);color:#facc15;border:1px solid rgba(250,204,21,0.3)" onclick="runFixOnPreview()" title="Corrige contaminación de campos antes de importar">🔧 Auto-fix</button>
         <button class="btn btn-primary" id="pvConfirmBtn" onclick="confirmImportPreview()">✅ Importar seleccionados</button>
       </div>
     </div>
