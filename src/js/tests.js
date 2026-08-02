@@ -30,6 +30,10 @@ const Tests = {
     this.testTextSanitizer();
     this.testQuoteGeneratorHtml();
     this.testImageSpatialMatching();
+    this.testImageShapeGate();
+    this.testImageShapeGateCompatible();
+    this.testImageLowResThumbnail();
+    this.testMatcherTightenedGates();
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
@@ -430,6 +434,49 @@ const Tests = {
     const pinkImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 100, dominantColor: { name: 'PINK', confidence: 70 } };
     const resPurple = PdfParser.validateImageForProduct(pinkImage, { cat: 'CONTROLLER', modelo: '8BitDo Ultimate 2C Controller', variante: 'Purple' });
     this.assert(resPurple.valid === false, 'Color Guard rechazó la imagen Rosa/Pink asignada a "Purple Controller"');
+  },
+
+  testImageShapeGate() {
+    // Wide image (keyboard-shaped, aspect 2.6) on a compact product must be REJECTED
+    const wideImage = { dataUrl: 'data:image/png;base64,AAAA', width: 260, height: 100 };
+    const resMouse = PdfParser.validateImageForProduct(wideImage, { cat: 'MOUSE', modelo: 'G502 HERO', variante: 'Black' });
+    this.assert(resMouse.valid === false, 'Shape Gate rechazó imagen ancha (teclado) asignada a un MOUSE');
+    const resCtrl = PdfParser.validateImageForProduct(wideImage, { cat: 'CONTROLLER', modelo: 'Ultimate 2C', variante: 'Black' });
+    this.assert(resCtrl.valid === false, 'Shape Gate rechazó imagen ancha (teclado) asignada a un CONTROLLER');
+    // Tall/narrow image on a wide product must be REJECTED
+    const tallImage = { dataUrl: 'data:image/png;base64,AAAA', width: 60, height: 120 };
+    const resKb = PdfParser.validateImageForProduct(tallImage, { cat: 'TECLADO', modelo: 'AK820 Pro', variante: 'White' });
+    this.assert(resKb.valid === false, 'Shape Gate rechazó imagen estrecha asignada a un TECLADO');
+  },
+
+  testImageShapeGateCompatible() {
+    // Wide image on TECLADO -> valid
+    const wideImage = { dataUrl: 'data:image/png;base64,AAAA', width: 250, height: 100 };
+    const resKb = PdfParser.validateImageForProduct(wideImage, { cat: 'TECLADO', modelo: 'AK820', variante: 'White' });
+    this.assert(resKb.valid === true, 'Shape Gate permite imagen ancha para TECLADO');
+    // Roughly square image on MOUSE -> valid
+    const squareImage = { dataUrl: 'data:image/png;base64,AAAA', width: 100, height: 110 };
+    const resMouse = PdfParser.validateImageForProduct(squareImage, { cat: 'MOUSE', modelo: 'G502', variante: 'Black' });
+    this.assert(resMouse.valid === true, 'Shape Gate permite imagen cuadrada para MOUSE');
+  },
+
+  testImageLowResThumbnail() {
+    // Razer-sized thumbnail (50x31): unreliable content -> penalized + warning, not full score
+    const tiny = { dataUrl: 'data:image/png;base64,AAAA', width: 50, height: 31 };
+    const res = PdfParser.validateImageForProduct(tiny, { cat: 'MOUSE', modelo: 'Razer Viper', variante: 'Black' });
+    this.assert(res.score < 100, 'Thumbnail de baja resolución recibe penalización de score');
+    this.assert(res.warnings.some(w => /resoluci|thumbnail/i.test(w)), 'Thumbnail de baja resolución genera warning');
+  },
+
+  testMatcherTightenedGates() {
+    // Image in a far column (distX 220 > tightened gate 200) -> not assigned
+    const prodX = [{ sku: 'P1', marca: 'LOGITECH', modelo: 'G502', variante: 'Black', cat: 'MOUSE', fob: 39, pageNum: 1, x: 100, y: 100 }];
+    PdfParser.matchImagesToProductsGlobal(prodX, [{ pageNum: 1, x: 320, y: 90, width: 100, height: 100, dataUrl: 'data:image/png;base64,abc' }]);
+    this.assert(prodX[0].img === '-', 'Matcher global no asigna imágenes de columna lejana (distX 220 > 200)');
+    // Image 300px above anchor (> tightened gate 250) -> not assigned (fixes dense-row leakage)
+    const prodY = [{ sku: 'P2', marca: 'RAZER', modelo: 'Goliathus', variante: 'Black', cat: 'MOUSEPAD', fob: 15, pageNum: 1, x: 100, y: 400 }];
+    PdfParser.matchImagesToProductsGlobal(prodY, [{ pageNum: 1, x: 100, y: 100, width: 200, height: 80, dataUrl: 'data:image/png;base64,kbd' }]);
+    this.assert(prodY[0].img === '-', 'Matcher global no asigna imágenes a 300px verticales (gate 250)');
   },
 
   testGlobalBipartiteMatching() {

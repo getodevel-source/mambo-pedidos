@@ -591,23 +591,35 @@ const PdfParser = {
     // 1. Validación de aspect ratio por categoría
     const aspect = img.width / Math.max(1, img.height);
     const cat = (product.cat || '').toUpperCase();
+    const imgMaxDim = Math.max(img.width || 0, img.height || 0);
+
+    // 1a. HARD shape gate: reject images whose silhouette is incompatible with the
+    //     product family. Compact products (mouse/headset/controller) cannot have a
+    //     wide keyboard/mousepad photo; wide products (keyboard/mousepad) cannot have
+    //     a tall narrow photo. Kills cross-family mismatches at the source.
+    const COMPACT_CATS = ['MOUSE', 'AURICULAR', 'CONTROLLER', 'SWITCH'];
+    const WIDE_CATS = ['TECLADO', 'MOUSEPAD'];
+    if (COMPACT_CATS.includes(cat) && aspect > 1.9) {
+      return { valid: false, score: 0, warnings: [`🚫 Imagen ancha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+    }
+    if (WIDE_CATS.includes(cat) && aspect < 0.65) {
+      return { valid: false, score: 0, warnings: [`🚫 Imagen estrecha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+    }
+
+    // 1b. Low-resolution thumbnail: content/color unreliable at tiny sizes (e.g. Razer
+    //     ~50x31pts). Deprioritize (not reject) so a thumbnail only wins if nothing better.
+    if (imgMaxDim < 55) {
+      score -= 15;
+      warnings.push('⚠️ Thumbnail de baja resolución — coincidencia menos confiable');
+    }
 
     if (cat === 'TECLADO' && aspect < 0.8) {
       score -= 30;
       warnings.push(`⚠️ Imagen muy estrecha (ratio ${aspect.toFixed(2)}) para un teclado`);
     }
-    if (cat === 'MOUSE' && aspect > 2.5) {
-      score -= 30;
-      warnings.push(`⚠️ Imagen muy ancha (ratio ${aspect.toFixed(2)}) para un mouse`);
-    }
-    if (cat === 'MOUSEPAD' && aspect < 0.5) {
-      score -= 20;
-      warnings.push(`⚠️ Imagen muy estrecha para un mousepad`);
-    }
 
     // 2. Validación de color dominante vs variante del producto
     //    Skip en imágenes muy chicas (< 60px) — el color dominante no es confiable
-    const imgMaxDim = Math.max(img.width || 0, img.height || 0);
     if (img.dominantColor && img.dominantColor.name !== 'UNKNOWN' && img.dominantColor.confidence > 25 && imgMaxDim >= 60) {
       const imgColor = img.dominantColor.name;
       const variantText = ((product.variante || '') + ' ' + (product.modelo || '')).toLowerCase();
@@ -1808,8 +1820,9 @@ const PdfParser = {
           const distX = Math.abs(img.x - p.x);
           const distYRaw = p.y - img.y;
 
-          // Hard gate: demasiado lejos → Infinity (no asignar)
-          if (distX > 300 || distYRaw > 400 || distYRaw < -100) {
+          // Hard gate: demasiado lejos → Infinity (no asignar). Gates ajustados
+          // (distX 300→200, distY 400→250) para evitar fugas entre columnas/filas densas.
+          if (distX > 200 || distYRaw > 250 || distYRaw < -100) {
             rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation: null });
             continue;
           }
