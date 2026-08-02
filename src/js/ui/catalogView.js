@@ -157,19 +157,25 @@ const CatalogView = {
     const startIndex = (CatalogView.currentPage - 1) * CatalogView.pageSize;
     const pageItems = filtered.slice(startIndex, startIndex + CatalogView.pageSize);
 
-    const allFob = catalog.map(r => r.fob);
-    const positiveFob = allFob.filter(f => f > 0);
-    const minFob = positiveFob.length ? Math.min(...positiveFob) : 0;
+    // Single-pass min/max/sum (avoids Math.min(...spread) call-stack limit on large catalogs)
+    let minFob = Infinity, maxFob = 0, sumFob = 0, positiveCount = 0;
+    for (const r of catalog) {
+      const f = r.fob;
+      if (f > maxFob) maxFob = f;
+      if (f > 0) { if (f < minFob) minFob = f; sumFob += f; positiveCount++; }
+    }
+    if (minFob === Infinity) minFob = 0;
     document.getElementById('catKpiTotal').textContent = catalog.length;
     document.getElementById('catKpiMarcas').textContent = [...new Set(catalog.map(r => r.marca))].length + ' marcas';
     document.getElementById('catKpiMin').textContent = '$' + (minFob >= 10 ? minFob.toFixed(0) : minFob.toFixed(2));
-    document.getElementById('catKpiMax').textContent = '$' + (allFob.length ? Math.max(...allFob) : 0).toFixed(0);
-    document.getElementById('catKpiAvg').textContent = '$' + (positiveFob.length ? (positiveFob.reduce((a, b) => a + b, 0) / positiveFob.length) : 0).toFixed(2);
+    document.getElementById('catKpiMax').textContent = '$' + maxFob.toFixed(0);
+    document.getElementById('catKpiAvg').textContent = '$' + (positiveCount ? (sumFob / positiveCount) : 0).toFixed(2);
 
     const selItems = Object.entries(selection);
     const selQty = selItems.reduce((s, [k, v]) => s + v, 0);
+    const bySku = new Map(catalog.map(r => [r.sku, r]));
     const selFob = selItems.reduce((s, [k, v]) => {
-      const item = catalog.find(r => r.sku === k);
+      const item = bySku.get(k);
       return s + (item ? item.fob * v : 0);
     }, 0);
     document.getElementById('catKpiSel').textContent = selQty + ' u';
