@@ -1299,12 +1299,14 @@ const PdfParser = {
 
     if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(products, []);
 
-    // Image inheritance: products without image inherit from same brand+modelo
+    // Image inheritance: products without image inherit from same brand+modelo+category.
+    // Category is part of the key on purpose: a keyboard must never inherit a mouse photo
+    // (cross-category inheritance produced portrait images on TECLADO products).
     const imageByModel = new Map();
     for (const p of products) {
       const hasImg = typeof p.img === 'string' && /^data:image\//i.test(p.img);
       if (hasImg) {
-        const modelKey = (p.marca + '|' + p.modelo).toLowerCase();
+        const modelKey = (p.marca + '|' + p.modelo + '|' + p.cat).toLowerCase();
         if (!imageByModel.has(modelKey)) {
           imageByModel.set(modelKey, p.img);
         }
@@ -1313,7 +1315,7 @@ const PdfParser = {
     for (const p of products) {
       const hasImg = typeof p.img === 'string' && /^data:image\//i.test(p.img);
       if (!hasImg) {
-        const modelKey = (p.marca + '|' + p.modelo).toLowerCase();
+        const modelKey = (p.marca + '|' + p.modelo + '|' + p.cat).toLowerCase();
         const inherited = imageByModel.get(modelKey);
         if (inherited) {
           p.img = inherited;

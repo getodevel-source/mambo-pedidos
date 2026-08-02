@@ -76,16 +76,34 @@ function makeFile(pdfPath) {
 }
 
 /** Image-fit audit: does the matched photo's silhouette contradict the category? */
-function auditImageFit(product) {
+// Uses imageEvidence dims when present; otherwise decodes the dataUrl (cached, since
+// inherited images are shared) so cell-grid products without evidence are still checked.
+// This closes the blind spot that hid cross-category inheritance leaks.
+const { loadImage } = require('canvas');
+const dimCache = new Map();
+async function imageDims(dataUrl) {
+  if (dimCache.has(dataUrl)) return dimCache.get(dataUrl);
+  let d = null;
+  try { const im = await loadImage(dataUrl); d = { w: im.width, h: im.height }; } catch (e) {}
+  dimCache.set(dataUrl, d);
+  return d;
+}
+async function auditImageFit(product) {
+  let w, h;
   const ev = product.imageEvidence;
-  if (!ev || !ev.width || !ev.height) return null; // no image evidence
+  if (ev && ev.width && ev.height) { w = ev.width; h = ev.height; }
+  else if (/^data:image\//i.test(product.img || '')) {
+    const d = await imageDims(product.img);
+    if (!d) return null;
+    w = d.w; h = d.h;
+  } else return null;
   const cat = (product.cat || '').toUpperCase();
-  const aspect = ev.width / Math.max(1, ev.height);
+  const aspect = w / Math.max(1, h);
   if (COMPACT_CATS.includes(cat) && aspect > 1.9) {
-    return { cat, aspect: +aspect.toFixed(2), w: ev.width, h: ev.height, reason: 'wide photo on compact product' };
+    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'wide photo on compact product' };
   }
   if (WIDE_CATS.includes(cat) && aspect < 0.65) {
-    return { cat, aspect: +aspect.toFixed(2), w: ev.width, h: ev.height, reason: 'tall photo on wide product' };
+    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'tall photo on wide product' };
   }
   return null;
 }
@@ -110,7 +128,7 @@ async function auditPdf(pdfPath) {
 
   const mismatches = [];
   for (const p of products) {
-    const m = auditImageFit(p);
+    const m = await auditImageFit(p);
     if (m) mismatches.push({ sku: p.sku, marca: p.marca, modelo: p.modelo, ...m });
   }
 

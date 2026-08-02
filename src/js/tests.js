@@ -37,6 +37,7 @@ const Tests = {
     this.testGarbageModeloRecovery();
     this.testZeroIdentityRowDropped();
     this.testMarketRangeAndReclassification();
+    this.testImageInheritanceCategoryScoped();
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
@@ -531,6 +532,21 @@ const Tests = {
     // Numeric modelo recovered from variante
     const num = TextSanitizer.sanitizeItem({ modelo: '68', variante: 'Magnetic Black V3', marca: 'Atk', cat: 'TECLADO', fob: 76 });
     this.assert(!/^\d+$/.test(num.modelo), `Modelo numérico se recupera desde variante (got "${num.modelo}")`);
+  },
+
+  testImageInheritanceCategoryScoped() {
+    const IMG = 'data:image/png;base64,AAAA';
+    const products = [
+      { sku: 'M1', marca: 'Atk', modelo: 'Z1 Ultimate', variante: 'Black', cat: 'MOUSE', fob: 30, img: IMG, pageNum: 1 },
+      { sku: 'K1', marca: 'Atk', modelo: 'Z1 Ultimate', variante: 'White', cat: 'TECLADO', fob: 80, img: '-', pageNum: 1 },
+      { sku: 'K2', marca: 'Atk', modelo: 'F1', variante: 'Black', cat: 'TECLADO', fob: 70, img: IMG, pageNum: 1 },
+      { sku: 'K3', marca: 'Atk', modelo: 'F1', variante: 'White', cat: 'TECLADO', fob: 70, img: '-', pageNum: 1 }
+    ];
+    const out = PdfParser.finalizeCatalogProducts(products, 'Atk', 0, []);
+    const k1 = out.find(p => p.sku === 'K1');
+    const k3 = out.find(p => p.sku === 'K3');
+    this.assert(k1 && !/^data:image\//.test(k1.img || ''), 'Herencia de imagen NO cruza categorías (MOUSE->TECLADO)');
+    this.assert(k3 && /^data:image\//.test(k3.img || '') && k3._imageInherited, 'Herencia de imagen funciona dentro de la misma categoría');
   },
 
   testGlobalBipartiteMatching() {
