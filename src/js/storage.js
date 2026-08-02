@@ -54,12 +54,68 @@ const AppStorage = {
         console.error('Error guardando en Tauri Store:', e);
       }
     }
+    const serialized = JSON.stringify(value);
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, serialized);
+      return;
     } catch (e) {
-      console.error('No se pudo guardar el catálogo: cuota de almacenamiento insuficiente. Se conservaron los datos en memoria y no se eliminaron imágenes.', e);
-      throw new Error('Cuota de almacenamiento insuficiente; el catálogo no fue truncado');
+      console.warn('localStorage quota exceeded, attempting progressive strip...', e);
     }
+
+    // Progressive strip: remove heavy data to fit localStorage
+    const stripped = this._stripForQuota(value);
+    try {
+      localStorage.setItem(key, JSON.stringify(stripped));
+      if (typeof toast === 'function') {
+        toast('⚠️ Imágenes removidas del almacenamiento local para caber en la cuota. Las imágenes siguen visibles en esta sesión.', 'warning');
+      }
+      return;
+    } catch (e2) {
+      console.warn('Still over quota after image strip, removing evaluations...', e2);
+    }
+
+    // Level 2: also remove _evaluations, warnings, rawText, cellRawText
+    const strippedDeep = this._stripForQuota(stripped, true);
+    try {
+      localStorage.setItem(key, JSON.stringify(strippedDeep));
+      if (typeof toast === 'function') {
+        toast('⚠️ Catálogo guardado sin imágenes ni metadatos de validación (cuota localStorage).', 'warning');
+      }
+      return;
+    } catch (e3) {
+      console.error('No se pudo guardar el catálogo ni siquiera sin imágenes:', e3);
+      throw new Error('Cuota de almacenamiento insuficiente incluso sin imágenes. Considere usar menos catálogos o limpiar el almacenamiento.');
+    }
+  },
+
+  /**
+   * Strip heavy data from a catalog payload to fit localStorage quota.
+   * Level 1: replace base64 images with '-'
+   * Level 2 (deep): also remove _evaluations, warnings, rawText, cellRawText, sourceWarnings
+   */
+  _stripForQuota(value, deep = false) {
+    if (!value || typeof value !== 'object') return value;
+    const clone = JSON.parse(JSON.stringify(value));
+    const items = clone.items || clone;
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (item && typeof item === 'object') {
+          if (typeof item.img === 'string' && item.img.startsWith('data:image/')) {
+            item.img = '-';
+          }
+          if (deep) {
+            delete item._evaluations;
+            delete item._validation;
+            delete item.warnings;
+            delete item.sourceWarnings;
+            delete item.rawText;
+            delete item.cellRawText;
+            delete item._imageRef;
+          }
+        }
+      }
+    }
+    return clone;
   },
 
   async removeItem(key) {
@@ -307,6 +363,14 @@ const AppStorage = {
       localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(payload));
     } catch (e) {
       evidence.localstorageError = e.message;
+      // Retry with stripped images
+      try {
+        const stripped = this._stripForQuota(payload);
+        localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(stripped));
+        evidence.imagesStripped = true;
+      } catch (e2) {
+        evidence.localstorageError = e2.message;
+      }
     }
     return { backend: evidence.backend, evidence };
   },
