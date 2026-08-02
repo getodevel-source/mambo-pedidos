@@ -861,6 +861,11 @@ const PdfParser = {
 
       // Sanitización quirúrgica de Nombre y Variante
       const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
+      // Skip phantom rows: raw content is only a price/header token with no variant
+      // (the RMB price column parsed as a row, or a "PRICE PRICE" header) — not a product.
+      if (!(rawVariante || '').trim() && (/^\$?\d+([\.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
+        continue;
+      }
 
       // Búsqueda de Imagen STRICTLY dentro del Bounding Box de la Celda
       let matchedImg = '-';
@@ -1056,6 +1061,11 @@ const PdfParser = {
       const cat = this.detectCategory(rawCombined, detectedBrand);
 
       const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
+      // Skip phantom rows: raw content is only a price/header token with no variant
+      // (the RMB price column parsed as a row, or a "PRICE PRICE" header) — not a product.
+      if (!(rawVariante || '').trim() && (/^\$?\d+([\.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
+        continue;
+      }
 
       // Buscar imagen dentro de los mismos límites Y de la celda CON validación visual
       // Image bounds are wider than text bounds (+25px padding) to catch images

@@ -146,6 +146,15 @@ const TextSanitizer = {
     variante = audited.variante;
     marca = audited.marca;
 
+    // 5a. Post-audit guard: crossAudit can strip the last meaningful token out of modelo
+    //     (e.g. "68 V3" -> V3 moved to variante -> modelo degenerates to "68"). If modelo
+    //     ended up as noise while variante still holds content, recover the model from it.
+    if (/^(item|list|earphones?|products?|producto|none|n\/a|undefined|null|[-.]|\$?\d+([\.,]\d+)?)$/i.test(modelo.trim()) && variante) {
+      const recovered = this.crossAuditFields('', variante, marca, cat);
+      modelo = recovered.modelo;
+      variante = recovered.variante;
+    }
+
     // 5b. If modelo is empty after audit, use brand+category placeholder
     if (!modelo || modelo.length < 2) {
       const brandPart = (marca && marca !== 'OTRO') ? marca : '';

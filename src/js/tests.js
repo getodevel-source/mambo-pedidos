@@ -496,6 +496,9 @@ const Tests = {
     // Guard: a product with brand+category identity but no model keeps its placeholder (not dropped)
     const r4 = TextSanitizer.sanitizeItem({ modelo: '', variante: '', marca: 'Logitech', cat: 'MOUSE', fob: 20 });
     this.assert(r4 && /Logitech/i.test(r4.modelo), 'sanitizeItem conserva placeholder para producto con identidad pero sin modelo');
+    // Post-audit guard: crossAudit strips the connection token and modelo degenerates to a number
+    const r5 = TextSanitizer.sanitizeItem({ modelo: '68 V3', variante: 'Magnetic Side Print Blackberry', marca: 'Atk', cat: 'TECLADO', fob: 76 });
+    this.assert(!/^\d+$/.test(r5.modelo), `Post-audit guard recupera modelo que degeneró a número (68 V3 -> "${r5.modelo}")`);
   },
 
   testZeroIdentityRowDropped() {
