@@ -38,6 +38,7 @@ const Tests = {
     this.testZeroIdentityRowDropped();
     this.testMarketRangeAndReclassification();
     this.testImageInheritanceCategoryScoped();
+    this.testHonestModelQualityGate();
     this.testCustomsPackingListExport();
     this.testSupplierPriceComparison();
     this.testNegotiatedDiscount();
@@ -547,6 +548,22 @@ const Tests = {
     const k3 = out.find(p => p.sku === 'K3');
     this.assert(k1 && !/^data:image\//.test(k1.img || ''), 'Herencia de imagen NO cruza categorías (MOUSE->TECLADO)');
     this.assert(k3 && /^data:image\//.test(k3.img || '') && k3._imageInherited, 'Herencia de imagen funciona dentro de la misma categoría');
+  },
+
+  testHonestModelQualityGate() {
+    // Pure detector
+    this.assert(TextSanitizer.assessModelQuality('PC SeaSalt PA Silent 47 5g POM', '', 'SWITCH', '').level === 'RED', 'assessModelQuality: specs -> RED');
+    this.assert(TextSanitizer.assessModelQuality('S98 Glacier Axis Universe', 'White', 'TECLADO', '').level === 'YELLOW', 'assessModelQuality: switch pegado -> YELLOW');
+    this.assert(TextSanitizer.assessModelQuality('G502 HERO', 'Black', 'MOUSE', '').level === 'GREEN', 'assessModelQuality: modelo limpio -> GREEN');
+    // Wired into the validator: specs model becomes RED (not importable)
+    const specs = CatalogValidator.validateItem({ sku: 'SW-1', marca: 'Haimu', modelo: 'PC 2.0 PA 39 5g POM', variante: 'Tactile', cat: 'SWITCH', fob: 0.12, grounded: true });
+    this.assert(specs.status === 'RED', 'Validador: modelo de specs -> RED (no importable)');
+    // Glued switch becomes YELLOW (importable, flagged)
+    const glued = CatalogValidator.validateItem({ sku: 'KB-1', marca: 'RK', modelo: 'S98 Glacier Axis Universe', variante: 'White', cat: 'TECLADO', fob: 45, grounded: true });
+    this.assert(glued.status === 'YELLOW', 'Validador: switch pegado -> YELLOW (revisar)');
+    // Clean model stays GREEN (no false downgrade)
+    const clean = CatalogValidator.validateItem({ sku: 'MS-1', marca: 'Logitech', modelo: 'G502 HERO', variante: 'Black', cat: 'MOUSE', fob: 43, grounded: true });
+    this.assert(clean.status === 'GREEN', 'Validador: modelo limpio sigue GREEN (sin falso downgrade)');
   },
 
   testGlobalBipartiteMatching() {

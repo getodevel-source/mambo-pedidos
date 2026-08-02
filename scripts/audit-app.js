@@ -210,8 +210,19 @@ async function main() {
     if (allMism.length > 20) console.log(`    ... y ${allMism.length - 20} más`);
   }
 
-  const pass = tR === 0 && tMism === 0;
-  console.log(`\n  ${pass ? '✅ PASS — 0 RED, 0 image-fit mismatches' : `❌ FAIL — ${tR} RED, ${tMism} mismatches`}\n`);
+  // RED split: model-quality REDs are the HONEST semaphore rejecting unusable models
+  // (desired behaviour, not a pipeline regression); structural REDs are real defects.
+  let gateRed = 0;
+  for (const r of all) for (const [k, v] of Object.entries(r.redReasons || {})) if (k.includes("specs técnicas")) gateRed += v;
+  const structRed = tR - gateRed;
+  const pass = tMism === 0 && structRed === 0 && all.every(r => !r.error);
+  console.log(pass
+    ? `
+  ✅ PASS — pipeline íntegro (0 image-mismatches, 0 RED estructurales). Semáforo honesto: ${gateRed} RED de calidad de modelo (rechazados por diseño) + ${tY} YELLOW a revisar.
+`
+    : `
+  ❌ FAIL — ${structRed} RED estructurales, ${tMism} image-mismatches, ${all.filter(r=>r.error).length} errores de archivo.
+`);
 
   if (args.json) {
     const report = {

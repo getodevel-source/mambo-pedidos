@@ -522,6 +522,46 @@ const TextSanitizer = {
       }
     }
     return fixed;
+  },
+
+  /**
+   * Honest model-quality assessment. GREEN only means "structurally complete";
+   * this detects when the extracted model is actually DIRTY so the semaphore can
+   * stop lying (downgrade to YELLOW/RED) without changing the extracted value.
+   * Rules derived from visual ground-truth (ground-truth/verdicts.json, n=65).
+   * @returns {{ level: 'GREEN'|'YELLOW'|'RED', reasons: string[] }}
+   */
+  assessModelQuality(modelo, variante, cat, raw) {
+    const m = (modelo || '').trim();
+    const reasons = [];
+    if (!m) return { level: 'RED', reasons: ['Modelo vacío'] };
+
+    // RED: datasheet specs leaked into the model (never a product name).
+    // e.g. "PC SeaSalt PA Silent 47 5g POM", "3.60±0.30mm".
+    const SPEC_RE = /(\d+(?:\.\d+)?\s*(?:mm|mn)\b)|±|\b\d+(?:\.\d+)?\s*g\b|\b(?:POM|UPE|PA12|FR4|IXPE|PET)\b|\b(?:stroke|force|material|cover|axle|working|bottoming|pre[- ]?travel)\b/i;
+    if (/^total\b/i.test(m) || SPEC_RE.test(m)) {
+      return { level: 'RED', reasons: ['Modelo = specs técnicas de hoja de datos (no es un nombre de producto)'] };
+    }
+
+    // YELLOW: switch/axis name glued to the model code (identifiable but dirty).
+    // e.g. "S98 Glacier Axis Universe", "R98 Kaihua Speed Axis", "Plum axis Pro".
+    if (/\baxis\b/i.test(m) || /\bswitch\b/i.test(m)) {
+      reasons.push('El modelo incluye el tipo de switch/axis (debería ir aparte)');
+    }
+    // YELLOW: truncated model with an unclosed bracket.
+    if (/[({[]/.test(m) && !/[)}\]]/.test(m)) {
+      reasons.push('Modelo truncado (paréntesis/llave sin cerrar)');
+    }
+    // YELLOW: model has no alphanumeric code but the source row DID carry one
+    // (EAN-13 or a code with digits) -> the real code was lost (merged cell / matrix).
+    const r = (raw || '');
+    const rawHasCode = /\b\d{12,}\b/.test(r) || /\b[A-Z]{1,4}\d{2,}/.test(r);
+    const modelHasDigit = /\d/.test(m);
+    if (!modelHasDigit && rawHasCode) {
+      reasons.push('El código del producto no llegó al modelo (celda fusionada/matriz)');
+    }
+
+    return { level: reasons.length ? 'YELLOW' : 'GREEN', reasons };
   }
 };
 

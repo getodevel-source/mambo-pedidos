@@ -136,7 +136,18 @@ const CatalogValidator = {
 
     // ── Semáforo ──
     // R9 (missing image) is advisory: only blocks GREEN when combined with other violations
+        // ── R-model: honest model-quality gate ──
+        // GREEN only certifies structural completeness; this stops the semaphore from
+        // lying when the extracted model is actually dirty (datasheet specs, glued switch,
+        // glued product-type, truncated, or lost product code). RED = unusable (not
+        // importable), YELLOW = importable but flagged for human review.
+        if (typeof TextSanitizer !== 'undefined' && TextSanitizer.assessModelQuality) {
+          const _mq = TextSanitizer.assessModelQuality(modelo, variante, cat, item.rawText || item.cellRawText || '');
+          if (_mq.level === 'RED') _mq.reasons.forEach(r => critical.push(r));
+          else if (_mq.level === 'YELLOW') _mq.reasons.forEach(r => violations.push(r));
+        }
     const nonImageViolations = violations.length; // R9 no longer pushes to violations
+
     let status = 'GREEN';
     if (critical.length > 0) {
       status = 'RED';
