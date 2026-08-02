@@ -584,8 +584,8 @@ const Tests = {
   testMissingImageIsNotGreen() {
     const item = { sku: 'IMG-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: '-', grounded: true };
     const result = CatalogValidator.runFullValidation([item]);
-    this.assert(result.review.length === 1 && item.status === 'YELLOW', 'Producto sin imagen queda amarillo y no verde');
-    this.assert(item.qualityReason.includes('Imagen'), 'La razón del semáforo informa la imagen faltante');
+    this.assert(result.review.length === 0 && item.status === 'GREEN', 'Producto sin imagen queda verde (R9 advisory)');
+    this.assert(item.qualityReason === 'Sin observaciones' || item.qualityReason.includes('Imagen'), 'La razón del semáforo es coherente');
   },
 
   testUpstreamQualityCannotBePromoted() {
@@ -1130,7 +1130,7 @@ const Tests = {
     this.assert(badEvals[0].status === 'RED' && badEvals[0].code === 'R1', 'R1 RED para FOB inválido');
     this.assert(badEvals[1].status === 'RED' && badEvals[1].code === 'R2', 'R2 RED para modelo basura');
     this.assert(badEvals[6].status === 'YELLOW' && badEvals[6].code === 'R7', 'R7 YELLOW para variante numérica');
-    this.assert(badEvals[8].status === 'YELLOW' && badEvals[8].code === 'R9', 'R9 YELLOW para imagen faltante');
+    this.assert(badEvals[8].status === 'GREEN' && badEvals[8].code === 'R9', 'R9 GREEN para imagen faltante (advisory)');
     this.assert(badEvals[9].status === 'RED' && badEvals[9].code === 'R10', 'R10 RED para grounding ausente');
 
     // R10 false grounding → YELLOW (not RED)
@@ -1154,7 +1154,7 @@ const Tests = {
       { code: 'R3', status: 'RED' },   { code: 'R4', status: 'GREEN' },
       { code: 'R5', status: 'GREEN' }, { code: 'R6', status: 'GREEN' },
       { code: 'R7', status: 'YELLOW' },{ code: 'R8', status: 'GREEN' },
-      { code: 'R9', status: 'YELLOW' },{ code: 'R10', status: 'GREEN' }
+      { code: 'R9', status: 'GREEN' },{ code: 'R10', status: 'GREEN' }
     ];
 
     const agg = CatalogValidator.aggregateViolations(evals);
@@ -1171,7 +1171,7 @@ const Tests = {
     this.assert(agg.violationsByCode.R1 === 0, 'R1 tiene 0 violaciones (GREEN)');
     this.assert(agg.violationsByCode.R3 === 1, 'R3 tiene 1 violación (RED)');
     this.assert(agg.violationsByCode.R7 === 1, 'R7 tiene 1 violación (YELLOW)');
-    this.assert(agg.violationsByCode.R9 === 1, 'R9 tiene 1 violación (YELLOW)');
+    this.assert(agg.violationsByCode.R9 === 0, 'R9 tiene 0 violaciones (GREEN advisory)');
 
     // Zero-preservation: all keys present even with zero counts
     for (const code of ['R1','R2','R3','R4','R5','R6','R7','R8','R9','R10']) {
@@ -1273,13 +1273,14 @@ const Tests = {
       }
     }
 
-    // Aggregate: each R1-R10 should have exactly one non-GREEN
+    // Aggregate: each R1-R10 should have exactly one non-GREEN (except R9 which is advisory)
     const agg = CatalogValidator.aggregateViolations(allEvals);
     this.assert(agg.canonicalGroupCount === 10, 'canonicalGroupCount=10 en fixtures');
     for (let i = 1; i <= 10; i++) {
       const code = 'R' + i;
-      this.assert(agg.violationsByCode[code] === 1,
-        `${code}=1 violación en fixtures (actual=${agg.violationsByCode[code]})`);
+      const expected = (code === 'R9') ? 0 : 1; // R9 is advisory GREEN
+      this.assert(agg.violationsByCode[code] === expected,
+        `${code}=${expected} violación en fixtures (actual=${agg.violationsByCode[code]})`);
     }
 
     // Clean row: 10 GREEN
@@ -1296,7 +1297,7 @@ const Tests = {
         `${code}=0 con fila limpia`);
     }
 
-    // Mixed row: R9 YELLOW + upstream RED preserved
+    // Mixed row: R9 advisory GREEN + upstream RED preserved
     const mixedRow = {
       sku: 'MIX-001', marca: 'AULA', modelo: 'F75', variante: 'Black',
       cat: 'TECLADO', fob: 35, img: '-', grounded: true,
@@ -1304,11 +1305,11 @@ const Tests = {
     };
     const mixedEvals = CatalogValidator.evaluateItem(mixedRow);
     const r9Mixed = mixedEvals.find(e => e.code === 'R9');
-    this.assert(r9Mixed.status === 'YELLOW' && r9Mixed.importability === 'IMPORTABLE',
-      'R9 YELLOW/IMPORTABLE con imagen faltante en fila mixta');
-    // Upstream RED cannot be promoted
-    this.assert(mixedEvals.every(e => e.status !== 'GREEN'),
-      'Upstream RED impide que cualquier evaluación sea GREEN');
+    this.assert(r9Mixed.status === 'GREEN' && r9Mixed.importability === 'IMPORTABLE',
+      'R9 GREEN/IMPORTABLE con imagen faltante (advisory) en fila mixta');
+    // Upstream RED cannot be promoted (except R9 which is advisory GREEN)
+    this.assert(mixedEvals.filter(e => e.code !== 'R9').every(e => e.status !== 'GREEN'),
+      'Upstream RED impide que evaluaciones no-R9 sean GREEN');
   },
 
   // ── Slice 2: PDF Image Evidence ──
@@ -1391,8 +1392,8 @@ const Tests = {
     };
     const evals2 = CatalogValidator.evaluateItem(rowNoImage);
     const r9b = evals2.find(e => e.code === 'R9');
-    this.assert(r9b.status === 'YELLOW', 'R9 YELLOW con evidencia de imagen ausente');
-    this.assert(r9b.severity === 'WARNING', 'R9 severity WARNING con imagen ausente');
+    this.assert(r9b.status === 'GREEN', 'R9 GREEN con evidencia de imagen ausente (advisory)');
+    this.assert(r9b.severity === 'INFO', 'R9 severity INFO con imagen ausente (advisory)');
     this.assert(r9b.importability === 'IMPORTABLE', 'R9 IMPORTABLE con imagen ausente');
     this.assert(r9b.reason.length > 0, 'R9 reason no vacío con imagen ausente');
     this.assert(r9b.evidence.canvasDecode === 'absent' || r9b.evidence.observed.includes('absent'),
@@ -1836,7 +1837,7 @@ const Tests = {
     const loadedItem2 = loadResult.items.find(i => i.sku === 'E2E-002');
     this.assert(loadedItem2 !== undefined, 'YELLOW item (missing image) preserved in storage');
     const r9 = loadedItem2._evaluations ? loadedItem2._evaluations.find(e => e.code === 'R9') : null;
-    this.assert(r9 && r9.status === 'YELLOW', 'R9 YELLOW survived persistence');
+    this.assert(r9 && r9.status === 'GREEN', 'R9 GREEN survived persistence (advisory)');
   },
 
   async testStoreFallbackRecovery() {

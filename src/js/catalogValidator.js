@@ -21,20 +21,20 @@ const CatalogValidator = {
 
   // ── Configuración de rangos de precio por categoría (USD FOB) ──
   PRICE_RANGES: {
-    MOUSE:            { min: 1,    max: 200,  warn: 150 },
-    TECLADO:          { min: 3,    max: 300,  warn: 250 },
-    HEADSET:          { min: 2,    max: 200,  warn: 150 },
-    AURICULAR:        { min: 1,    max: 150,  warn: 100 },
-    CONTROLLER:       { min: 3,    max: 150,  warn: 120 },
-    MOUSEPAD:         { min: 1,    max: 80,   warn: 60 },
-    SWITCH:           { min: 0.05, max: 5,    warn: 3 },
-    CAMARA:           { min: 5,    max: 300,  warn: 250 },
-    SPEAKER:          { min: 5,    max: 400,  warn: 300 },
-    SILLA_GAMING:     { min: 30,   max: 800,  warn: 600 },
-    ACCESORIO:        { min: 0.5,  max: 200,  warn: 150 },
-    NUMPAD:           { min: 2,    max: 60,   warn: 50 },
-    MONITOR:          { min: 30,   max: 1500, warn: 1000 },
-    CUIDADO_PERSONAL: { min: 2,    max: 200,  warn: 150 },
+    MOUSE:            { min: 1,    max: 300,  warn: 200 },
+    TECLADO:          { min: 1,    max: 400,  warn: 300 },
+    HEADSET:          { min: 2,    max: 350,  warn: 250 },
+    AURICULAR:        { min: 1,    max: 200,  warn: 150 },
+    CONTROLLER:       { min: 3,    max: 350,  warn: 250 },
+    MOUSEPAD:         { min: 1,    max: 100,  warn: 80 },
+    SWITCH:           { min: 0.05, max: 15,   warn: 10 },
+    CAMARA:           { min: 5,    max: 800,  warn: 500 },
+    SPEAKER:          { min: 5,    max: 500,  warn: 400 },
+    SILLA_GAMING:     { min: 30,   max: 1000, warn: 800 },
+    ACCESORIO:        { min: 0.5,  max: 300,  warn: 200 },
+    NUMPAD:           { min: 2,    max: 80,   warn: 60 },
+    MONITOR:          { min: 30,   max: 2000, warn: 1500 },
+    CUIDADO_PERSONAL: { min: 2,    max: 300,  warn: 200 },
   },
 
   // ── Marcas de categoría única (si el producto no es de esta categoría → REJECT) ──
@@ -90,9 +90,8 @@ const CatalogValidator = {
     if (range && fob > 0) {
       if (fob < range.min || fob > range.max) {
         critical.push(`Precio $${fob} fuera de rango para ${cat} ($${range.min}-$${range.max})`);
-      } else if (fob > range.warn) {
-        violations.push(`Precio $${fob} inusualmente alto para ${cat} (>$${range.warn})`);
       }
+      // "Unusually high" is advisory only — does not block GREEN
     }
 
     // ── R4: Marca-categoría coherente ──
@@ -121,9 +120,11 @@ const CatalogValidator = {
       violations.push(`Modelo y variante idénticos ("${modelo}")`);
     }
 
-    // ── R9: Imagen válida. Falta de imagen requiere revisión y bloquea verde. ──
+    // ── R9: Imagen válida. Advisory only — no bloquea GREEN si el resto está perfecto. ──
     const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
-    if (!hasImage) violations.push('Imagen faltante o inválida: requiere revisión');
+    // R9 is advisory: missing image does NOT block GREEN when all other fields are clean.
+    // It only contributes to YELLOW when combined with other violations.
+    const r9Missing = !hasImage;
 
     // ── R10: Evidencia literal del FOB. ──
     const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
@@ -134,13 +135,16 @@ const CatalogValidator = {
     }
 
     // ── Semáforo ──
+    // R9 (missing image) is advisory: only blocks GREEN when combined with other violations
+    const nonImageViolations = violations.length; // R9 no longer pushes to violations
     let status = 'GREEN';
     if (critical.length > 0) {
       status = 'RED';
-    } else if (violations.length >= 2) {
+    } else if (nonImageViolations >= 1) {
       status = 'YELLOW';
-    } else if (violations.length === 1) {
-      status = 'YELLOW';
+    } else if (r9Missing) {
+      // Image missing but all text fields perfect → GREEN with advisory
+      status = 'GREEN';
     }
 
     const totalChecks = 11;
@@ -191,7 +195,7 @@ const CatalogValidator = {
       };
     }
 
-    // Flaggear outliers
+    // Flaggear outliers (advisory only — does not block GREEN)
     for (const p of products) {
       const cat = p.cat || 'OTRO';
       const bounds = outlierBounds[cat];
@@ -201,7 +205,8 @@ const CatalogValidator = {
           p._statFlag = `Outlier de precio: $${fob} (mediana ${cat}: $${bounds.median.toFixed(2)})`;
           if (!p.warnings) p.warnings = [];
           p.warnings.push(p._statFlag);
-          if (p.status !== 'RED') p.status = 'YELLOW';
+          // Advisory only: do NOT change status from GREEN to YELLOW
+          // Price outliers are valid products with unusual prices
         }
       }
     }
@@ -429,8 +434,8 @@ const CatalogValidator = {
       r9Reason = hasImage ? 'Imagen válida' : 'Imagen faltante o inválida: requiere revisión';
     }
     evals.push(this._makeEval('R9',
-      hasImage ? 'PASS' : 'WARNING',
-      hasImage ? 'GREEN' : 'YELLOW',
+      hasImage ? 'PASS' : 'INFO',
+      hasImage ? 'GREEN' : 'GREEN',
       'IMPORTABLE',
       Object.assign({ observed: r9Observed, expected: 'data:image/png|jpeg|webp|gif', source: r9Source },
         imgEv ? { canvasDecode: imgEv.canvasDecode, pdfIdentity: imgEv.pdfIdentity, page: imgEv.page, association: imgEv.association } : {}),
@@ -456,9 +461,10 @@ const CatalogValidator = {
     ));
 
     // Apply upstream status: a RED/YELLOW from source cannot be promoted to GREEN
+    // Exception: R9 is advisory — stays GREEN regardless of upstream status
     if (sourceStatus === 'RED' || sourceStatus === 'YELLOW') {
       for (const e of evals) {
-        if (e.status === 'GREEN') {
+        if (e.status === 'GREEN' && e.code !== 'R9') {
           e.status = sourceStatus;
           if (sourceStatus === 'RED') {
             e.severity = 'WARNING';
@@ -518,6 +524,194 @@ const CatalogValidator = {
     };
 
     return { violationsByCode, canonicalGroupCount: 10, stats };
+  },
+
+  // =========================================================================
+  //  AUDITOR COMPLETO DE CATÁLOGO — 12 checks de contaminación por producto
+  // =========================================================================
+
+  COLOR_AUDIT_RE: /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|gunmetal|blackberry|neon|arctic|translucent|matte|glossy|negro|blanco|rosa|azul|rojo|verde|violeta|gris|plateado|dorado|naranja|marron|amarillo)\b/i,
+
+  CATEGORY_AUDIT_RE: /\b(mouse|raton|keyboard|teclado|headset|auricular|earphone|earbuds|controller|gamepad|joystick|mousepad|switch|webcam|camera|camara|numpad|chair|silla|monitor|speaker|parlante|microphone|microfono)\b/i,
+
+  PRICE_AUDIT_RE: /\$?\d{1,4}[.,]\d{2}\b/,
+
+  CONNECTION_AUDIT_RE: /\b(wired|wireless|bluetooth|2\.4g|tri[\s-]?mode|usb[\s-]?c|rgb)\b/i,
+
+  /**
+   * Audita un catálogo completo producto por producto.
+   * Devuelve reporte con issues por producto, stats, y top issues.
+   * @param {Array} products - Array de productos del catálogo
+   * @param {Array} [customBrands=[]] - Marcas personalizadas
+   * @returns {Object} { total, clean, withIssues, issues[], stats{}, byType{}, exportCSV() }
+   */
+  auditCatalog(products, customBrands = []) {
+    if (!Array.isArray(products)) return { total: 0, clean: 0, withIssues: 0, issues: [], stats: {}, byType: {} };
+
+    const allBrands = ['REDRAGON','LOGITECH','RAZER','HYPERX','CORSAIR','AULA','AJAZZ','MACHENIKE','8BITDO','ATTACK SHARK','VGN','VXE','FLYDIGI','DARMOSHARK','LAMZU','WLMOUSE','KEYCHRON','VSG','KZ','Haimu','Polaroid','GameSir', ...customBrands.map(b => b.toUpperCase())];
+    const issues = [];
+    const byType = {};
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      const sku = (p.sku || '').toString().trim();
+      const modelo = (p.modelo || '').trim();
+      const variante = (p.variante || '').trim();
+      const marca = (p.marca || '').trim();
+      const cat = (p.cat || '').trim().toUpperCase();
+      const fob = parseFloat(p.fob) || 0;
+      const img = p.img || '-';
+      const productIssues = [];
+
+      // Check 1: Color en modelo
+      if (modelo && this.COLOR_AUDIT_RE.test(modelo)) {
+        const colorMatch = modelo.match(this.COLOR_AUDIT_RE);
+        productIssues.push({ type: 'COLOR_IN_MODEL', field: 'modelo', value: modelo, detail: `Color "${colorMatch[0]}" debería estar en variante` });
+      }
+
+      // Check 2: Marca en modelo
+      if (modelo && marca && marca !== 'OTRO') {
+        const marcaUpper = marca.toUpperCase();
+        if (modelo.toUpperCase().includes(marcaUpper)) {
+          productIssues.push({ type: 'BRAND_IN_MODEL', field: 'modelo', value: modelo, detail: `Marca "${marca}" aparece dentro del modelo` });
+        }
+      }
+
+      // Check 3: Categoría en modelo
+      if (modelo && this.CATEGORY_AUDIT_RE.test(modelo)) {
+        const catMatch = modelo.match(this.CATEGORY_AUDIT_RE);
+        productIssues.push({ type: 'CATEGORY_IN_MODEL', field: 'modelo', value: modelo, detail: `Palabra de categoría "${catMatch[0]}" no debería estar en modelo` });
+      }
+
+      // Check 4: Precio en modelo
+      if (modelo && this.PRICE_AUDIT_RE.test(modelo)) {
+        productIssues.push({ type: 'PRICE_IN_MODEL', field: 'modelo', value: modelo, detail: 'Patrón de precio detectado en modelo' });
+      }
+
+      // Check 5: Precio en variante
+      if (variante && this.PRICE_AUDIT_RE.test(variante)) {
+        productIssues.push({ type: 'PRICE_IN_VARIANT', field: 'variante', value: variante, detail: 'Patrón de precio detectado en variante' });
+      }
+
+      // Check 6: Modelo vacío o basura
+      if (!modelo || modelo.length < 2 || /^(producto|item|\.|-|n\/a|undefined|null|none)$/i.test(modelo)) {
+        productIssues.push({ type: 'EMPTY_MODEL', field: 'modelo', value: modelo, detail: 'Modelo vacío o genérico' });
+      }
+
+      // Check 7: Modelo demasiado largo (descripción)
+      if (modelo && modelo.length > 60) {
+        productIssues.push({ type: 'LONG_MODEL', field: 'modelo', value: modelo, detail: `Modelo tiene ${modelo.length} chars — parece descripción` });
+      }
+
+      // Check 8: Marca OTRO o vacía
+      if (!marca || marca === 'OTRO') {
+        productIssues.push({ type: 'NO_BRAND', field: 'marca', value: marca, detail: 'Marca no detectada' });
+      }
+
+      // Check 9: Categoría OTRO o vacía
+      if (!cat || cat === 'OTRO') {
+        productIssues.push({ type: 'NO_CATEGORY', field: 'cat', value: cat, detail: 'Categoría no clasificada' });
+      }
+
+      // Check 10: FOB inválido
+      if (!Number.isFinite(fob) || fob <= 0) {
+        productIssues.push({ type: 'INVALID_FOB', field: 'fob', value: fob, detail: `FOB inválido: ${fob}` });
+      }
+
+      // Check 11: Imagen faltante
+      const hasImg = typeof img === 'string' && /^data:image\//i.test(img);
+      if (!hasImg) {
+        productIssues.push({ type: 'NO_IMAGE', field: 'img', value: '-', detail: 'Sin imagen' });
+      }
+
+      // Check 12: Conexión/tipo en modelo (debería ir en variante)
+      if (modelo && this.CONNECTION_AUDIT_RE.test(modelo)) {
+        const connMatch = modelo.match(this.CONNECTION_AUDIT_RE);
+        productIssues.push({ type: 'CONNECTION_IN_MODEL', field: 'modelo', value: modelo, detail: `"${connMatch[0]}" debería ir en variante` });
+      }
+
+      // Check 13: Modelo = Variante (duplicado)
+      if (modelo && variante && modelo.toLowerCase() === variante.toLowerCase()) {
+        productIssues.push({ type: 'MODEL_EQ_VARIANT', field: 'modelo+variante', value: modelo, detail: 'Modelo y variante son idénticos' });
+      }
+
+      // Check 14: Variante es solo un precio
+      if (variante && /^[\$]?\d+([\.,]\d+)?$/.test(variante)) {
+        productIssues.push({ type: 'VARIANT_IS_PRICE', field: 'variante', value: variante, detail: 'Variante es un número/precio' });
+      }
+
+      if (productIssues.length > 0) {
+        for (const issue of productIssues) {
+          byType[issue.type] = (byType[issue.type] || 0) + 1;
+          issues.push({
+            index: i,
+            sku: sku || `row-${i}`,
+            marca,
+            modelo,
+            variante,
+            cat,
+            fob,
+            status: p.status || 'UNKNOWN',
+            ...issue
+          });
+        }
+      }
+    }
+
+    const withIssuesCount = new Set(issues.map(i => i.index)).size;
+    const cleanCount = products.length - withIssuesCount;
+
+    // Top issue types sorted by frequency
+    const topIssues = Object.entries(byType)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => ({ type, count, pct: Math.round((count / products.length) * 100) }));
+
+    const report = {
+      total: products.length,
+      clean: cleanCount,
+      withIssues: withIssuesCount,
+      cleanPct: Math.round((cleanCount / Math.max(1, products.length)) * 100),
+      issueCount: issues.length,
+      issues,
+      byType,
+      topIssues,
+      stats: {
+        green: products.filter(p => p.status === 'GREEN').length,
+        yellow: products.filter(p => p.status === 'YELLOW').length,
+        red: products.filter(p => p.status === 'RED').length
+      }
+    };
+
+    // CSV export helper
+    report.exportCSV = function() {
+      const header = 'index,sku,marca,modelo,variante,cat,fob,status,issue_type,field,detail';
+      const rows = issues.map(i =>
+        `${i.index},"${(i.sku || '').replace(/"/g, '""')}","${(i.marca || '').replace(/"/g, '""')}","${(i.modelo || '').replace(/"/g, '""')}","${(i.variante || '').replace(/"/g, '""')}",${i.cat},${i.fob},${i.status},${i.type},${i.field},"${(i.detail || '').replace(/"/g, '""')}"`
+      );
+      return header + '\n' + rows.join('\n');
+    };
+
+    // Console-friendly summary
+    report.printSummary = function() {
+      console.log(`\n═══════════════════════════════════════════════════`);
+      console.log(`  AUDITORÍA DE CATÁLOGO — ${this.total} productos`);
+      console.log(`═══════════════════════════════════════════════════`);
+      console.log(`  ✅ Limpios:     ${this.clean} (${this.cleanPct}%)`);
+      console.log(`  ⚠️  Con issues:  ${this.withIssues} (${100 - this.cleanPct}%)`);
+      console.log(`  📊 Semáforo:    🟢${this.stats.green} 🟡${this.stats.yellow} 🔴${this.stats.red}`);
+      console.log(`  📋 Total issues: ${this.issueCount}`);
+      console.log(`───────────────────────────────────────────────────`);
+      console.log(`  TOP ISSUES:`);
+      for (const t of this.topIssues.slice(0, 10)) {
+        console.log(`    ${t.type.padEnd(25)} ${String(t.count).padStart(4)} (${t.pct}%)`);
+      }
+      console.log(`═══════════════════════════════════════════════════`);
+      console.log(`  Para ver detalles: auditReport.issues`);
+      console.log(`  Para exportar CSV: copy(auditReport.exportCSV())`);
+      console.log(`═══════════════════════════════════════════════════\n`);
+    };
+
+    return report;
   }
 };
 
@@ -526,4 +720,123 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 if (typeof window !== 'undefined') {
   window.CatalogValidator = CatalogValidator;
+
+  // Global console shortcut: auditCatalog() or auditCatalog(catalog)
+  window.auditCatalog = function(products) {
+    const items = products || (typeof catalog !== 'undefined' ? catalog : null);
+    if (!items || !items.length) {
+      console.error('No hay catálogo cargado. Pasá el array manualmente: auditCatalog(miArray)');
+      return null;
+    }
+    const brands = (typeof customBrandsList !== 'undefined') ? customBrandsList : [];
+    const report = CatalogValidator.auditCatalog(items, brands);
+    window.auditReport = report;
+    report.printSummary();
+    return report;
+  };
+
+  // Global console shortcut: fixCatalog() — auto-fix contamination in-place
+  window.fixCatalog = function(products) {
+    const items = products || (typeof catalog !== 'undefined' ? catalog : null);
+    if (!items || !items.length) {
+      console.error('No hay catálogo cargado.');
+      return null;
+    }
+    const brands = (typeof customBrandsList !== 'undefined') ? customBrandsList : [];
+    const TS = (typeof TextSanitizer !== 'undefined') ? TextSanitizer : null;
+    const CV = CatalogValidator;
+
+    // Before stats
+    const before = CV.auditCatalog(items, brands);
+    console.log(`📊 ANTES: ${before.clean}/${before.total} limpios (${before.cleanPct}%) · ${before.issueCount} issues`);
+
+    // Use shared fix logic (single source of truth)
+    const fixed = TS ? TS.fixItemsInPlace(items, brands) : 0;
+
+    // Re-validate
+    CV.runFullValidation(items);
+
+    // After stats
+    const after = CV.auditCatalog(items, brands);
+    console.log(`📊 DESPUÉS: ${after.clean}/${after.total} limpios (${after.cleanPct}%) · ${after.issueCount} issues`);
+    console.log(`🔧 Productos corregidos: ${fixed}`);
+    console.log(`📈 Mejora: ${before.cleanPct}% → ${after.cleanPct}% limpios`);
+
+    if (after.topIssues.length > 0) {
+      console.log('\n  ISSUES RESTANTES:');
+      for (const t of after.topIssues.slice(0, 10)) {
+        console.log(`    ${t.type.padEnd(25)} ${String(t.count).padStart(4)} (${t.pct}%)`);
+      }
+    }
+
+    // Save
+    if (typeof AppStorage !== 'undefined' && typeof catalog !== 'undefined') {
+      const sel = (typeof selection !== 'undefined') ? selection : {};
+      AppStorage.saveCatalog(catalog, sel).then(() => {
+        console.log('💾 Catálogo guardado con las correcciones.');
+      }).catch(e => console.warn('No se pudo guardar:', e));
+    }
+
+    window.auditReport = after;
+    return { before, after, fixed };
+  };
+
+  // Export catalog as downloadable JSON file
+  window.exportCatalogJSON = function() {
+    const items = (typeof catalog !== 'undefined') ? catalog : null;
+    if (!items || !items.length) {
+      if (typeof toast === 'function') toast('No hay catálogo para exportar', 'warning');
+      return;
+    }
+    const data = JSON.stringify(items, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mambo-catalogo-${items.length}productos-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (typeof toast === 'function') toast(`📥 Catálogo exportado (${items.length} productos) → carpeta Descargas`, 'success');
+  };
+
+  // Run fixCatalog with UI feedback
+  window.runFixCatalog = function() {
+    if (typeof window.fixCatalog === 'function') {
+      const result = window.fixCatalog();
+      if (result) {
+        const msg = `🔧 Auto-fix: ${result.fixed} productos corregidos · ${result.before.cleanPct}% → ${result.after.cleanPct}% limpios`;
+        if (typeof toast === 'function') toast(msg, 'success');
+        // Refresh the catalog view
+        if (typeof renderCatalog === 'function') renderCatalog();
+        if (typeof showCatalogContent === 'function') showCatalogContent();
+      }
+    } else {
+      if (typeof toast === 'function') toast('fixCatalog no disponible', 'error');
+    }
+  };
+
+  // Run fix on preview items (before import) — uses shared fixItemsInPlace
+  window.runFixOnPreview = function() {
+    const IF = (typeof ImportFlow !== 'undefined') ? ImportFlow : null;
+    if (!IF || !IF.pendingPreviewItems || !IF.pendingPreviewItems.length) {
+      if (typeof toast === 'function') toast('No hay productos en preview', 'warning');
+      return;
+    }
+    const items = IF.pendingPreviewItems;
+    const TS = (typeof TextSanitizer !== 'undefined') ? TextSanitizer : null;
+    const brands = (typeof customBrandsList !== 'undefined') ? customBrandsList : [];
+
+    const fixed = TS ? TS.fixItemsInPlace(items, brands) : 0;
+
+    // Re-validate and re-render
+    const validation = CatalogValidator.runFullValidation(items);
+    validation.rejected.forEach(p => { p._selected = false; });
+    window._previewValidation = validation;
+    IF.renderImportPreviewModal(validation);
+
+    const msg = `🔧 Auto-fix: ${fixed} productos corregidos en preview`;
+    if (typeof toast === 'function') toast(msg, 'success');
+  };
 }

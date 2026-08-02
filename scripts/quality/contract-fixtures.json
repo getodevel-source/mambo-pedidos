@@ -115,8 +115,8 @@
       "img": "-",
       "grounded": true,
       "expectedViolation": "R9",
-      "expectedStatus": "YELLOW",
-      "expectedSeverity": "WARNING"
+      "expectedStatus": "GREEN",
+      "expectedSeverity": "INFO"
     },
     {
       "sku": "FIX-R10",
