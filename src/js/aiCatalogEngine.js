@@ -112,13 +112,22 @@ const AiCatalogEngine = {
   async extractPageChunkWithAI(chunkText, chunkIndex, customBrands = []) {
     if (!chunkText || chunkText.trim().length < 5) return [];
 
-    const prompt = `Extrae todos los productos de este fragmento de catálogo de periféricos gamer.
+    const prompt = `Eres un extractor de datos de catálogos de periféricos gamer. Extrae TODOS los productos del fragmento.
 Responde únicamente en este formato JSON exacto:
 {
   "items": [
     { "sku": "...", "marca": "...", "modelo": "...", "variante": "...", "cat": "...", "fob": 0.0 }
   ]
 }
+
+REGLAS ESTRICTAS DE SEPARACIÓN DE CAMPOS:
+- "marca": SOLO el nombre de la marca (ej: "Redragon", "Logitech"). NUNCA incluyas modelo ni color.
+- "modelo": SOLO el código/nombre del producto SIN marca, SIN color. Ej: "M652", "G502 HERO", "AK820 Pro". Máximo 4-5 palabras.
+- "variante": Color + conexión + specs. Ej: "Black Wireless", "Pink Wired". Los colores SIEMPRE van aquí.
+- "cat": UNA de: TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, CAMARA, CUIDADO_PERSONAL, NUMPAD, ACCESORIO.
+- "fob": Precio USD como número. Sin símbolo $.
+
+ERRORES A EVITAR: color en modelo, marca en modelo, precio en modelo/variante, descripciones largas en modelo.
 
 Categorías permitidas: TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, CAMARA, CUIDADO_PERSONAL, NUMPAD, ACCESORIO.
 
@@ -241,12 +250,39 @@ ${chunkText}
       const cleanLine = line.replace(priceMatch[0], '').replace(/\s+/g, ' ').trim();
       if (cleanLine.length < 3) continue;
 
+      const marca = this.extractBrandFromRawText(cleanLine, customBrands) || 'OTRO';
+
+      // Use TextSanitizer for proper model/variant separation instead of substring(0,50)
+      let modelo = cleanLine;
+      let variante = '';
+      if (typeof TextSanitizer !== 'undefined') {
+        // Remove brand prefix before parsing
+        let textForParse = cleanLine;
+        if (marca !== 'OTRO') {
+          textForParse = cleanLine.replace(new RegExp('^' + marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '').trim();
+        }
+        const parsed = TextSanitizer.parseModelAndVariant(textForParse, marca);
+        modelo = parsed.modelo;
+        variante = parsed.variante;
+
+        // Run cross-audit to fix contamination
+        if (typeof TextSanitizer.crossAuditFields === 'function') {
+          const audited = TextSanitizer.crossAuditFields(modelo, variante, marca, '');
+          modelo = audited.modelo;
+          variante = audited.variante;
+        }
+      } else {
+        modelo = cleanLine.substring(0, 50);
+      }
+
+      const cat = (typeof TextSanitizer !== 'undefined') ? TextSanitizer.detectCategoryFromText(modelo + ' ' + variante) : 'OTRO';
+
       items.push({
         sku: '',
-        marca: this.extractBrandFromRawText(cleanLine, customBrands) || 'OTRO',
-        modelo: cleanLine.substring(0, 50),
-        variante: '',
-        cat: (typeof TextSanitizer !== 'undefined') ? TextSanitizer.detectCategoryFromText(cleanLine) : 'OTRO',
+        marca,
+        modelo: modelo || (marca !== 'OTRO' ? marca + ' Item' : 'Producto'),
+        variante,
+        cat,
         fob
       });
     }

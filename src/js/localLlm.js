@@ -35,6 +35,11 @@ const LocalLlm = {
    * Comprueba si el servidor local de IA está corriendo y respondiendo.
    */
   async checkHealth() {
+    // Cache health check for 30 seconds to avoid per-call HTTP overhead
+    const now = Date.now();
+    if (this._lastHealthCheck && (now - this._lastHealthCheck) < 30000) {
+      return this.isAvailable;
+    }
     if (this.isChecking) return this.isAvailable;
     this.isChecking = true;
 
@@ -56,6 +61,7 @@ const LocalLlm = {
       this.lastError = e.message || 'Servidor local no disponible';
     } finally {
       this.isChecking = false;
+      this._lastHealthCheck = Date.now();
     }
 
     return false;
@@ -130,11 +136,36 @@ const LocalLlm = {
    * Extrae atributos estructurados de un texto de celda/producto vía el modelo local real.
    */
   async parseCellStructured(cellText, customBrands = []) {
-    const prompt = `Analiza este texto de catálogo de periféricos gamer y extrae los campos en este formato JSON exacto:
+    const prompt = `Eres un extractor de datos de catálogos de periféricos gamer. Analiza el texto y extrae EXACTAMENTE estos campos en JSON:
 {"marca": "...", "modelo": "...", "variante": "...", "cat": "...", "fob": 0.0}
 
-Categorías válidas: TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, CAMARA, CUIDADO_PERSONAL, NUMPAD, ACCESORIO.
-Marcas conocidas: ${['REDRAGON', 'LOGITECH', 'RAZER', ...customBrands].join(', ')}.
+REGLAS ESTRICTAS DE SEPARACIÓN DE CAMPOS:
+- "marca": SOLO el nombre de la marca/fabricante (ej: "Redragon", "Logitech", "Razer"). NUNCA incluyas modelo, color ni descripción.
+- "modelo": SOLO el nombre/código del producto SIN marca, SIN color, SIN descripción larga. Ej: "M652", "G502 HERO", "AK820 Pro". NUNCA incluyas colores ni specs técnicas aquí.
+- "variante": Color + tipo de conexión + specs clave. Ej: "Black Wireless", "Pink Wired", "White 2.4G Bluetooth". Los colores SIEMPRE van aquí, NUNCA en modelo.
+- "cat": UNA de estas categorías exactas: TECLADO, MOUSE, HEADSET, AURICULAR, CONTROLLER, MOUSEPAD, SWITCH, CAMARA, CUIDADO_PERSONAL, NUMPAD, ACCESORIO.
+- "fob": Precio en USD como número decimal. SOLO el número, sin símbolo $.
+
+EJEMPLOS CORRECTOS:
+Texto: "Redragon M652 RGB Gaming Mouse Black Wired $12.50"
+→ {"marca": "Redragon", "modelo": "M652 RGB", "variante": "Black Wired", "cat": "MOUSE", "fob": 12.50}
+
+Texto: "Logitech G502 HERO High Performance Gaming Mouse $39.99"
+→ {"marca": "Logitech", "modelo": "G502 HERO", "variante": "", "cat": "MOUSE", "fob": 39.99}
+
+Texto: "AK820 Pro 75% Mechanical Keyboard Pink Wireless Bluetooth $45.00"
+→ {"marca": "OTRO", "modelo": "AK820 Pro 75%", "variante": "Pink Wireless Bluetooth", "cat": "TECLADO", "fob": 45.00}
+
+Texto: "KZ ZSN Pro X Earphone Silver $8.90"
+→ {"marca": "KZ", "modelo": "ZSN Pro X", "variante": "Silver", "cat": "AURICULAR", "fob": 8.90}
+
+ERRORES COMUNES A EVITAR:
+- NO pongas el color en "modelo" (ej: modelo="M652 Black" es INCORRECTO → modelo="M652", variante="Black")
+- NO pongas la marca en "modelo" (ej: modelo="Redragon M652" es INCORRECTO → marca="Redragon", modelo="M652")
+- NO pongas descripciones largas en "modelo" (máximo 4-5 palabras)
+- NO pongas el precio en "modelo" ni en "variante"
+
+Marcas conocidas: ${['REDRAGON', 'LOGITECH', 'RAZER', 'HYPERX', 'CORSAIR', 'AULA', 'AJAZZ', 'MACHENIKE', '8BITDO', 'ATTACK SHARK', 'VGN', 'VXE', 'FLYDIGI', 'DARMOSHARK', 'LAMZU', 'WLMOUSE', 'KEYCHRON', ...customBrands].join(', ')}.
 
 Texto de la celda: "${cellText}"`;
 
