@@ -934,11 +934,11 @@ pageProducts.push({
       //  y devuelve las columnas por rol y posición X. Si no hay cabecera confiable
       //  devuelve [] -> el engine cae al path posicional actual (sin regresión).
       // =========================================================================
-      HEADER_TOKEN_RE: /^(model|product|item|color|colour|axis|switch|key\s*switch|image|picture|photo|cny|rmb|price|usd|fob)$/i,
+      HEADER_TOKEN_RE: /^(model|product|item|color|colour|axis|switch(es)?|key\s*switch(es)?|image|picture|photo|cny|rmb|price|usd|fob)$/i,
       HEADER_ROLE_RE: {
         model: /^(model|product|item)$/i,
         color: /^(color|colour)$/i,
-        switch: /^(axis|switch|key\s*switch)$/i,
+        switch: /^(axis|switch(es)?|key\s*switch(es)?)$/i,
         image: /^(image|picture|photo)$/i,
         cny: /^(cny|rmb|price)$/i,
         usd: /^(usd|fob)$/i
@@ -1263,18 +1263,21 @@ if (!rawModelo) continue;
         y: anchor.y
       });
 
-      // SLICE 2 backfill: esta fila tiene modelo real y la anterior quedó con
+      // SLICE 2 backfill: esta fila tiene modelo real y las anteriores quedaron con
       // un swap de color/switch (celda de modelo fusionada con texto centrado).
-      if (!rowModelEmpty && !modelFromSwap && pageProducts.length && pageProducts[pageProducts.length - 1]._needsModel) {
-        const prev = pageProducts[pageProducts.length - 1];
-        const restoredVariante = prev.variante || '';
-        prev.modelo = sanitized.modelo;
-        prev.variante = restoredVariante;
-        prev.rawText = (sanitized.modelo + ' ' + restoredVariante).replace(/s+/g, ' ').trim();
-        prev.cellRawText = prev.rawText;
-        prev.cat = this.detectCategory(prev.rawText, prev.marca);
-        prev.marca = this.detectBrandFromTextLine(prev.rawText, customBrands) || prev.marca || brandFallback || 'OTRO';
-        delete prev._needsModel;
+      // Corrige TODAS las filas swap consecutivas pendientes (no solo la última).
+      if (!rowModelEmpty && !modelFromSwap) {
+        for (let k = pageProducts.length - 1; k >= 0 && pageProducts[k] && pageProducts[k]._needsModel; k--) {
+          const prev = pageProducts[k];
+          const restoredVariante = prev.variante || '';
+          prev.modelo = sanitized.modelo;
+          prev.variante = restoredVariante;
+          prev.rawText = (sanitized.modelo + ' ' + restoredVariante).replace(/s+/g, ' ').trim();
+          prev.cellRawText = prev.rawText;
+          prev.cat = this.detectCategory(prev.rawText, prev.marca);
+          prev.marca = this.detectBrandFromTextLine(prev.rawText, customBrands) || prev.marca || brandFallback || 'OTRO';
+          delete prev._needsModel;
+        }
       }
       // SLICE 2: marcar filas cuyo "modelo" es un swap — serán corregidas por
       // el backfill de la siguiente fila con modelo real (si existe).
