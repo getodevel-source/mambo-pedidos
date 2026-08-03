@@ -82,17 +82,13 @@ const UINotifications = {
   },
 
   showDropOverlay() {
-    if (document.getElementById('dropOverlay')) return;
-    const d = document.createElement('div');
-    d.id = 'dropOverlay';
-    d.style.cssText = 'position:fixed;inset:0;background:rgba(255,87,34,0.15);backdrop-filter:blur(8px);z-index:999998;display:flex;align-items:center;justify-content:center;pointer-events:none;';
-    d.innerHTML = '<div style="text-align:center;color:#fff;font-size:24px;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,0.5);">📂 Soltá los archivos acá</div>';
-    document.body.appendChild(d);
+    const d = document.getElementById('dropOverlay');
+    if (d) d.style.display = 'flex';
   },
 
   hideDropOverlay() {
-    const e = document.getElementById('dropOverlay');
-    if (e) e.remove();
+    const d = document.getElementById('dropOverlay');
+    if (d) d.style.display = 'none';
   }
 };
 

@@ -18,7 +18,7 @@ const QuoteGenerator = {
     const decimals = opts.decimals !== undefined ? opts.decimals : 2;
     try {
       return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value || 0);
-    } catch (e) {
+    } catch {
       return `$${(value || 0).toFixed(decimals)}`;
     }
   },
@@ -43,8 +43,6 @@ const QuoteGenerator = {
     pedido.items.forEach((item, i) => {
       const pvpU = item.pvp || item.fob || 0;
       const sub = item.subPvp || (pvpU * item.qty);
-      const pvpArs = item.pvpArs || Math.round(pvpU * (t.tipoCambio || 1400));
-      const subArs = Math.round(sub * (t.tipoCambio || 1400));
       const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
       const imgCell = hasImage ? `<img src="${this.esc(item.img)}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">-</span>`;
 
@@ -100,15 +98,15 @@ const QuoteGenerator = {
       <div class="no-print" style="max-width: 900px; margin: 0 auto 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <button onclick="window.close()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">← Volver a la App</button>
         <div style="display: flex; gap: 8px;">
-          <button onclick="document.body.classList.toggle('hide-images'); this.textContent = document.body.classList.contains('hide-images') ? '📄 Modo Texto Compacto' : '🎨 Modo Catálogo Visual';" style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700;">🎨 Modo Catálogo Visual</button>
-          <button onclick="window.print()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 14px;">🖨️ Imprimir / Guardar PDF</button>
+          <button onclick="document.body.classList.toggle('hide-images'); this.textContent = document.body.classList.contains('hide-images') ? 'Modo Texto Compacto' : 'Modo Catálogo Visual';" style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700;">Modo Catálogo Visual</button>
+          <button onclick="window.print()" style="padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 14px;">Imprimir / Guardar PDF</button>
         </div>
       </div>
 
       <div class="quote-card">
         <div class="header">
           <div>
-            <div class="logo">⚡ ${this.esc(companyName)}</div>
+            <div class="logo">${this.esc(companyName)}</div>
             <div class="subtitle">Gestión de Catálogos & Presupuestos Mayoristas</div>
           </div>
           <div class="quote-title">

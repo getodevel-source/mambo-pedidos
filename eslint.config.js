@@ -41,6 +41,12 @@ module.exports = [
         fetchLiveDolarRates: 'readonly',
         loadDemoCatalog: 'readonly',
         resetCatalog: 'readonly',
+        DEMO_CATALOG: 'readonly',
+        AppStore: 'readonly',
+        showConfirm: 'readonly',
+        toastUndo: 'readonly',
+        resolveConfirm: 'readonly',
+        closeConfirmModal: 'readonly',
         // Shared state (app.js module-level)
         catalog: 'writable',
         selection: 'writable',

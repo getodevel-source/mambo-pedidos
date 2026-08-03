@@ -7,6 +7,34 @@ let selection = {};
 let currentPedido = null;
 let dragCount = 0;
 
+// ============================================
+//  AppStore - Mínimo store reactivo (pub/sub sobre el estado de la app).
+//  Los mutadores envuelven sus cambios con AppStore.commit() para que la UI
+//  se sincronice sola (badges, hint guiado). Adopción incremental.
+// ============================================
+const AppStore = {
+  _listeners: [],
+  subscribe(fn) {
+    this._listeners.push(fn);
+    return () => { this._listeners = this._listeners.filter(l => l !== fn); };
+  },
+  commit(mutator) {
+    mutator();
+    this.notify();
+  },
+  notify() {
+    this._listeners.slice().forEach(fn => {
+      try { fn(); } catch (e) { console.error('AppStore listener error:', e); }
+    });
+  }
+};
+
+// Sincronización reactiva de la UI tras cada commit.
+AppStore.subscribe(() => {
+  if (typeof updateBadges === 'function') updateBadges();
+  if (typeof CatalogView !== 'undefined' && CatalogView.refreshNextStepHint) CatalogView.refreshNextStepHint();
+});
+
 // Escape Helpers
 function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function escJs(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
@@ -48,6 +76,7 @@ async function updateBadges() {
 // showCatalogContent, populateCatalogFilters, prevPage, nextPage, adjustQty,
 // setCatChip → src/js/ui/catalogView.js
 
+/* exported syncMarkup */
 function syncMarkup(val, origin) {
   const numInput = document.getElementById('cMarkup');
   const rangeInput = document.getElementById('cMarkupRange');
@@ -64,10 +93,12 @@ function syncMarkup(val, origin) {
 
 // Brand Manager State (pendingPreviewItems → src/js/ui/importFlow.js)
 // pendingPreviewItems → src/js/ui/importFlow.js
+/* exported customBrandsList */
 let customBrandsList = [];
 
 // openBrandManagerModal, closeBrandManagerModal, addCustomBrand, deleteCustomBrand → src/js/ui/modals.js
 
+/* exported renderBrandList */
 function renderBrandList() {
   const cont = document.getElementById('brandListContainer');
   if (!cont) return;
@@ -79,7 +110,7 @@ function renderBrandList() {
   customBrandsList.forEach((b, i) => {
     html += `<div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 6px 10px; border-radius: 6px; font-size: 12px;">`;
     html += `<div><strong style="color: var(--primary);">${esc(b.name)}</strong> <span style="color: var(--text-muted); font-size: 11px;">(Patrón: "${esc(b.pattern)}")</span></div>`;
-    html += `<button class="btn btn-sm" onclick="deleteCustomBrand(${i})" style="color: var(--red); padding: 2px 6px;">🗑</button>`;
+    html += `<button class="btn btn-sm" onclick="deleteCustomBrand(${i})" style="color: var(--red); padding: 2px 6px;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>`;
     html += `</div>`;
   });
   cont.innerHTML = html;
@@ -91,7 +122,8 @@ function renderBrandList() {
 // removePreviewItem, closeImportPreviewModal, confirmImportPreview → src/js/ui/importFlow.js
 
 // Pedido UI
-function validarYOarmarPedido() {
+/* exported validarYOarmarPedido */
+async function validarYOarmarPedido() {
   if (!Object.keys(selection).length) {
     toast('Seleccioná al menos un producto', 'error');
     return;
@@ -111,9 +143,9 @@ function validarYOarmarPedido() {
     return;
   }
   if (validation.warnings.length) {
-    if (!confirm('Hay ' + validation.warnings.length + ' advertencias. ¿Continuar?\n\n' + validation.warnings.map(w => '• ' + w.message).join('\n'))) {
-      return;
-    }
+    const list = validation.warnings.map(w => '• ' + esc(w.message)).join('<br>');
+    const ok = await showConfirm({ title: validation.warnings.length + ' advertencias', message: list, confirmText: 'Continuar de todos modos' });
+    if (!ok) return;
   }
   armarPedido();
   hideValidationPanel();
@@ -129,7 +161,7 @@ function armarPedido() {
   currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');
   renderPedido();
-  toast('📦 Pedido armado: ' + items.length + ' SKUs', 'success');
+  toast('Pedido armado: ' + items.length + ' SKUs', 'success');
 }
 
 function getCostInputs() {
@@ -191,6 +223,54 @@ function renderPedido() {
   recalc();
 }
 
+// Adaptative fiscal form: show only the fields the current regime/freight mode actually uses.
+// Safe because Calculator already ignores the inactive mode's fields (courierCost vs despCost, peso vs porcentaje).
+function applyLogisticsVisibility() {
+  const getRadio = (name) => {
+    const el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : null;
+  };
+  const logModo = getRadio('rLogisticaModo') || 'courier';
+  const fleteModo = getRadio('rFleteModo') || 'porcentaje';
+  const setVisible = (inputId, visible) => {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const wrap = el.closest('.cost');
+    if (wrap) wrap.style.display = visible ? '' : 'none';
+  };
+  setVisible('cCourier', logModo === 'courier');
+  setVisible('cDesp', logModo === 'importador');
+  setVisible('cFlete', fleteModo === 'porcentaje');
+  setVisible('cPesoKg', fleteModo === 'peso');
+  setVisible('cCostoPorKg', fleteModo === 'peso');
+}
+
+// Preset de costos: aplica los valores recomendados para el régimen seleccionado.
+/* exported applyFiscalPreset */
+function applyFiscalPreset() {
+  const preset = {
+    cMarkup: 2.5,
+    cTasaCambio: 1400,
+    cFlete: 15,
+    cPesoKg: 0,
+    cCostoPorKg: 12,
+    cSeguro: 2,
+    cDerechos: 16,
+    cTasa: 3,
+    cPerc: 6,
+    cIvaPct: 21,
+    cDesp: 500,
+    cCourier: 8,
+  };
+  for (const [id, val] of Object.entries(preset)) {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  }
+  if (typeof syncMarkup === 'function') syncMarkup(preset.cMarkup, 'num');
+  recalc();
+  toast('Preset aplicado: valores recomendados para el régimen actual', 'success');
+}
+
 function recalc() {
   if (!currentPedido) return;
   const costInputs = getCostInputs();
@@ -221,17 +301,17 @@ function recalc() {
   if (healthBadge) {
     const mPct = t.margenPct || 0;
     if (mPct >= 40) {
-      healthBadge.textContent = '🟢 Excelente Rentabilidad (>40%)';
+      healthBadge.textContent = 'Excelente Rentabilidad (>40%)';
       healthBadge.style.background = 'rgba(16,185,129,0.15)';
       healthBadge.style.borderColor = 'rgba(16,185,129,0.4)';
       healthBadge.style.color = '#34d399';
     } else if (mPct >= 20) {
-      healthBadge.textContent = '🟡 Margen Saludable (20-40%)';
+      healthBadge.textContent = 'Margen Saludable (20-40%)';
       healthBadge.style.background = 'rgba(234,179,8,0.15)';
       healthBadge.style.borderColor = 'rgba(234,179,8,0.4)';
       healthBadge.style.color = '#fde047';
     } else {
-      healthBadge.textContent = '🔴 Margen Ajustado (<20%)';
+      healthBadge.textContent = 'Margen Ajustado (<20%)';
       healthBadge.style.background = 'rgba(239,68,68,0.15)';
       healthBadge.style.borderColor = 'rgba(239,68,68,0.4)';
       healthBadge.style.color = '#f87171';
@@ -247,21 +327,18 @@ function recalc() {
   if (warnCont) {
     let warnHtml = '';
     if (res.cautions && res.cautions.length) {
-      warnHtml += `<div style="background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #a5b4fc;">${res.cautions.join(' · ')}</div>`;
+      warnHtml += `<div class="alert-banner info">${res.cautions.join(' · ')}</div>`;
     }
     if (res.warnings && res.warnings.length) {
       res.warnings.forEach(w => {
-        const bg = w.type === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)';
-        const border = w.type === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(234,179,8,0.4)';
-        const color = w.type === 'danger' ? '#f87171' : '#fde047';
-        warnHtml += `<div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; font-size: 13px; color: ${color};">
-          <strong>${esc(w.title)}:</strong> ${esc(w.message)}
-        </div>`;
+        const cls = w.type === 'danger' ? 'danger' : 'warning';
+        warnHtml += `<div class="alert-banner ${cls}"><strong>${esc(w.title)}:</strong> ${esc(w.message)}</div>`;
       });
     }
     warnCont.innerHTML = warnHtml;
   }
 
+  applyLogisticsVisibility();
   renderPedidoTable();
 }
 
@@ -285,7 +362,7 @@ async function fetchLiveDolarRates(userInitiated = false) {
   if (!userInitiated && liveDolarData && (Date.now() - _dolarLastFetch) < DOLAR_CACHE_MS) {
     return;
   }
-  if (userInitiated) toast('🔄 Consultando DólarAPI en vivo...', 'info');
+  if (userInitiated) toast('Consultando DólarAPI en vivo...', 'info');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
@@ -299,12 +376,12 @@ async function fetchLiveDolarRates(userInitiated = false) {
     _dolarLastFetch = Date.now();
 
     renderDolarBadges();
-    if (userInitiated) toast('✅ Cotizaciones Dólar actualizadas', 'success');
+    if (userInitiated) toast('Cotizaciones Dólar actualizadas', 'success');
   } catch (err) {
     console.warn('Error al obtener cotizaciones de dólar:', err);
     if (userInitiated) {
       const stale = liveDolarData ? ` (última: ${new Date(_dolarLastFetch).toLocaleTimeString('es-AR')})` : '';
-      toast(`⚠️ No se pudo conectar con la API de Dólar${stale}`, 'error');
+      toast(`No se pudo conectar con la API de Dólar${stale}`, 'error');
     }
   } finally {
     clearTimeout(timeoutId);
@@ -338,6 +415,7 @@ function renderDolarBadges() {
   badgeList.innerHTML = html;
 }
 
+/* exported applyDolarRate */
 function applyDolarRate(key) {
   if (!liveDolarData || !liveDolarData[key]) {
     fetchLiveDolarRates(true);
@@ -354,6 +432,7 @@ function applyDolarRate(key) {
   }
 }
 
+/* exported syncDescuentoNegociado */
 function syncDescuentoNegociado(val) {
   const pct = parseFloat(val) || 0;
   const label = document.getElementById('cDescuentoNegociadoVal');
@@ -373,10 +452,10 @@ function syncDescuentoNegociado(val) {
     const badge = document.getElementById('negotiationSavingsBadge');
     if (badge) {
       if (pct > 0) {
-        badge.innerHTML = `🤝 Ahorro por Negociación: <strong>-$${Math.round(diffSavings)} USD</strong> (${pct}% off list)`;
+        badge.innerHTML = `Ahorro por Negociación: <strong>-$${Math.round(diffSavings)} USD</strong> (${pct}% off list)`;
         badge.style.background = 'rgba(16,185,129,0.2)';
       } else {
-        badge.textContent = '🤝 Sin descuento negociado';
+        badge.textContent = 'Sin descuento negociado';
         badge.style.background = 'rgba(16,185,129,0.15)';
       }
     }
@@ -384,6 +463,7 @@ function syncDescuentoNegociado(val) {
   recalc();
 }
 
+/* exported toggleFullscreen */
 function toggleFullscreen() {
   if (document.fullscreenElement) {
     if (document.exitFullscreen) {
@@ -394,6 +474,92 @@ function toggleFullscreen() {
       document.documentElement.requestFullscreen().catch(() => {});
     }
   }
+}
+
+// ============================================
+//  Premium UI: dropdowns, collapsibles, guided hints
+// ============================================
+/* exported toggleDropdown */
+function toggleDropdown(btn) {
+  const dd = btn.closest('.dropdown');
+  if (!dd) return;
+  const wasOpen = dd.classList.contains('open');
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) dd.classList.add('open');
+}
+
+/* exported toggleAdvancedCosts */
+function toggleAdvancedCosts(btn) {
+  const panel = document.getElementById('advancedCostsPanel');
+  if (!panel) return;
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!expanded));
+  panel.style.display = expanded ? 'none' : 'block';
+}
+
+/* exported dismissNextStepHint */
+function dismissNextStepHint() {
+  if (typeof CatalogView !== 'undefined') CatalogView._nextStepDismissed = true;
+  const h = document.getElementById('catalogNextStepHint');
+  if (h) h.style.display = 'none';
+}
+
+// Close dropdowns on outside click or when an item is selected
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.dropdown-item') || !e.target.closest('.dropdown')) {
+    document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+// ============================================
+//  Confirm modal (promise-based) + undo toast
+// ============================================
+const CONFIRM_DANGER_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+let _confirmResolve = null;
+
+function showConfirm(opts = {}) {
+  return new Promise((resolve) => {
+    _confirmResolve = resolve;
+    const titleEl = document.getElementById('confirmTitle');
+    const msgEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOkBtn');
+    const iconEl = document.getElementById('confirmIcon');
+    if (titleEl) titleEl.textContent = opts.title || 'Confirmar';
+    if (msgEl) msgEl.innerHTML = opts.message || '';
+    if (iconEl) { iconEl.innerHTML = opts.danger ? CONFIRM_DANGER_ICON : ''; }
+    if (okBtn) {
+      okBtn.textContent = opts.confirmText || 'Confirmar';
+      okBtn.className = 'btn btn-sm ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+    }
+    const m = document.getElementById('confirmModal');
+    if (m) m.style.display = 'flex';
+  });
+}
+
+function resolveConfirm(value) {
+  const m = document.getElementById('confirmModal');
+  if (m) m.style.display = 'none';
+  if (_confirmResolve) { const r = _confirmResolve; _confirmResolve = null; r(value); }
+}
+
+function closeConfirmModal() { resolveConfirm(false); }
+
+/* exported toastUndo */
+function toastUndo(msg, onUndo) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = msg;
+  const btn = document.createElement('button');
+  btn.className = 'toast-undo';
+  btn.textContent = 'Deshacer';
+  btn.onclick = () => { try { onUndo(); } catch (err) { console.error('Undo falló:', err); } t.classList.remove('show'); };
+  t.appendChild(span);
+  t.appendChild(btn);
+  t.className = 'toast show info';
+  clearTimeout(t._undoTimer);
+  t._undoTimer = setTimeout(() => t.classList.remove('show'), 6000);
 }
 
 function updateProductImage(sku, dataUrl) {
@@ -409,7 +575,7 @@ function updateProductImage(sku, dataUrl) {
     renderCatalog();
     if (typeof renderPedidoTable === 'function') renderPedidoTable();
     scheduleCatalogSave();
-    toast('📷 Foto del producto actualizada', 'success');
+    toast('Foto del producto actualizada', 'success');
   }
 }
 
@@ -446,12 +612,13 @@ function renderPedidoTable() {
     html += '<td class="num">$' + r.subFob.toFixed(0) + '</td>';
     html += '<td class="num" style="color: var(--accent);">$' + r.pvp.toLocaleString() + '</td>';
     html += '<td class="num" style="color: var(--green);">' + r.margenPct + '%</td>';
-    html += '<td class="action"><button class="btn btn-sm" onclick="removePedItem(' + i + ')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);">🗑</button></td>';
+    html += '<td class="action"><button class="btn btn-sm" onclick="removePedItem(' + i + ')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button></td>';
     html += '</tr>';
   });
   document.getElementById('pedidoBody').innerHTML = html;
 }
 
+/* exported removePedItem */
 function removePedItem(idx) {
   currentPedido.items.splice(idx, 1);
   if (!currentPedido.items.length) {
@@ -477,14 +644,14 @@ function showValidationPanel(errors, warnings) {
     document.body.appendChild(panel);
   }
   let html = '<span class="close" onclick="hideValidationPanel()">✕</span>';
-  html += '<h4>❌ ' + errors.length + ' errores encontrados</h4>';
+  html += '<h4>' + errors.length + ' errores encontrados</h4>';
   html += '<ul>';
   errors.forEach(e => {
     html += '<li><strong style="color: var(--red);">' + esc(e.field) + ':</strong> ' + esc(e.message) + '</li>';
   });
   html += '</ul>';
   if (warnings.length) {
-    html += '<h4 style="color: var(--yellow); margin-top: 12px;">⚠️ ' + warnings.length + ' advertencias</h4>';
+    html += '<h4 style="color: var(--yellow); margin-top: 12px;">' + warnings.length + ' advertencias</h4>';
     html += '<ul>';
     warnings.forEach(w => {
       html += '<li><strong style="color: var(--yellow);">' + esc(w.field) + ':</strong> ' + esc(w.message) + '</li>';
@@ -500,51 +667,15 @@ function hideValidationPanel() {
   if (p) p.style.display = 'none';
 }
 
+/* exported loadDemoCatalog */
 function loadDemoCatalog() {
-  const demo = [
-    {sku:'TEC-001',cat:'TECLADO',marca:'AULA',modelo:'F75 Reaper Switch',variante:'Glacier Blue',fob:31.75},
-    {sku:'TEC-002',cat:'TECLADO',marca:'AULA',modelo:'F75 Reaper Switch',variante:'Cedar Green',fob:31.75},
-    {sku:'TEC-003',cat:'TECLADO',marca:'AULA',modelo:'F75 Reaper Switch',variante:'Sea Salt Blue',fob:31.75},
-    {sku:'TEC-004',cat:'TECLADO',marca:'AULA',modelo:'F75MAX',variante:'Thunder Black',fob:39.48},
-    {sku:'TEC-005',cat:'TECLADO',marca:'AULA',modelo:'F75MAX',variante:'Glacier Blue',fob:39.48},
-    {sku:'TEC-006',cat:'TECLADO',marca:'AULA',modelo:'F99',variante:'Light Grey',fob:36.04},
-    {sku:'TEC-007',cat:'TECLADO',marca:'MCHOSE',modelo:'ACE 68 V2 HE',variante:'Peachy Pink',fob:37.75},
-    {sku:'TEC-008',cat:'TECLADO',marca:'MCHOSE',modelo:'ACE 68 V2 HE',variante:'Berry Red',fob:37.75},
-    {sku:'TEC-009',cat:'TECLADO',marca:'MCHOSE',modelo:'Mix 87 8KHz',variante:'Black',fob:40.39},
-    {sku:'TEC-010',cat:'TECLADO',marca:'Madlions',modelo:'MAD 60 V2 White Horse',variante:'Matte White',fob:25.57},
-    {sku:'TEC-011',cat:'TECLADO',marca:'Madlions',modelo:'MAD 60 V2 White Horse',variante:'Matte Black',fob:25.57},
-    {sku:'TEC-012',cat:'TECLADO',marca:'Madlions',modelo:'TITAN 68 TURBO',variante:'Black',fob:42.74},
-    {sku:'TEC-013',cat:'TECLADO',marca:'ATK',modelo:'Z87',variante:'Caribbean Blue',fob:32.80},
-    {sku:'TEC-014',cat:'TECLADO',marca:'ATK',modelo:'Z87 PRO',variante:'Foggy Black',fob:46.00},
-    {sku:'MOU-001',cat:'MOUSE',marca:'ATK',modelo:'X1 Ultimate 8KHz',variante:'White',fob:60.70},
-    {sku:'MOU-002',cat:'MOUSE',marca:'ATK',modelo:'X1 Ultimate 8KHz',variante:'Black',fob:60.70},
-    {sku:'MOU-003',cat:'MOUSE',marca:'ATK',modelo:'A9 Ultra PAW3950',variante:'White',fob:51.70},
-    {sku:'MOU-004',cat:'MOUSE',marca:'ATK',modelo:'A9 Ultra PAW3950',variante:'Black',fob:51.70},
-    {sku:'MOU-005',cat:'MOUSE',marca:'VXE',modelo:'R1 Pro Max 8KHz',variante:'Sunset Orange',fob:32.80},
-    {sku:'MOU-006',cat:'MOUSE',marca:'VXE',modelo:'R1 Pro Max 8KHz',variante:'Lilac Purple',fob:32.80},
-    {sku:'MOU-007',cat:'MOUSE',marca:'Attack Shark',modelo:'R5 Ultra',variante:'Black',fob:45.97},
-    {sku:'MOU-008',cat:'MOUSE',marca:'Attack Shark',modelo:'R5 Ultra',variante:'White',fob:45.97},
-    {sku:'MOU-009',cat:'MOUSE',marca:'Attack Shark',modelo:'X8 SE Tri-mode',variante:'White',fob:13.37},
-    {sku:'MOU-010',cat:'MOUSE',marca:'Attack Shark',modelo:'X3 PRO 4K',variante:'Black',fob:29.25},
-    {sku:'PAD-001',cat:'MOUSEPAD',marca:'ATK',modelo:'Sky Large 900x400',variante:'Black',fob:13.10},
-    {sku:'PAD-002',cat:'MOUSEPAD',marca:'ATK',modelo:'Sky Large 900x400',variante:'Orange',fob:13.10},
-    {sku:'PAD-003',cat:'MOUSEPAD',marca:'ATK',modelo:'99G Carbon eSport',variante:'Matcha Green',fob:13.10},
-    {sku:'PAD-004',cat:'MOUSEPAD',marca:'ATK',modelo:'Anime Mouse Pad Reverie',variante:'Black-White',fob:8.10},
-    {sku:'PAD-005',cat:'MOUSEPAD',marca:'ATK',modelo:'Anime Mouse Pad NANA',variante:'Anime',fob:8.10},
-    {sku:'PAD-006',cat:'MOUSEPAD XL',marca:'ATK',modelo:'99G Air PRO XL',variante:'Green',fob:32.80},
-    {sku:'PAD-007',cat:'MOUSEPAD',marca:'ATK',modelo:'99G Air Carbon',variante:'Green',fob:6.70},
-    {sku:'HEA-001',cat:'HEADSET',marca:'MCHOSE',modelo:'V9 Turbo+ Magnetic',variante:'Black Gold',fob:60.58},
-    {sku:'HEA-002',cat:'HEADSET',marca:'MCHOSE',modelo:'V9 Turbo+ Magnetic',variante:'White Gold',fob:60.58},
-    {sku:'HEA-003',cat:'HEADSET',marca:'MCHOSE',modelo:'X9 53mm 7.1',variante:'White',fob:40.39},
-    {sku:'HEA-004',cat:'HEADSET',marca:'ATK',modelo:'Neptune N9 eSports',variante:'White',fob:24.50},
-    {sku:'HEA-005',cat:'HEADSET',marca:'Attack Shark',modelo:'L50 PRO Wireless',variante:'Black',fob:23.17},
-  ];
+  const demo = DEMO_CATALOG;
   catalog = demo.map(d => ({...d}));
   selection = {};
   scheduleCatalogSave();
   showCatalogContent();
   renderCatalog();
-  toast('🎮 ' + catalog.length + ' productos demo cargados', 'success');
+  toast(catalog.length + ' productos demo cargados', 'success');
 }
 
 // Setup Event Listeners
@@ -573,7 +704,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     catalog = saved.items;
     showCatalogContent();
     renderCatalog();
-    toast('📚 ' + catalog.length + ' productos restaurados', 'info');
+    toast(catalog.length + ' productos restaurados', 'info');
   }
 
   // Inputs de Archivos
@@ -598,9 +729,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentPedido = { name: 'Pedido importado ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
       switchView('pedido');
       renderPedido();
-      toast('📦 Pedido importado: ' + items.length + ' SKUs', 'success');
+      toast('Pedido importado: ' + items.length + ' SKUs', 'success');
     } catch(err) {
-      toast('❌ Error importando pedido: ' + err.message, 'error');
+      toast('Error importando pedido: ' + err.message, 'error');
     }
   });
 
@@ -640,6 +771,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Global Escape Key Listener for Modals
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+        document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+        closeConfirmModal();
     if (typeof closeImportPreviewModal === 'function') closeImportPreviewModal();
     if (typeof closeBrandManagerModal === 'function') closeBrandManagerModal();
     if (typeof closeImageZoomModal === 'function') closeImageZoomModal();

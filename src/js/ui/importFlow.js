@@ -29,7 +29,7 @@ const ImportFlow = {
         const progressCb = (current, total) => {
           const filePct = (current / total) * stepPct;
           const currentPct = Math.round(basePct + filePct);
-          showProgress(currentPct, `🤖 Procesando ${f.name}`, `Página ${current} de ${total} · ${currentPct}%`);
+          showProgress(currentPct, `Procesando ${f.name}`, `Página ${current} de ${total} · ${currentPct}%`);
         };
 
         // PDFs → Parser Espacial (Cell Grid + LLM por celda)
@@ -41,7 +41,7 @@ const ImportFlow = {
         const incoming = res.products || [];
 
         for (const rawItem of incoming) {
-          let item = (typeof TextSanitizer !== 'undefined')
+          const item = (typeof TextSanitizer !== 'undefined')
             ? TextSanitizer.sanitizeItem(rawItem, customBrandsList)
             : rawItem;
 
@@ -53,11 +53,11 @@ const ImportFlow = {
         }
       } catch (err) {
         console.error('Error procesando ' + f.name, err);
-        toast('❌ ' + f.name + ': ' + err.message, 'error');
+        toast(f.name + ': ' + err.message, 'error');
       }
     }
 
-    showProgress(100, '🔍 Validando calidad de datos...', 'Motor de validación cruzada...');
+    showProgress(100, 'Validando calidad de datos...', 'Motor de validación cruzada...');
 
     if (ImportFlow.pendingPreviewItems.length > 0) {
       if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(ImportFlow.pendingPreviewItems, catalog);
@@ -74,13 +74,13 @@ const ImportFlow = {
 
       // RED → rechazados (no se importan, se muestran separados)
       if (validation.rejected.length > 0) {
-        toast(`🔴 ${validation.rejected.length} productos rechazados por validación crítica`, 'error');
+        toast(`${validation.rejected.length} productos rechazados por validación crítica`, 'error');
       }
 
       // Actualizar el preview con el resultado de la validación
       ImportFlow.renderImportPreviewModal(validation);
     } else {
-      toast('⚠️ No se detectaron productos válidos en los archivos', 'warning');
+      toast('No se detectaron productos válidos en los archivos', 'warning');
     }
     setTimeout(hideProgress, 400);
   },
@@ -139,7 +139,7 @@ const ImportFlow = {
     // Actualizar botón de confirmar
     const selCount = ImportFlow.pendingPreviewItems.filter(i => i._selected).length;
     const confirmBtn = document.getElementById('pvConfirmBtn');
-    if (confirmBtn) confirmBtn.textContent = `✅ Importar ${selCount} seleccionados`;
+    if (confirmBtn) confirmBtn.textContent = `Importar ${selCount} seleccionados`;
 
     const CATS = ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'];
 
@@ -152,7 +152,7 @@ const ImportFlow = {
       const placeholder = `<div class="pv-card-img pv-card-img-empty" style="${hasCatalogImage(item.img) ? 'display:none' : ''}">-</div>`;
 
       const reasonBanner = reason
-        ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${status === 'RED' ? '⛔' : status === 'YELLOW' ? '⚠️' : '✅'} ${esc(reason)}</div>`
+        ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${esc(reason)}</div>`
         : '';
 
       return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
@@ -216,7 +216,7 @@ const ImportFlow = {
   updateConfirmCount() {
     const selCount = ImportFlow.pendingPreviewItems.filter(i => i._selected).length;
     const confirmBtn = document.getElementById('pvConfirmBtn');
-    if (confirmBtn) confirmBtn.textContent = `✅ Importar ${selCount} seleccionados`;
+    if (confirmBtn) confirmBtn.textContent = `Importar ${selCount} seleccionados`;
   },
 
   updatePreviewItem(idx, field, value) {
@@ -259,7 +259,7 @@ const ImportFlow = {
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
     ImportFlow.renderImportPreviewModal(validation);
-    toast(`🛠️ Marca "${brand}" aplicada a ${count} ítems`, 'success');
+    toast(`Marca "${brand}" aplicada a ${count} ítems`, 'success');
   },
 
   applyBatchCat() {
@@ -276,12 +276,12 @@ const ImportFlow = {
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
     ImportFlow.renderImportPreviewModal(validation);
-    toast(`🛠️ Categoría "${cat}" aplicada a ${count} ítems`, 'success');
+    toast(`Categoría "${cat}" aplicada a ${count} ítems`, 'success');
   },
 
   async autoCorrectPreviewWithAI() {
     if (!ImportFlow.pendingPreviewItems || !ImportFlow.pendingPreviewItems.length) return;
-    toast('🧹 Sanitizando productos...', 'info');
+    toast('Sanitizando productos...', 'info');
     try {
       if (typeof TextSanitizer !== 'undefined') {
         // Use shared fix logic (single source of truth)
@@ -291,10 +291,10 @@ const ImportFlow = {
       validation.rejected.forEach(p => { p._selected = false; });
       window._previewValidation = validation;
       ImportFlow.renderImportPreviewModal(validation);
-      toast('✨ Catálogo sanitizado correctamente', 'success');
+      toast('Catálogo sanitizado correctamente', 'success');
     } catch (err) {
       console.error('Error en sanitización:', err);
-      toast('❌ Error durante la sanitización del catálogo', 'error');
+      toast('Error durante la sanitización del catálogo', 'error');
     }
   },
 
@@ -314,7 +314,7 @@ const ImportFlow = {
   },
 
   async confirmImportPreview() {
-    const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+    const _validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
     if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(ImportFlow.pendingPreviewItems, catalog);
     const selectedItems = ImportFlow.pendingPreviewItems.filter(i => i._selected && i.status !== 'RED' && i.importable !== false);
     if (!selectedItems.length) {
@@ -377,7 +377,7 @@ const ImportFlow = {
     renderCatalog();
     ImportFlow.closeImportPreviewModal();
 
-    let msg = `✅ Importación completada: ${addedCount} nuevos`;
+    let msg = `Importación completada: ${addedCount} nuevos`;
     if (updatedCount > 0) msg += `, ${updatedCount} precios actualizados`;
     if (skippedCount > 0) msg += ` (${skippedCount} sin cambios)`;
 

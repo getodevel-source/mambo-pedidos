@@ -10,6 +10,7 @@ const CatalogView = {
   activeCategoryChip: '',
   catalogViewMode: 'table',
   _searchTimer: null,
+  _nextStepDismissed: false,
 
   /**
    * Debounced catalog render for search/filter inputs.
@@ -87,11 +88,20 @@ const CatalogView = {
     }
   },
 
+  refreshNextStepHint() {
+    const nextStepHint = document.getElementById('catalogNextStepHint');
+    if (!nextStepHint) return;
+    const selQty = Object.values(selection).reduce((sum, v) => sum + v, 0);
+    nextStepHint.style.display = (selQty === 0 && !CatalogView._nextStepDismissed) ? 'flex' : 'none';
+  },
+
   adjustQty(sku, delta) {
     const current = selection[sku] || 0;
     const next = Math.max(0, current + delta);
-    if (next > 0) selection[sku] = next;
-    else delete selection[sku];
+    AppStore.commit(() => {
+      if (next > 0) selection[sku] = next;
+      else delete selection[sku];
+    });
     CatalogView.renderCatalog();
   },
 
@@ -196,6 +206,9 @@ const CatalogView = {
       }
     }
 
+    // Guided next-step hint: visible while nothing is selected
+    CatalogView.refreshNextStepHint();
+
     const DEFAULT_SVG_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4" fill="#12131C"/><circle cx="8.5" cy="8.5" r="1.5" fill="#334155"/><polyline points="21 15 16 10 5 21" stroke="#334155"/></svg>');
     const qualityBadge = r => {
       const status = ['GREEN', 'YELLOW', 'RED'].includes(r.status) ? r.status : 'YELLOW';
@@ -227,7 +240,7 @@ const CatalogView = {
       html += '<button class="btn btn-sm" onclick="adjustQty(\'' + skuJs + '\', 1)" style="padding: 1px 6px; font-weight: 700;">+</button>';
       html += '</div>';
       html += '</td>';
-      html += '<td class="action"><button class="btn btn-sm" onclick="removeItem(\'' + skuJs + '\')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);">🗑</button></td>';
+      html += '<td class="action"><button class="btn btn-sm" onclick="removeItem(\'' + skuJs + '\')" style="background: transparent; border: 1px solid var(--border); padding: 2px 6px; color: var(--red);"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button></td>';
       html += '</tr>';
     });
     const gridEl = document.getElementById('catalogGrid');
@@ -269,33 +282,54 @@ const CatalogView = {
   },
 
   toggleItem(sku, on) {
-    if (on) { if (!selection[sku]) selection[sku] = 1; }
-    else { delete selection[sku]; }
+    AppStore.commit(() => {
+      if (on) { if (!selection[sku]) selection[sku] = 1; }
+      else { delete selection[sku]; }
+    });
     scheduleCatalogSave();
     CatalogView.renderCatalog();
   },
 
   setQty(sku, val) {
     const qty = parseInt(val) || 0;
-    if (qty > 0) selection[sku] = qty;
-    else delete selection[sku];
+    AppStore.commit(() => {
+      if (qty > 0) selection[sku] = qty;
+      else delete selection[sku];
+    });
     scheduleCatalogSave();
     CatalogView.renderCatalog();
   },
 
   toggleSelectAll(on) {
-    if (on) catalog.forEach(r => selection[r.sku] = 1);
-    else selection = {};
+    AppStore.commit(() => {
+      if (on) catalog.forEach(r => selection[r.sku] = 1);
+      else selection = {};
+    });
     scheduleCatalogSave();
     CatalogView.renderCatalog();
   },
 
-  removeItem(sku) {
-    if (!confirm('¿Eliminar ' + sku + '?')) return;
-    catalog = catalog.filter(r => r.sku !== sku);
-    delete selection[sku];
+  async removeItem(sku) {
+    const item = catalog.find(r => r.sku === sku);
+    if (!item) return;
+    const ok = await showConfirm({ title: 'Eliminar producto', message: '¿Eliminar <strong>' + esc(sku) + '</strong> del catálogo?', confirmText: 'Eliminar', danger: true });
+    if (!ok) return;
+    const idx = catalog.indexOf(item);
+    const qty = selection[sku] || 0;
+    AppStore.commit(() => {
+      catalog = catalog.filter(r => r.sku !== sku);
+      delete selection[sku];
+    });
     scheduleCatalogSave();
     CatalogView.renderCatalog();
+    toastUndo('Producto ' + sku + ' eliminado', () => {
+      AppStore.commit(() => {
+        catalog.splice(idx, 0, item);
+        if (qty > 0) selection[sku] = qty;
+      });
+      scheduleCatalogSave();
+      CatalogView.renderCatalog();
+    });
   },
 
   addCatalogItem() {
@@ -306,19 +340,32 @@ const CatalogView = {
     scheduleCatalogSave();
     CatalogView.showCatalogContent();
     CatalogView.renderCatalog();
-    toast('➕ Producto agregado', 'success');
+    toast('Producto agregado', 'success');
   },
 
-  resetCatalog() {
-    if (!confirm('¿Borrar TODO el catálogo? Esta acción no se puede deshacer.')) return;
-    catalog = [];
-    selection = {};
+  async resetCatalog() {
+    const ok = await showConfirm({ title: 'Limpiar catálogo', message: '¿Borrar <strong>todo</strong> el catálogo? Podés deshacerlo unos segundos después.', confirmText: 'Borrar todo', danger: true });
+    if (!ok) return;
+    const prevCatalog = catalog.slice();
+    const prevSelection = Object.assign({}, selection);
+    AppStore.commit(() => {
+      catalog = [];
+      selection = {};
+    });
     AppStorage.removeItem(AppStorage.KEYS.CATALOG);
     document.getElementById('catalogEmpty').style.display = 'block';
     document.getElementById('catalogContent').style.display = 'none';
     document.getElementById('catalogActions').style.display = 'none';
     updateBadges();
-    toast('Catálogo reseteado', 'success');
+    toastUndo('Catálogo vaciado', () => {
+      AppStore.commit(() => {
+        catalog = prevCatalog;
+        selection = prevSelection;
+      });
+      scheduleCatalogSave();
+      CatalogView.showCatalogContent();
+      CatalogView.renderCatalog();
+    });
   },
 
   updateField(oldSku, field, value) {
