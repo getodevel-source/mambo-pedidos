@@ -175,6 +175,9 @@
           <button class="btn btn-primary btn-lg" onclick="document.getElementById('fileInputPdf').click()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> Cargar PDFs
           </button>
+          <button class="btn btn-secondary btn-lg" onclick="document.getElementById('fileInputCsv').click()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg> Cargar Excel/CSV
+          </button>
           <button class="btn btn-secondary btn-lg" onclick="document.getElementById('folderInput').click()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> Carpeta completa
           </button>
@@ -320,6 +323,11 @@
       <div>
         <div class="page-title">Pedido actual</div>
         <div class="page-sub" id="pedidoSubtitle">Armá un pedido desde el catálogo</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('fileInputPedido').click()" title="Importar un pedido existente desde Excel o CSV">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> Importar pedido
+        </button>
       </div>
     </div>
 
@@ -887,55 +895,60 @@
     <script src="js/demoCatalog.js"></script>
 <script src="js/app.js"></script>
 <script src="js/updater.js"></script>
-<script src="js/tests.js"></script>
+<!-- tests.js se ejecuta solo desde el harness de node (npm run test), no se carga en producción -->
 
 <script>
   /* ============================================================
      PREMIUM UI MICRO-ANIMATIONS — Mambo Pedidos v1.8.0
      ============================================================ */
 
-  // Animated number counter for KPI stat values
-  function animateCounter(el, targetRaw) {
-    if (!el) return;
-    const text = String(targetRaw);
-    const hasPrefix = text.startsWith('$');
-    const hasSuffix = text.endsWith('%') || text.endsWith(' u') || text.endsWith(' sku') || text.endsWith(' marcas');
-    const numStr = text.replace(/[^0-9.,]/g, '');
-    const num = parseFloat(numStr.replace(',', '.'));
-    if (isNaN(num) || num === 0) { el.textContent = targetRaw; return; }
-
-    const suffix = hasSuffix ? text.slice(numStr.length) : '';
-    const prefix = hasPrefix ? '$' : '';
-    const duration = 600;
-    const steps = 30;
+  // Animated number counter for KPI stat values.
+  // Recibe el texto final ("$45.50 FOB", "123 u", "3 marcas") y anima solo la parte
+  // numérica manteniendo exactamente el formato de destino (punto decimal, sin miles).
+  function animateCounter(el, num, prefix, suffix, decimals) {
+    const duration = 500;
+    const steps = 24;
     const stepTime = duration / steps;
     let current = 0;
     const increment = num / steps;
-    const isFloat = numStr.includes('.') || numStr.includes(',');
-    const decimals = isFloat ? 2 : 0;
 
-    el.style.animation = 'countUp 0.4s cubic-bezier(0.16,1,0.3,1) both';
-    const interval = setInterval(() => {
+    el.style.animation = 'countUp 0.35s cubic-bezier(0.16,1,0.3,1) both';
+    if (el._counterTimer) clearInterval(el._counterTimer);
+    el._counterTimer = setInterval(() => {
       current = Math.min(current + increment, num);
-      const display = current.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-      el.textContent = `${prefix}${display}${suffix}`;
-      if (current >= num) clearInterval(interval);
+      el.textContent = prefix + current.toFixed(decimals) + suffix;
+      if (current >= num) {
+        clearInterval(el._counterTimer);
+        el._counterTimer = null;
+        el.textContent = prefix + num.toFixed(decimals) + suffix;
+      }
     }, stepTime);
   }
 
-  // Patch stat value updates to run the counter animation
-  const _origSetTextContent = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent')?.set;
-  if (_origSetTextContent) {
-    const statValueEls = new WeakSet();
-    document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('.stat-value').forEach(el => statValueEls.add(el));
-    });
-  }
-
-  // Helper: animate all .stat-value elements when their content changes
+  // Helper: anima un .stat-value cuando su valor numérico cambia.
+  // Si el valor es idéntico al mostrado (p. ej. al tipear en la búsqueda), no re-anima.
   window.updateStatValue = function(id, value) {
     const el = document.getElementById(id);
-    if (el) animateCounter(el, value);
+    if (!el) return;
+    const text = String(value);
+    const m = text.match(/^([^0-9]*)([\d.,]+)(.*)$/);
+    if (!m) { el.textContent = text; return; }
+    const prefix = m[1], numStr = m[2], suffix = m[3];
+
+    // El último separador (',' o '.') es el decimal; los anteriores son miles.
+    let norm;
+    if (numStr.includes(',') && numStr.includes('.')) {
+      norm = numStr.lastIndexOf(',') > numStr.lastIndexOf('.')
+        ? numStr.replace(/\./g, '').replace(',', '.')
+        : numStr.replace(/,/g, '');
+    } else {
+      norm = numStr.replace(',', '.');
+    }
+    const num = parseFloat(norm);
+    if (isNaN(num) || num === 0) { el.textContent = text; return; }
+    if (el.textContent === text) return; // sin cambios → no animar
+    const decimals = (numStr.includes('.') || numStr.includes(',')) ? 2 : 0;
+    animateCounter(el, num, prefix, suffix, decimals);
   };
 
   // Nav ripple effect on click

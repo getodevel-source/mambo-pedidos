@@ -60,6 +60,13 @@ function switchView(name) {
   updateBadges();
 }
 
+let _historialBadgeCache = null;
+let _historialBadgeCachedAt = 0;
+const HISTORIAL_BADGE_TTL = 10 * 1000;
+
+/* exported invalidateHistorialBadge */
+function invalidateHistorialBadge() { _historialBadgeCache = null; }
+
 async function updateBadges() {
   const catBadge = document.getElementById('navBadgeCat');
   const pedBadge = document.getElementById('navBadgePed');
@@ -69,8 +76,17 @@ async function updateBadges() {
   const selQty = Object.values(selection).reduce((s, v) => s + v, 0);
   if (pedBadge) pedBadge.textContent = selQty;
   
-  const historial = await AppStorage.loadHistorial();
-  if (hisBadge) hisBadge.textContent = historial.length;
+  // Evitar I/O de disco (Tauri Store) en cada render: cachear el conteo con TTL
+  if (_historialBadgeCache === null || (Date.now() - _historialBadgeCachedAt) > HISTORIAL_BADGE_TTL) {
+    try {
+      const historial = await AppStorage.loadHistorial();
+      _historialBadgeCache = historial.length;
+      _historialBadgeCachedAt = Date.now();
+    } catch {
+      _historialBadgeCache = _historialBadgeCache || 0;
+    }
+  }
+  if (hisBadge) hisBadge.textContent = _historialBadgeCache;
 }
 
 // showCatalogContent, populateCatalogFilters, prevPage, nextPage, adjustQty,
@@ -357,6 +373,40 @@ let liveDolarData = null;
 let _dolarLastFetch = 0;
 const DOLAR_CACHE_MS = 5 * 60 * 1000;
 
+// ── Persistencia de cotizaciones (modo offline) ──
+function cacheDolarRates() {
+  try {
+    localStorage.setItem('mambo_dolar_cache', JSON.stringify({ data: liveDolarData, ts: Date.now() }));
+  } catch { /* cuota/privacidad: no crítico */ }
+}
+
+function loadCachedDolarRates() {
+  try {
+    const raw = localStorage.getItem('mambo_dolar_cache');
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (cached && cached.data && cached.ts) return cached;
+  } catch { /* cache corrupto: ignorar */ }
+  return null;
+}
+
+function showDolarStaleBadge(ts) {
+  let el = document.getElementById('dolarStaleBadge');
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'dolarStaleBadge';
+    el.style.cssText = 'font-size: 10px; color: var(--yellow); font-weight: 700; margin-left: 10px; white-space: nowrap;';
+    const banner = document.getElementById('topDolarBanner');
+    if (banner) banner.appendChild(el);
+  }
+  el.textContent = '· guardado ' + new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function hideDolarStaleBadge() {
+  const el = document.getElementById('dolarStaleBadge');
+  if (el) el.remove();
+}
+
 async function fetchLiveDolarRates(userInitiated = false) {
   // Cache: skip re-fetch within 5 minutes unless user explicitly requested
   if (!userInitiated && liveDolarData && (Date.now() - _dolarLastFetch) < DOLAR_CACHE_MS) {
@@ -376,9 +426,23 @@ async function fetchLiveDolarRates(userInitiated = false) {
     _dolarLastFetch = Date.now();
 
     renderDolarBadges();
+    cacheDolarRates();
+    hideDolarStaleBadge();
     if (userInitiated) toast('Cotizaciones Dólar actualizadas', 'success');
   } catch (err) {
     console.warn('Error al obtener cotizaciones de dólar:', err);
+    if (!liveDolarData) {
+      // Sin datos en memoria: restaurar la última cotización guardada (modo offline)
+      const cached = loadCachedDolarRates();
+      if (cached) {
+        liveDolarData = cached.data;
+        _dolarLastFetch = cached.ts;
+        renderDolarBadges();
+        showDolarStaleBadge(cached.ts);
+        if (userInitiated) toast('Sin conexión: mostrando cotizaciones guardadas', 'warning');
+        return;
+      }
+    }
     if (userInitiated) {
       const stale = liveDolarData ? ` (última: ${new Date(_dolarLastFetch).toLocaleTimeString('es-AR')})` : '';
       toast(`No se pudo conectar con la API de Dólar${stale}`, 'error');
@@ -702,6 +766,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       selection = saved.sel || {};
     }
     catalog = saved.items;
+    // Restaurar preferencia de vista (tabla/galería) entre sesiones
+    try {
+      const savedMode = localStorage.getItem('mambo_catalog_viewmode');
+      if (savedMode === 'grid' && typeof CatalogView !== 'undefined' && CatalogView.setCatalogViewMode) {
+        CatalogView.setCatalogViewMode('grid');
+      }
+    } catch { /* preferencia opcional */ }
     showCatalogContent();
     renderCatalog();
     toast(catalog.length + ' productos restaurados', 'info');
@@ -768,8 +839,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // showDropOverlay/hideDropOverlay are now in src/js/ui/notifications.js
 
-// Global Escape Key Listener for Modals
+// Global Escape Key Listener for Modals + Atajos de teclado (app desktop)
 window.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod) {
+    const anyModalOpen = Array.from(document.querySelectorAll('.modal-backdrop')).some(m => m.style.display === 'flex');
+    const key = e.key.toLowerCase();
+    if (!anyModalOpen) {
+      if (key === 'f') {
+        const search = document.getElementById('catSearch');
+        if (search) { e.preventDefault(); search.focus(); search.select(); return; }
+      }
+      if (['1', '2', '3'].includes(key)) {
+        e.preventDefault();
+        switchView({ '1': 'catalogo', '2': 'pedido', '3': 'historial' }[key]);
+        return;
+      }
+      if (e.key === 'Enter' && document.getElementById('view-catalogo')?.classList.contains('active')) {
+        e.preventDefault();
+        validarYOarmarPedido();
+        return;
+      }
+    }
+  }
   if (e.key === 'Escape') {
         document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
         closeConfirmModal();

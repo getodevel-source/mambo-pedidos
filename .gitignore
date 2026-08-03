@@ -64,3 +64,8 @@ qwen-code-export-*.json
 # Ground-truth renders (regenerable; ~24MB of PNGs)
 ground-truth/*.png
 ground-truth/crops/
+
+# FASE 2 scratch / debug scripts (table-parser rewrite; no commitear)
+scripts/_dbg_*
+scripts/_splice*
+scripts/_t1.js

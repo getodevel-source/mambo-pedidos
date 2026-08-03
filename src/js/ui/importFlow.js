@@ -161,13 +161,13 @@ const ImportFlow = {
         `<div class="pv-card-media">${imgHtml}${placeholder}</div>` +
         `<div class="pv-card-body">` +
           `<div class="pv-card-brand">${esc(item.marca || 'OTRO')}</div>` +
-        `<input class="pv-card-model" value="${esc(item.modelo)}" onchange="updatePreviewItem(${idx}, 'modelo', this.value)" title="Modelo (clic para editar)">` +
-        `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" onchange="updatePreviewItem(${idx}, 'variante', this.value)">` +
+        `<input class="pv-card-model" value="${esc(item.modelo)}" data-edit-idx="${idx}" data-edit-field="modelo" onchange="updatePreviewItem(${idx}, 'modelo', this.value)" title="Modelo (clic para editar)">` +
+        `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" data-edit-idx="${idx}" data-edit-field="variante" onchange="updatePreviewItem(${idx}, 'variante', this.value)">` +
           `<div class="pv-card-meta">` +
-            `<select class="pv-card-cat" onchange="updatePreviewItem(${idx}, 'cat', this.value)">` +
+            `<select class="pv-card-cat" data-edit-idx="${idx}" data-edit-field="cat" onchange="updatePreviewItem(${idx}, 'cat', this.value)">` +
               CATS.map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
             `</select>` +
-            `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" onchange="updatePreviewItem(${idx}, 'fob', this.value)"></div>` +
+            `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" data-edit-idx="${idx}" data-edit-field="fob" onchange="updatePreviewItem(${idx}, 'fob', this.value)"></div>` +
           `</div>` +
           reasonBanner +
         `</div>` +
@@ -228,7 +228,20 @@ const ImportFlow = {
     const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
+
+    // Preservar scroll y foco: el re-render reconstruye el grid completo
+    const wrap = document.getElementById('pvGridWrap');
+    const prevScroll = wrap ? wrap.scrollTop : 0;
     ImportFlow.renderImportPreviewModal(validation);
+    if (wrap) wrap.scrollTop = prevScroll;
+    const edited = wrap ? wrap.querySelector(`[data-edit-idx="${idx}"][data-edit-field="${field}"]`) : null;
+    if (edited) {
+      edited.focus();
+      if (typeof edited.setSelectionRange === 'function') {
+        const len = edited.value.length;
+        edited.setSelectionRange(len, len);
+      }
+    }
   },
 
   toggleSelectAllPreview(checked) {

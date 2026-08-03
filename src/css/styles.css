@@ -130,6 +130,10 @@
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+@keyframes countUp {
+  0%   { opacity: 0.55; transform: translateY(3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 
 /* ===============================================================
    GLOBAL RESET & ENVIRONMENT

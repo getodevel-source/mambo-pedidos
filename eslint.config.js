@@ -54,6 +54,8 @@ module.exports = [
         customBrandsList: 'writable',
         // App.js functions used across modules
         updateBadges: 'readonly',
+        invalidateHistorialBadge: 'readonly',
+        updateStatValue: 'readonly',
         renderPedido: 'readonly',
         renderPedidoTable: 'readonly',
         getCostInputs: 'readonly',
@@ -127,6 +129,6 @@ module.exports = [
     }
   },
   {
-    ignores: ['node_modules/', 'src/vendor/', 'src-tauri/', 'dist/', 'build/', '.codegraph/', '.atl/']
+    ignores: ['node_modules/', 'src/vendor/', 'src-tauri/', 'dist/', 'build/', '.codegraph/', '.atl/', 'scripts/_dbg_*', 'scripts/_splice*', 'scripts/_t1.js']
   }
 ];

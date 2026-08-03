@@ -24,6 +24,7 @@ const HistoryView = {
     const list = await AppStorage.loadHistorial();
     list.unshift({ ...currentPedido });
     await AppStorage.saveHistorial(list);
+    if (typeof invalidateHistorialBadge === 'function') invalidateHistorialBadge();
     toast(currentPedido.name + ' guardado', 'success');
     updateBadges();
     hideValidationPanel();
@@ -124,12 +125,14 @@ const HistoryView = {
     const list = await AppStorage.loadHistorial();
     list.splice(idx, 1);
     await AppStorage.saveHistorial(list);
+    if (typeof invalidateHistorialBadge === 'function') invalidateHistorialBadge();
     this.render();
     updateBadges();
     toastUndo('Pedido "' + pedido.name + '" borrado', async () => {
       const l = await AppStorage.loadHistorial();
       l.splice(idx, 0, pedido);
       await AppStorage.saveHistorial(l);
+      if (typeof invalidateHistorialBadge === 'function') invalidateHistorialBadge();
       HistoryView.render();
       updateBadges();
     });

@@ -63,6 +63,29 @@ const CatalogView = {
     }
   },
 
+  /** Filtros activos (búsqueda + marca + categoría + rango de precio + chip).
+   *  Fuente única de verdad compartida por renderCatalog, nextPage y toggleSelectAll. */
+  getFilteredCatalog() {
+    const txt = (document.getElementById('catSearch')?.value || '').toLowerCase();
+    const marca = document.getElementById('catFilterMarca')?.value;
+    const cat = document.getElementById('catFilterCat')?.value;
+    const minPrice = parseFloat(document.getElementById('catFilterMinPrice')?.value) || 0;
+    const maxPrice = parseFloat(document.getElementById('catFilterMaxPrice')?.value) || Infinity;
+
+    return catalog.filter(r => {
+      const matchTxt = !txt || (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt);
+      const matchMarca = !marca || r.marca === marca;
+      let matchCat = !cat || r.cat === cat;
+      if (CatalogView.activeCategoryChip === 'SELECTED_ONLY') {
+        matchCat = (selection[r.sku] || 0) > 0;
+      } else if (CatalogView.activeCategoryChip) {
+        matchCat = r.cat === CatalogView.activeCategoryChip;
+      }
+      const matchPrice = (r.fob >= minPrice) && (r.fob <= maxPrice);
+      return matchTxt && matchMarca && matchCat && matchPrice;
+    });
+  },
+
   prevPage() {
     if (CatalogView.currentPage > 1) {
       CatalogView.currentPage--;
@@ -71,15 +94,7 @@ const CatalogView = {
   },
 
   nextPage() {
-    const txt = (document.getElementById('catSearch')?.value || '').toLowerCase();
-    const marca = document.getElementById('catFilterMarca')?.value;
-    const cat = document.getElementById('catFilterCat')?.value;
-    const filteredCount = catalog.filter(r => {
-      const matchTxt = !txt || (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt);
-      const matchMarca = !marca || r.marca === marca;
-      const matchCat = !cat || r.cat === cat;
-      return matchTxt && matchMarca && matchCat;
-    }).length;
+    const filteredCount = CatalogView.getFilteredCatalog().length;
 
     const totalPages = Math.ceil(filteredCount / CatalogView.pageSize) || 1;
     if (CatalogView.currentPage < totalPages) {
@@ -136,26 +151,24 @@ const CatalogView = {
     CatalogView.renderCatalog();
   },
 
+  clearCatalogFilters() {
+    ['catSearch', 'catFilterMarca', 'catFilterCat', 'catFilterMinPrice', 'catFilterMaxPrice'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    CatalogView.currentPage = 1;
+    const allChip = document.querySelector('#catFilterChips .chip');
+    if (allChip) {
+      CatalogView.setCatChip('', allChip); // restaura el chip "Todas las categorías" y re-renderiza
+    } else {
+      CatalogView.activeCategoryChip = '';
+      CatalogView.renderCatalog();
+    }
+  },
+
   renderCatalog() {
     if (!catalog.length) return;
-    const txt = (document.getElementById('catSearch')?.value || '').toLowerCase();
-    const marca = document.getElementById('catFilterMarca')?.value;
-    const cat = document.getElementById('catFilterCat')?.value;
-    const minPrice = parseFloat(document.getElementById('catFilterMinPrice')?.value) || 0;
-    const maxPrice = parseFloat(document.getElementById('catFilterMaxPrice')?.value) || Infinity;
-
-    const filtered = catalog.filter(r => {
-      const matchTxt = !txt || (r.sku + ' ' + r.marca + ' ' + r.modelo + ' ' + (r.variante || '')).toLowerCase().includes(txt);
-      const matchMarca = !marca || r.marca === marca;
-      let matchCat = !cat || r.cat === cat;
-      if (CatalogView.activeCategoryChip === 'SELECTED_ONLY') {
-        matchCat = (selection[r.sku] || 0) > 0;
-      } else if (CatalogView.activeCategoryChip) {
-        matchCat = r.cat === CatalogView.activeCategoryChip;
-      }
-      const matchPrice = (r.fob >= minPrice) && (r.fob <= maxPrice);
-      return matchTxt && matchMarca && matchCat && matchPrice;
-    });
+    const filtered = CatalogView.getFilteredCatalog();
 
     const totalPages = Math.ceil(filtered.length / CatalogView.pageSize) || 1;
     if (CatalogView.currentPage > totalPages) CatalogView.currentPage = totalPages;
@@ -175,11 +188,15 @@ const CatalogView = {
       if (f > 0) { if (f < minFob) minFob = f; sumFob += f; positiveCount++; }
     }
     if (minFob === Infinity) minFob = 0;
-    document.getElementById('catKpiTotal').textContent = catalog.length;
-    document.getElementById('catKpiMarcas').textContent = [...new Set(catalog.map(r => r.marca))].length + ' marcas';
-    document.getElementById('catKpiMin').textContent = '$' + (minFob >= 10 ? minFob.toFixed(0) : minFob.toFixed(2));
-    document.getElementById('catKpiMax').textContent = '$' + maxFob.toFixed(0);
-    document.getElementById('catKpiAvg').textContent = '$' + (positiveCount ? (sumFob / positiveCount) : 0).toFixed(2);
+    const setKpi = (id, text) => {
+      if (typeof updateStatValue === 'function') updateStatValue(id, text);
+      else { const el = document.getElementById(id); if (el) el.textContent = text; }
+    };
+    setKpi('catKpiTotal', String(catalog.length));
+    setKpi('catKpiMarcas', [...new Set(catalog.map(r => r.marca))].length + ' marcas');
+    setKpi('catKpiMin', '$' + (minFob >= 10 ? minFob.toFixed(0) : minFob.toFixed(2)));
+    setKpi('catKpiMax', '$' + maxFob.toFixed(0));
+    setKpi('catKpiAvg', '$' + (positiveCount ? (sumFob / positiveCount) : 0).toFixed(2));
 
     const selItems = Object.entries(selection);
     const selQty = selItems.reduce((s, [k, v]) => s + v, 0);
@@ -188,8 +205,8 @@ const CatalogView = {
       const item = bySku.get(k);
       return s + (item ? item.fob * v : 0);
     }, 0);
-    document.getElementById('catKpiSel').textContent = selQty + ' u';
-    document.getElementById('catKpiSelFob').textContent = '$' + selFob.toFixed(2) + ' FOB';
+    setKpi('catKpiSel', selQty + ' u');
+    setKpi('catKpiSelFob', '$' + selFob.toFixed(2) + ' FOB');
     document.getElementById('catalogSubtitle').textContent = filtered.length + ' de ' + catalog.length + ' productos · ' + new Set(filtered.map(r => r.marca)).size + ' marcas';
 
     // Actualizar Sticky Order Bar
@@ -250,7 +267,8 @@ const CatalogView = {
         const qty = selection[r.sku] || 0;
         const isSel = qty > 0;
         const skuJs = escJs(r.sku);
-        const pvp = (r.fob * 2.5).toFixed(2);
+        const markup = parseFloat(document.getElementById('cMarkup')?.value) || 2.5;
+        const pvp = (r.fob * markup).toFixed(2);
         const imgSrc = hasCatalogImage(r.img) ? r.img : DEFAULT_SVG_IMG;
 
         gridHtml += `<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; border: ${isSel ? '2px solid var(--primary)' : '1px solid var(--border)'}; background: ${isSel ? 'rgba(255,87,34,0.05)' : 'var(--surface)'}; border-radius: 12px; position: relative;">`;
@@ -275,6 +293,10 @@ const CatalogView = {
         gridHtml += `</div>`;
       });
       if (gridEl) gridEl.innerHTML = gridHtml || '<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-3);">Sin productos con esos filtros</div>';
+    }
+
+    if (!filtered.length) {
+      html = '<tr><td colspan="10" style="text-align: center; padding: 36px 16px; color: var(--text-3);">Sin productos que coincidan con los filtros actuales.<button class="btn btn-xs btn-secondary" style="margin-left: 10px;" onclick="clearCatalogFilters()">Limpiar filtros</button></td></tr>';
     }
 
     document.getElementById('catalogBody').innerHTML = html;
@@ -302,8 +324,12 @@ const CatalogView = {
 
   toggleSelectAll(on) {
     AppStore.commit(() => {
-      if (on) catalog.forEach(r => selection[r.sku] = 1);
-      else selection = {};
+      if (on) {
+        // Respeta los filtros activos: selecciona solo lo visible (igual que el preview de importación)
+        CatalogView.getFilteredCatalog().forEach(r => { selection[r.sku] = 1; });
+      } else {
+        selection = {};
+      }
     });
     scheduleCatalogSave();
     CatalogView.renderCatalog();
@@ -384,9 +410,13 @@ const CatalogView = {
     }
 
     if (field === 'fob') {
-      const n = parseFloat(value.replace(',', '.').replace(/[$\s]/g, ''));
-      if (!isNaN(n) && n > 0 && n <= 500) { item.fob = n; }
-      else { CatalogView.renderCatalog(); return; }
+      const n = parseFloat(value.replace(',', '.').replace(/[$ ]/g, ''));
+      if (!isNaN(n) && n > 0 && n <= 100000) { item.fob = n; }
+      else {
+        if (typeof toast === 'function') toast('FOB inválido: ingresá un precio entre 0 y 100000', 'error');
+        CatalogView.renderCatalog();
+        return;
+      }
     } else if (field === 'sku' && value && value !== oldSku) {
       const normalizedSku = typeof SkuAllocator !== 'undefined' ? SkuAllocator.normalizeSku(value) : value;
       if (catalog.find(r => r !== item && (typeof SkuAllocator !== 'undefined' ? SkuAllocator.normalizeSku(r.sku) === normalizedSku : r.sku === normalizedSku))) { toast('SKU duplicado globalmente', 'error'); CatalogView.renderCatalog(); return; }
@@ -402,6 +432,7 @@ const CatalogView = {
 
   setCatalogViewMode(mode) {
     CatalogView.catalogViewMode = mode;
+    try { localStorage.setItem('mambo_catalog_viewmode', mode); } catch { /* persistencia opcional */ }
     const btnTable = document.getElementById('btnViewTable');
     const btnGrid = document.getElementById('btnViewGrid');
     const tableWrap = document.getElementById('catalogTableWrap');
@@ -431,6 +462,7 @@ if (typeof window !== 'undefined') {
   window.nextPage = () => CatalogView.nextPage();
   window.adjustQty = (sku, delta) => CatalogView.adjustQty(sku, delta);
   window.setCatChip = (cat, el) => CatalogView.setCatChip(cat, el);
+  window.clearCatalogFilters = () => CatalogView.clearCatalogFilters();
   window.renderCatalog = () => CatalogView.renderCatalog();
   window.debouncedRenderCatalog = () => CatalogView.debouncedRender();
   window.toggleItem = (sku, on) => CatalogView.toggleItem(sku, on);
