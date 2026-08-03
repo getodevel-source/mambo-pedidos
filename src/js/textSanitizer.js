@@ -235,13 +235,21 @@ const TextSanitizer = {
     }
 
     // 2. Move connection/type words from modelo → variante
-    // ALWAYS move — even if modelo becomes empty (same fix as colors)
+    // ALWAYS move — even if modelo becomes empty (same fix as colors).
+    // Version tokens (V2/V3/V6/V9) are part of the product CODE (MAD 68 V2,
+    // RS7 V2, K99 V3, FE87 V2) — ground truth requires them in modelo.
     const connInModel = modelo ? modelo.match(this.CONNECTION_WORDS_RE) : null;
     if (connInModel && connInModel.length > 0) {
-      const modeloNoConn = modelo.replace(this.CONNECTION_WORDS_RE, '').replace(/\s+/g, ' ').trim();
+      const isVersion = (c) => /^v\d+$/i.test(c.trim());
+      const versionInModel = connInModel.filter(isVersion);
+      const connOnly = connInModel.filter(c => !isVersion(c));
+      const baseNoConn = modelo.replace(this.CONNECTION_WORDS_RE, '').replace(/\s+/g, ' ').trim();
+      const modeloNoConn = versionInModel.length
+        ? (baseNoConn + ' ' + versionInModel.join(' ')).replace(/\s+/g, ' ').trim()
+        : baseNoConn;
       const existingVarLower = variante.toLowerCase();
-      const newConns = connInModel.filter(c => !existingVarLower.includes(c.toLowerCase()));
-      if (modeloNoConn.length >= 2) {
+      const newConns = connOnly.filter(c => !existingVarLower.includes(c.toLowerCase()));
+      if (modeloNoConn.length >= 2 && !/^v\d+$/i.test(modeloNoConn)) {
         modelo = modeloNoConn;
         if (newConns.length > 0) {
           variante = (variante + ' ' + newConns.join(' ')).replace(/\s+/g, ' ').trim();

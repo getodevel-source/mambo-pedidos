@@ -853,7 +853,8 @@ const PdfParser = {
         rawModelo = inlinePart;
       }
 
-      if (!rawModelo) continue;
+      
+if (!rawModelo) continue;
 
       const rawCombined = rawModelo + ' ' + rawVariante;
       const detectedBrand = this.detectBrandFromTextLine(rawCombined, customBrands) || brandFallback || 'OTRO';
@@ -897,7 +898,8 @@ const PdfParser = {
         }
       }
 
-      pageProducts.push({
+      
+pageProducts.push({
         sku: '',
         cat,
         marca: detectedBrand,
@@ -925,6 +927,83 @@ const PdfParser = {
   //  Para catálogos con una sola columna de precios (layout tabular).
   //  Cada fila Y con ancla de precio $ = un producto.
   // =========================================================================
+
+      // =========================================================================
+      //  DETECCIÓN DE CABECERA DE TABLA (SLICE 1: HEADER-DRIVEN COLUMN MAPPING)
+      //  Detecta la fila de cabecera (Model | Color | Axis/Switch | Image | CNY | USD)
+      //  y devuelve las columnas por rol y posición X. Si no hay cabecera confiable
+      //  devuelve [] -> el engine cae al path posicional actual (sin regresión).
+      // =========================================================================
+      HEADER_TOKEN_RE: /^(model|product|item|color|colour|axis|switch|key\s*switch|image|picture|photo|cny|rmb|price|usd|fob)$/i,
+      HEADER_ROLE_RE: {
+        model: /^(model|product|item)$/i,
+        color: /^(color|colour)$/i,
+        switch: /^(axis|switch|key\s*switch)$/i,
+        image: /^(image|picture|photo)$/i,
+        cny: /^(cny|rmb|price)$/i,
+        usd: /^(usd|fob)$/i
+      },
+
+      detectTableHeaders(rawElements, priceColX) {
+        const candidates = [];
+        // Agrupar por fila Y (tolerancia 6px, como el resto del engine)
+        const rows = new Map();
+        for (const el of rawElements) {
+          if (el.x >= priceColX - 10) continue; // zona de precios
+          if (!this.HEADER_TOKEN_RE.test(el.text.trim())) continue;
+          const key = Math.round(el.y / 6);
+          if (!rows.has(key)) rows.set(key, []);
+          rows.get(key).push(el);
+        }
+        for (const els of rows.values()) {
+          if (els.length < 2) continue;
+          const xs = els.map(e => e.x).sort((a, b) => a - b);
+          if (xs[xs.length - 1] - xs[0] < 40) continue; // sin dispersión horizontal
+          const columns = [];
+          for (const el of els) {
+            for (const [role, re] of Object.entries(this.HEADER_ROLE_RE)) {
+              if (re.test(el.text.trim()) && !columns.some(c => c.role === role)) {
+                columns.push({ role, x: el.x });
+                break;
+              }
+            }
+          }
+          if (columns.length < 2) continue;
+          const hasProductRole = columns.some(c => c.role === 'model' || c.role === 'color' || c.role === 'switch');
+          if (!hasProductRole) continue;
+          columns.sort((a, b) => a.x - b.x);
+          candidates.push({ y: els[0].y, columns });
+        }
+        return candidates;
+      },
+
+      // Devuelve la cabecera más cercana por encima de una fila dada.
+      findHeaderAbove(headers, y) {
+        let best = null;
+        for (const h of headers) {
+          if (h.y < y && (!best || h.y > best.y)) best = h;
+        }
+        return best;
+      },
+
+      // Clasifica un item por su X dentro de las bandas de la cabecera.
+      // Devuelve 'model' | 'color' | 'switch' | 'skip' | null (null = fuera de bandas).
+      classifyByHeader(header, x) {
+        const cols = header.columns;
+        if (x >= cols[cols.length - 1].x + 60) return 'skip';
+        for (let i = 0; i < cols.length; i++) {
+          const left = i === 0 ? -Infinity : (cols[i - 1].x + cols[i].x) / 2;
+          const right = i === cols.length - 1 ? Infinity : (cols[i].x + cols[i + 1].x) / 2;
+          if (x >= left && x < right) {
+            if (cols[i].role === 'model') return 'model';
+            if (cols[i].role === 'color') return 'color';
+            if (cols[i].role === 'switch') return 'switch';
+            return 'skip'; // image / cny / usd / price
+          }
+        }
+        return null;
+      },
+
   extractPageProductsByTableRows(rawElements, priceAnchors, viewportHeight, pageNum, pageImages, brandFallback, customBrands, existingProducts, isPageNoise, isHeaderNoiseLine) {
     priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
     const pageProducts = [];
@@ -936,6 +1015,27 @@ const PdfParser = {
 
     // Determinar la X de la columna de precios USD (promedio de anclas)
     const priceColX = priceAnchors.reduce((s, a) => s + a.x, 0) / priceAnchors.length;
+
+        // SLICE 1: cabeceras de tabla detectadas (Model | Color | Axis | Image | CNY | USD)
+        const tableHeaders = this.detectTableHeaders(rawElements, priceColX);
+
+        // SLICE 1c: logos de marca repetidos por fila. Un token de 2-4 letras
+        // mayúsculas puras que aparece en >=50% de las filas es un logo de marca
+        // (ej: "RK" en cada fila del catálogo RK) — no es parte del modelo.
+        // Códigos de modelo sin dígitos (ej: "MAD" en "MAD 60 V2") aparecen una
+        // vez por bloque y sobreviven. Solo se activa con tablas grandes (>=8 filas).
+        const logoKill = new Set();
+        if (priceAnchors.length >= 8) {
+          const counts = {};
+          for (const el of rawElements) {
+            if (el.x < 100 && /^[A-Z]{2,4}$/.test(el.text)) {
+              counts[el.text] = (counts[el.text] || 0) + 1;
+            }
+          }
+          for (const [tok, n] of Object.entries(counts)) {
+            if (n >= priceAnchors.length * 0.35) logoKill.add(tok);
+          }
+        }
 
     // Calcular altura de fila promedio para límites dinámicos
     let avgRowHeight = 60;
@@ -963,8 +1063,13 @@ const PdfParser = {
       // Calcular límites Y dinámicos: punto medio entre anclas consecutivas
       const prevAnchor = i > 0 ? priceAnchors[i - 1] : null;
       const nextAnchor = i < priceAnchors.length - 1 ? priceAnchors[i + 1] : null;
-      const topBound = prevAnchor ? (prevAnchor.y + anchor.y) / 2 : Math.max(0, anchor.y - avgRowHeight * 1.3);
+      let topBound = prevAnchor ? (prevAnchor.y + anchor.y) / 2 : Math.max(0, anchor.y - avgRowHeight * 1.3);
       const bottomBound = nextAnchor ? (anchor.y + nextAnchor.y) / 2 : Math.min(viewportHeight, anchor.y + 30);
+
+      // SLICE 1b: la primera fila de datos no debe incluir la fila de cabecera
+      // (sus tokens caerian dentro de los bounds y contaminarian el modelo).
+      const rowHeader = this.findHeaderAbove(tableHeaders, anchor.y);
+      if (rowHeader && topBound < rowHeader.y + 6) topBound = rowHeader.y + 6;
 
       // Recolectar TODOS los elementos dentro de los límites Y, a la izquierda de la columna de precios
       const cellItems = rawElements.filter(el => {
@@ -981,7 +1086,8 @@ const PdfParser = {
 
       const allItems = cellItems.sort((a, b) => a.y - b.y || a.x - b.x);
 
-      for (const el of allItems) {
+      
+          for (const el of allItems) {
         const txt = el.text;
 
         // Filtrar ruido
@@ -1000,14 +1106,40 @@ const PdfParser = {
           productCode = txt;
           continue;
         }
-        // Código parcial (ej: "RZ01" "-" "03850100" "-" "R3C1" como items separados)
-        if (/^[A-Z]{2,4}\d{0,2}$/.test(txt) && el.x < 100) continue;
-        if (/^\d{6,}$/.test(txt) && el.x < 100) continue;
-        if (/^[A-Z]\d[A-Z]\d$/.test(txt) && el.x < 100) continue;
-        if (txt === '-' && el.x < 100) continue;
+            // SLICE 1: si hay cabecera por encima, clasificar por banda de columna.
+            // (Layout Model|Color|Axis|Image|CNY|USD: el switch NO contamina el modelo.)
+            const header = this.findHeaderAbove(tableHeaders, anchor.y);
+            let headerRole = null;
 
-        // Clasificar por posición X relativa a la columna de precios
-        const relX = el.x / priceColX; // 0..1 (izquierda..precio)
+        // Código parcial (ej: "RZ01" "-" "03850100" "-" "R3C1" como items separados).
+        // Con cabecera, la banda modelo ES el código — el filtro solo aplica sin cabecera.
+        if (header === null) {
+          // Sin cabecera: fragmentos de SKU partida ("RZ01" "-" "03850100" "-" "R3C1").
+          if (/^[A-Z]{2,4}\d{0,2}$/.test(txt) && el.x < 100) continue;
+          if (/^\d{6,}$/.test(txt) && el.x < 100) continue;
+          if (/^[A-Z]\d[A-Z]\d$/.test(txt) && el.x < 100) continue;
+          if (txt === '-' && el.x < 100) continue;
+        } else if (logoKill.has(txt) && el.x < 100) {
+          // Con cabecera: logo de marca repetido por fila ("RK" en el catálogo RK).
+          continue;
+        }
+
+            if (header) {
+              headerRole = this.classifyByHeader(header, el.x);
+              if (headerRole === 'model') {
+                // SLICE 1b: residuo de cabecera/sub-cabecera en la banda modelo
+                // (ej: el label "Color" de las filas RK61) — nunca es un modelo.
+                if (this.HEADER_TOKEN_RE.test(txt)) continue;
+                nameParts.push(txt); continue;
+              }
+              if (headerRole === 'color') { colorParts.push(txt); continue; }
+              if (headerRole === 'switch') { typeParts.push(txt); continue; }
+              if (headerRole === 'skip') continue;
+              // role null -> cae a las heurísticas posicionales de abajo
+            }
+
+// Clasificar por posición X relativa a la columna de precios
+            const relX = el.x / priceColX; // 0..1 (izquierda..precio)
 
         // Keywords que siempre van a variante (sin importar posición)
         const isSwitchType = /\b(magnetic|hall\s*effect|linear|tactile|clicky|optical|mechanical|hot[\s-]?swap|pcb|gasket|foam|silicone|poron|ixpe|pet|fr4|aluminum|brass|carbon)\b/i.test(txt);
@@ -1043,18 +1175,25 @@ const PdfParser = {
       let rawModelo = nameParts.join(' ').replace(/\s+/g, ' ').trim();
       let rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
 
-      // Model inheritance: if this row has NO model text (only colors/prices),
-      // inherit the model name from the previous product row
+      // SLICE 2: celdas fusionadas. Una fila sin texto de modelo es
+      // continuación de un producto cuya celda de modelo está fusionada
+      // (el texto suele estar centrado verticalmente en el bloque).
+      const rowModelEmpty = !rawModelo;
+      let modelFromSwap = false;
+      let swapOriginalVariante = '';
       if (!rawModelo && lastInheritedModel) {
         rawModelo = lastInheritedModel;
         // Don't swap — the color stays in variante
       } else if (!rawModelo && rawVariante) {
-        // No inheritance available — swap as last resort
+        // Sin herencia disponible — swap como último recurso: se marca para
+        // backfill (la siguiente fila con modelo real corrige el modelo).
+        swapOriginalVariante = rawVariante;
         rawModelo = rawVariante;
-        rawVariante = '';
+        modelFromSwap = true;
       }
 
-      if (!rawModelo) continue;
+      
+if (!rawModelo) continue;
 
       const rawCombined = rawModelo + ' ' + rawVariante;
       const detectedBrand = this.detectBrandFromTextLine(rawCombined, customBrands) || brandFallback || 'OTRO';
@@ -1124,14 +1263,47 @@ const PdfParser = {
         y: anchor.y
       });
 
-      // Update model inheritance for color-only rows that follow
-      if (sanitized.modelo && sanitized.modelo.length > 2 && !/^(item|producto)$/i.test(sanitized.modelo)) {
+      // SLICE 2 backfill: esta fila tiene modelo real y la anterior quedó con
+      // un swap de color/switch (celda de modelo fusionada con texto centrado).
+      if (!rowModelEmpty && !modelFromSwap && pageProducts.length && pageProducts[pageProducts.length - 1]._needsModel) {
+        const prev = pageProducts[pageProducts.length - 1];
+        const restoredVariante = prev.variante || '';
+        prev.modelo = sanitized.modelo;
+        prev.variante = restoredVariante;
+        prev.rawText = (sanitized.modelo + ' ' + restoredVariante).replace(/s+/g, ' ').trim();
+        prev.cellRawText = prev.rawText;
+        prev.cat = this.detectCategory(prev.rawText, prev.marca);
+        prev.marca = this.detectBrandFromTextLine(prev.rawText, customBrands) || prev.marca || brandFallback || 'OTRO';
+        delete prev._needsModel;
+      }
+      // SLICE 2: marcar filas cuyo "modelo" es un swap — serán corregidas por
+      // el backfill de la siguiente fila con modelo real (si existe).
+      if (rowModelEmpty && modelFromSwap) {
+        const pushed = pageProducts[pageProducts.length - 1];
+        pushed._needsModel = true;
+        // SLICE 2 fix: la celda fusionada repite el modelo en el texto de
+        // detalle (Irok/Mars: "Mars75 Pro" en la columna modelo Y en el
+        // detalle) — la variante no debe repetir el modelo extraído.
+        const modelTokens = (sanitized.modelo || '').split(/\s+/).map(t => t.toLowerCase());
+        let swapVar = swapOriginalVariante;
+        if (modelTokens.length) {
+          swapVar = swapVar.split(/\s+/).filter(w => !modelTokens.includes(w.toLowerCase())).join(' ');
+        }
+        pushed.variante = swapVar.replace(/\s+/g, ' ').trim();
+        pushed.rawText = (pushed.modelo + ' ' + pushed.variante).replace(/s+/g, ' ').trim();
+        pushed.cellRawText = pushed.rawText;
+      }
+
+      // Update model inheritance for color-only rows that follow.
+      // Un modelo de swap (color/switch) NO debe contaminar la herencia.
+      if (!modelFromSwap && sanitized.modelo && sanitized.modelo.length > 2 && !/^(item|producto)$/i.test(sanitized.modelo)) {
         lastInheritedModel = sanitized.modelo;
         lastInheritedBrand = detectedBrand;
         lastInheritedCat = cat;
       }
     }
 
+    for (const p of pageProducts) { delete p._needsModel; }
     return pageProducts;
   },
 
@@ -1947,4 +2119,4 @@ const PdfParser = {
 };
 
 if (typeof window !== 'undefined') window.PdfParser = PdfParser;
-if (typeof module !== 'undefined') module.exports = PdfParser;
+if (typeof module !== 'undefined') module.exports = PdfParser;
