@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '1.9.0',
+  CURRENT_VERSION: '1.9.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -35,7 +35,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '1.9.0';
+    return this.CURRENT_VERSION || '1.9.1';
   },
 
   /**
@@ -205,6 +205,7 @@ const AppUpdater = {
     const notesEl = document.getElementById('updateModalNotes');
     const btnEl = document.getElementById('updateModalBtn');
     const linkAnchor = document.getElementById('updateModalLinkAnchor');
+    const directLink = document.getElementById('updateModalDirectLink');
 
     if (verEl) verEl.textContent = `Versión v${version} disponible (tenés la v${this.CURRENT_VERSION})`;
     if (notesEl) notesEl.textContent = this.formatNotes(notes);
@@ -213,6 +214,9 @@ const AppUpdater = {
       linkAnchor.href = releaseUrl;
       linkAnchor.textContent = releaseUrl;
     }
+    // El enlace manual a GitHub es el último recurso: oculto por defecto y
+    // se muestra únicamente si falla la instalación automática 1-Click.
+    if (directLink) directLink.style.display = 'none';
     if (btnEl) {
       btnEl.disabled = false;
       btnEl.textContent = '⚡ Instalar Actualización';
@@ -236,62 +240,75 @@ const AppUpdater = {
 
   /**
    * Punto de entrada del botón "Instalar Actualización".
-   * Usa el plugin nativo de Tauri 2.0: descarga el artefacto firmado,
+   * Usa el plugin nativo de Tauri v2: descarga el artefacto firmado,
    * verifica la firma criptográfica minisign, reemplaza in-place y relanza.
-   * No existe fallback de descarga: el updater oficial firmado es el único camino de instalación.
+   * Requiere el resource `rid` devuelto por el check + un Channel de progreso.
    */
   async startDirectDownload() {
     const progressWrap = document.getElementById('updateProgressWrap');
     const progressText = document.getElementById('updateProgressText');
     const progressBarInner = document.getElementById('updateProgressBarInner');
     const btn = document.getElementById('updateModalBtn');
+    const directLink = document.getElementById('updateModalDirectLink');
 
     if (progressWrap) progressWrap.style.display = 'block';
     if (progressBarInner) progressBarInner.style.width = '5%';
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Descargando actualización...'; }
     if (progressText) progressText.textContent = '🔐 Verificando firma y descargando...';
+    if (directLink) directLink.style.display = 'none';
 
     try {
-      // Camino principal: plugin oficial de Tauri (con verificación de firma minisign)
+      // Camino principal: plugin oficial de Tauri v2 (con verificación de firma minisign)
+      const update = this._updateHandle;
+      if (!update || typeof update.rid !== 'number') {
+        throw new Error('No hay una actualización verificada para instalar. Ejecutá primero la búsqueda de actualizaciones.');
+      }
+
       await new Promise((resolve, reject) => {
-        let unlistenFn = null;
+        let channel = null;
+        let timeout = null;
 
         const cleanup = () => {
-          if (unlistenFn) {
-            try { unlistenFn(); } catch (e) {}
-            unlistenFn = null;
-          }
+          if (channel) { try { channel.onmessage = null; } catch (e) {} channel = null; }
+          if (timeout) { clearTimeout(timeout); timeout = null; }
         };
 
-        // Listener de progreso real del plugin
-        if (window.__TAURI__?.event?.listen) {
-          window.__TAURI__.event.listen('tauri://update-status', (event) => {
-            const p = event.payload || {};
-            if (p.status === 'Started' || p.status === 'Pending') {
-              if (progressText) progressText.textContent = '⬇️ Descargando actualización firmada...';
-              if (progressBarInner) progressBarInner.style.width = '15%';
-            } else if (p.status === 'Progress') {
-              const pct = Math.min(90, Math.max(15, Math.round((p.chunkLength || 0) / 1024)));
-              if (progressBarInner) progressBarInner.style.width = pct + '%';
-              if (progressText) progressText.textContent = `⬇️ Descargando... ${pct}%`;
-            } else if (p.status === 'Done' || p.status === 'UpToDate') {
-              cleanup();
-              resolve();
-            } else if (p.status === 'Error') {
-              cleanup();
-              reject(new Error(p.error || 'Error en actualización'));
-            }
-          }).then(fn => { unlistenFn = fn; }).catch(() => {});
+        // Channel de progreso del plugin v2: recibe { event, data } con
+        // Started / Progress (chunkLength) / Finished.
+        try {
+          if (window.__TAURI__?.core?.Channel) {
+            channel = new window.__TAURI__.core.Channel();
+            channel.onmessage = (e) => {
+              const ev = e && e.event;
+              if (ev === 'Started') {
+                if (progressText) progressText.textContent = '⬇️ Descargando actualización firmada...';
+                if (progressBarInner) progressBarInner.style.width = '15%';
+              } else if (ev === 'Progress') {
+                const chunk = (e && e.data && e.data.chunkLength) || 0;
+                const pct = Math.min(90, Math.max(15, Math.round(chunk / 1024)));
+                if (progressBarInner) progressBarInner.style.width = pct + '%';
+                if (progressText) progressText.textContent = '⬇️ Descargando... ' + pct + '%';
+              } else if (ev === 'Finished') {
+                if (progressBarInner) progressBarInner.style.width = '95%';
+                if (progressText) progressText.textContent = '🔧 Instalando actualización...';
+              }
+            };
+          }
+        } catch (e) {
+          channel = null;
         }
 
         // Timeout de seguridad: si en 5 min no hay respuesta, abortar
-        const timeout = setTimeout(() => {
+        timeout = setTimeout(() => {
           cleanup();
-          reject(new Error('Timeout de descarga'));
+          reject(new Error('Timeout de descarga (5 min)'));
         }, 300000);
 
-        this._invoke('plugin:updater|download_and_install', {})
-          .then(() => { clearTimeout(timeout); resolve(); })
+        this._invoke('plugin:updater|download_and_install', {
+          rid: update.rid,
+          onEvent: channel,
+        })
+          .then(() => { clearTimeout(timeout); timeout = null; resolve(); })
           .catch(err => { clearTimeout(timeout); cleanup(); reject(err); });
       });
 
@@ -303,21 +320,22 @@ const AppUpdater = {
       // Relanzar la app
       setTimeout(() => {
         this._invoke('plugin:process|restart', {}).catch(() => {
-          this._invoke('restart_app', {}).catch(() => {
-            window.location.reload();
-          });
+          window.location.reload();
         });
       }, 1500);
 
       return;
     } catch (pluginErr) {
-      console.error('Updater oficial firmado falló:', pluginErr.message || pluginErr);
-    }
+      const msg = (pluginErr && pluginErr.message) ? pluginErr.message : String(pluginErr);
+      console.error('Updater oficial firmado falló:', msg);
 
-    if (progressText) progressText.textContent = '❌ No se pudo instalar la actualización firmada.';
-    if (progressBarInner) progressBarInner.style.width = '100%';
-    if (btn) { btn.disabled = false; btn.textContent = 'Reintentar actualización'; }
-    toast('❌ La actualización no se instaló porque falló la verificación oficial.', 'error');
+      if (progressText) progressText.textContent = '❌ ' + msg;
+      if (progressBarInner) progressBarInner.style.width = '100%';
+      if (btn) { btn.disabled = false; btn.textContent = 'Reintentar actualización'; }
+      // Último recurso manual: mostrar el enlace al release en GitHub
+      if (directLink) directLink.style.display = 'block';
+      toast('❌ No se pudo instalar la actualización automática.', 'error');
+    }
   },
 
   openExternal(url) {
