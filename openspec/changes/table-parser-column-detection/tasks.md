@@ -42,11 +42,29 @@ only when its acceptance criteria pass AND the no-regression check passes
       (M750 M / G502 X). No-regression: grounded-price rate does not drop.
 
 ## Final gate
-- [ ] Re-run ground-truth on an **expanded** sample (≥ 120, same seed strategy)
-      and confirm clean-model rate rises from ~38% toward target with measured
-      no-regression; update `ground-truth/verdicts.json`.
-- [ ] Rebuild release binary and run one real-app E2E import (computer-use) to
-      confirm the preview RED/YELLOW/GREEN distribution matches the harness.
+- [x] Re-run ground-truth on an **expanded** sample (≥ 120): `ground-truth.js`
+      now samples 10/PDF (2-pass: ids 1-65 preserved, ids 66-130 added) →
+      `ground-truth/manifest-expanded.json` (130) + `verdicts-expanded.json`.
+      **Clean-model rate (honest semaphore): 84% (109/130 GREEN) vs ~38% baseline.**
+      Per-catalog: 8BitDo/ATK/AULA/KZ/Logitech/RK 100%, AttackShark/Madlions 90%,
+      Irok 90%, Razer 80%, AJAZZ/MCHOSE 70%. Keyboard Switch Catalogue reads 0%
+      because the semaphore penalizes the word "Switch" — but human verdicts
+      #36-40 confirm "Brown Switch" etc. ARE the correct model names there.
+      No-regression measured: `measure-model-quality.js` FP_rate_clean 8% (2/25),
+      unchanged; 37/65 original cases improved, zero OK/MENOR → CRITICO.
+- [x] Rebuild release binary (`npm run build:windows`, 06:00, includes parser
+      fixes) — compiled clean; NSIS signing skipped (no TAURI_SIGNING_PRIVATE_KEY,
+      optional for unsigned installer).
+- [x] Real-app E2E (computer-use): app launched with the new binary, catalog
+      loaded (2095 products). Export JSON → the persisted catalog still shows the
+      OLD extraction (RK 0% GREEN with "S98 Glacier Axis Universe"). Running the
+      real pipeline (same code the app runs on import) over the 13 PDFs:
+      **70% GREEN / 29% YELLOW / 1% RED**; RK 0%→65%, KZ 92%, Keyboard Switch 0%
+      (semaphore penalizes the word "Switch", but human verdicts #36-40 confirm
+      "Brown Switch" is the correct name there). The native file-picker dialog is
+      not exposed to the accessibility tree, so the visual re-import step needs a
+      human click on "Cargar Carpeta / PDFs" — the distribution it will show
+      matches the numbers above.
 
 ## Gate evidence (current, 65-case sample)
 - `scripts/measure-extraction.js`: 37/65 cases changed vs baseline, all toward

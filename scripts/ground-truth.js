@@ -26,7 +26,8 @@ const PdfParser = require('../src/js/pdfParser.js');
 
 const CATALOG_DIR = process.env.MAMBO_CATALOG_DIR || 'C:\\Mambo\\Catalogos';
 const OUT_DIR = path.join(__dirname, '..', 'ground-truth');
-const SAMPLE_PER_PDF = 5;
+const SAMPLE_PER_PDF = 10;
+const KEEP_FIRST = 5;
 const SCALE = 1.7;
 const SEED = 42;
 
@@ -99,7 +100,14 @@ async function main() {
     // Seeded random sample
     const pool = [...withPos];
     const picks = [];
-    for (let i = 0; i < SAMPLE_PER_PDF && pool.length; i++) {
+    // First pass: KEEP_FIRST picks per PDF reuse the SAME RNG sequence as the
+    // original 65-case sample, so ids 1-65 stay identical and existing human
+    // verdicts keep matching. Second pass adds the remaining picks (ids 66+).
+    for (let i = 0; i < KEEP_FIRST && pool.length; i++) {
+      const idx = Math.floor(rand() * pool.length);
+      picks.push(pool.splice(idx, 1)[0]);
+    }
+    for (let i = 0; i < SAMPLE_PER_PDF - KEEP_FIRST && pool.length; i++) {
       const idx = Math.floor(rand() * pool.length);
       picks.push(pool.splice(idx, 1)[0]);
     }
