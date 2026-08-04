@@ -54,8 +54,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "Retro 87 Xbox",
-   "variante": "Mechanical Keyboard Edition Green",
+   "modelo": "Retro 87",
+   "variante": "Mechanical Keyboard Xbox Edition Green",
    "status": "YELLOW"
   }
  },
@@ -100,13 +100,13 @@
   },
   "neu": {
    "modelo": "AK980V2PRO Lychee AK980 (Transparent",
-   "variante": "switch Wired+2.+BT (8K+8K) Purple Yellow",
+   "variante": "switch Dark Wired+2.+BT PRO (8K+8K)",
    "status": "GREEN"
   }
  },
  {
   "id": 8,
-  "dist": 0,
+  "dist": 49,
   "veredicto": "CAMPO",
   "old": {
    "modelo": "AJ139 Ultra Paw 3950 Star AJ139P NL",
@@ -114,14 +114,14 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "AJ139 Ultra Paw 3950 Star AJ139P NL V3",
-   "variante": "Wired+2.+BT Flash+Wired+BT White",
-   "status": "YELLOW"
+   "modelo": "AJ159P 3311 MC",
+   "variante": "Wired/Bluetooth Wired+2.+BT Black",
+   "status": "GREEN"
   }
  },
  {
   "id": 9,
-  "dist": 0,
+  "dist": 51,
   "veredicto": "MENOR",
   "old": {
    "modelo": "NJ07 Ultra NACODEX",
@@ -129,8 +129,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "NJ07 Ultra NACODEX",
-   "variante": "Wired+2.+BT PAW3950 White Tri mode",
+   "modelo": "NJ08 Ultra NACODEX",
+   "variante": "Ultra Tri 3-Mode Wired+2.+BT PAW3950",
    "status": "GREEN"
   }
  },
@@ -159,8 +159,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "A87 Plum axis Pro Sea Salt",
-   "variante": "",
+   "modelo": "A87 Plum Pro Sea Salt",
+   "variante": "axis",
    "status": "GREEN"
   }
  },
@@ -294,8 +294,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "68HE Ultra Jade King",
-   "variante": "Magnetic Switch White",
+   "modelo": "68HE Ultra",
+   "variante": "Jade King Magnetic Switch White",
    "status": "YELLOW"
   }
  },
@@ -339,8 +339,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "X820Ultra Star +Gift",
-   "variante": "Gasket Switch Mechanical Keyboard Black",
+   "modelo": "X820Ultra +Gift",
+   "variante": "Tri 3-Mode Star Gasket Switch",
    "status": "GREEN"
   }
  },
@@ -429,8 +429,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "Serpent Axis",
-   "variante": "White Black",
+   "modelo": "Serpent",
+   "variante": "Axis White Black",
    "status": "GREEN"
   }
  },
@@ -534,8 +534,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "PC SeaSalt PA Silent 47 5g POM",
-   "variante": "Mechanical Switch Tactile",
+   "modelo": "SeaSalt 47 5g",
+   "variante": "Mechanical Switch Silent Tactile",
    "status": "YELLOW"
   }
  },
@@ -549,8 +549,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "3.5 POM Midnight 52 5g UPE 60",
-   "variante": "Mechanical Switch Linear Blue",
+   "modelo": "3.5 Midnight 52 5g 60",
+   "variante": "Mechanical Switch Linear Bottoming Blue",
    "status": "YELLOW"
   }
  },
@@ -564,8 +564,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "3.6 PC Flamingo 47 10g POM 55",
-   "variante": "Mechanical Switch Linear",
+   "modelo": "3.6 Flamingo 47 10g 55",
+   "variante": "Mechanical Switch Linear Bottoming",
    "status": "YELLOW"
   }
  },
@@ -579,8 +579,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "PC 2.0 PA 39 5g POM 54 4g",
-   "variante": "Mechanical Switch Tactile Brown",
+   "modelo": "2.0 39 5g 54 4g",
+   "variante": "Mechanical Switch Tactile Bottoming Brown",
    "status": "YELLOW"
   }
  },
@@ -594,8 +594,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "PC 2.0 PA 41 5g POM 54 4g",
-   "variante": "Switch Mechanical Blue",
+   "modelo": "2.0 41 5g 54 4g Switch",
+   "variante": "Mechanical Bottoming Blue",
    "status": "YELLOW"
   }
  },
@@ -624,8 +624,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "MK200 Combo Mouse",
-   "variante": "Keyboard Black",
+   "modelo": "MK200 Mouse",
+   "variante": "Keyboard Combo Black",
    "status": "YELLOW"
   }
  },
@@ -684,9 +684,9 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "68 Keys Esport",
-   "variante": "Magnetic Switch Silver White",
-   "status": "YELLOW"
+   "modelo": "68 Keys",
+   "variante": "Magnetic Esport Switch Silver White",
+   "status": "GREEN"
   }
  },
  {
@@ -849,8 +849,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "Misty Axis R98 V2",
-   "variante": "Green",
+   "modelo": "R98 V2",
+   "variante": "Misty Axis Green",
    "status": "YELLOW"
   }
  },
@@ -864,8 +864,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "axis",
-   "variante": "Brown",
+   "modelo": "R87PRO",
+   "variante": "axis Brown",
    "status": "GREEN"
   }
  },
@@ -879,8 +879,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "R98 Kaihua Speed Axis",
-   "variante": "Cyan blue",
+   "modelo": "R98",
+   "variante": "Kaihua Speed Axis Cyan blue",
    "status": "YELLOW"
   }
  },

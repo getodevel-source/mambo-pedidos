@@ -1080,6 +1080,7 @@ pageProducts.push({
 
       // Clasificar elementos de la celda
       const nameParts = [];
+      let firstCodeY = null;
       const typeParts = [];
       const colorParts = [];
       let productCode = '';
@@ -1116,7 +1117,7 @@ pageProducts.push({
         if (header === null) {
           // Sin cabecera: fragmentos de SKU partida ("RZ01" "-" "03850100" "-" "R3C1").
           if (/^[A-Z]{2,4}\d{0,2}$/.test(txt) && el.x < 100) continue;
-          if (/^\d{6,}$/.test(txt) && el.x < 100) continue;
+          if (/^\d{6,}$/.test(txt)) continue;
           if (/^[A-Z]\d[A-Z]\d$/.test(txt) && el.x < 100) continue;
           if (txt === '-' && el.x < 100) continue;
         } else if (logoKill.has(txt) && el.x < 100) {
@@ -1130,7 +1131,9 @@ pageProducts.push({
                 // SLICE 1b: residuo de cabecera/sub-cabecera en la banda modelo
                 // (ej: el label "Color" de las filas RK61) — nunca es un modelo.
                 if (this.HEADER_TOKEN_RE.test(txt)) continue;
-                nameParts.push(txt); continue;
+                nameParts.push(txt);
+                if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                continue;
               }
               if (headerRole === 'color') { colorParts.push(txt); continue; }
               if (headerRole === 'switch') { typeParts.push(txt); continue; }
@@ -1138,38 +1141,47 @@ pageProducts.push({
               // role null -> cae a las heurísticas posicionales de abajo
             }
 
-// Clasificar por posición X relativa a la columna de precios
+            // Clasificar por posición X relativa a la columna de precios
             const relX = el.x / priceColX; // 0..1 (izquierda..precio)
 
-        // Keywords que siempre van a variante (sin importar posición)
-        const isSwitchType = /\b(magnetic|hall\s*effect|linear|tactile|clicky|optical|mechanical|hot[\s-]?swap|pcb|gasket|foam|silicone|poron|ixpe|pet|fr4|aluminum|brass|carbon)\b/i.test(txt);
-        const isSensorSpec = /\b(paw\d{4}\w*|8k|4k|2\.4g|tri[\s-]?mode|25k|30k|35k|26000|dpi)\b/i.test(txt);
-        const isConnectionType = /\b(bluetooth|wired|wireless|usb[\s-]?c|rgb|nfc)\b/i.test(txt);
-        const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material)\b/i.test(txt);
-        const isColor = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|faker|wukong|myth|gunmetal|blackberry|periwinkle|neon|flash|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|arctic|fox|dream|whimsy|perilla|obsidian|any|tea)\b/i.test(txt);
+            // Keywords que siempre van a variante (sin importar posición)
+            const isSwitchType = /\b(magnetic|hall\s*effect|linear|tactile|clicky|optical|mechanical|hot[\s-]?swap|pcb|gasket|foam|silicone|poron|ixpe|pet|fr4|aluminum|brass|carbon|axis|speed|kailh|kaihua|misty|biluo|gateron|outemu|ttc|hmx)\b/i.test(txt);
+            const isSensorSpec = /\b(paw\d{4}\w*|8k|4k|2\.4g|tri[\s-]?mode|25k|30k|35k|26000|dpi)\b/i.test(txt);
+            const isConnectionType = /\b(bluetooth|wired|wireless|usb[\s-]?c|rgb|nfc)\b/i.test(txt);
+            const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material)\b/i.test(txt);
+            const isColor = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|faker|wukong|myth|gunmetal|blackberry|periwinkle|neon|flash|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|arctic|fox|dream|whimsy|perilla|obsidian|any|tea)\b/i.test(txt);
 
-        if (isSwitchType || isSensorSpec || isConnectionType || isDescriptor) {
-          typeParts.push(txt);
-        } else if (isColor) {
-          // Colors ALWAYS go to variante, regardless of X position
-          colorParts.push(txt);
-        } else if (relX < 0.45) {
-          if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
-            typeParts.push(txt);
-          } else {
-            nameParts.push(txt);
+            if (isSwitchType || isSensorSpec || isConnectionType || isDescriptor) {
+              typeParts.push(txt);
+            } else if (isColor) {
+              // Colors ALWAYS go to variante, regardless of X position
+              colorParts.push(txt);
+            } else if (relX < 0.45) {
+              if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
+                typeParts.push(txt);
+              } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
+                // Ya hay un código en el modelo y este token está a la derecha
+                // y debajo del código — es el detalle/switch de la celda (ej:
+                // "Jade King" debajo de "68HE Ultra").
+                typeParts.push(txt);
+              } else {
+                nameParts.push(txt);
+                if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+              }
+            } else if (relX < 0.85) {
+              if (isColor) {
+                colorParts.push(txt);
+              } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
+                typeParts.push(txt);
+              } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
+                typeParts.push(txt);
+              } else {
+                nameParts.push(txt);
+                if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+              }
+            }
+            // relX >= 0.85: zona de precios, ya filtrado
           }
-        } else if (relX < 0.85) {
-          if (isColor) {
-            colorParts.push(txt);
-          } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
-            typeParts.push(txt);
-          } else {
-            nameParts.push(txt);
-          }
-        }
-        // relX >= 0.85: zona de precios, ya filtrado
-      }
 
       // Construir modelo y variante
       let rawModelo = nameParts.join(' ').replace(/\s+/g, ' ').trim();
@@ -2122,4 +2134,5 @@ if (!rawModelo) continue;
 };
 
 if (typeof window !== 'undefined') window.PdfParser = PdfParser;
-if (typeof module !== 'undefined') module.exports = PdfParser;
+if (typeof module !== 'undefined') module.exports = PdfParser;
+
