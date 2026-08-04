@@ -141,7 +141,7 @@ const TextSanitizer = {
     }
 
     // 5. Cross-field audit: fix contamination between modelo, variante, marca
-    const audited = this.crossAuditFields(modelo, variante, marca, cat);
+    const audited = this.crossAuditFields(modelo, variante, marca, cat, !!item._keepColorNames);
     modelo = audited.modelo;
     variante = audited.variante;
     marca = audited.marca;
@@ -150,7 +150,7 @@ const TextSanitizer = {
     //     (e.g. "68 V3" -> V3 moved to variante -> modelo degenerates to "68"). If modelo
     //     ended up as noise while variante still holds content, recover the model from it.
     if (/^(item|list|earphones?|products?|producto|none|n\/a|undefined|null|[-.]|\$?\d+([\.,]\d+)?)$/i.test(modelo.trim()) && variante) {
-      const recovered = this.crossAuditFields('', variante, marca, cat);
+      const recovered = this.crossAuditFields('', variante, marca, cat, !!item._keepColorNames);
       modelo = recovered.modelo;
       variante = recovered.variante;
     }
@@ -204,14 +204,14 @@ const TextSanitizer = {
    * Cross-field audit: detects and fixes contamination between modelo, variante, marca.
    * Runs AFTER basic sanitization to catch what the extractor missed.
    */
-  crossAuditFields(modelo, variante, marca, cat) {
+  crossAuditFields(modelo, variante, marca, cat, keepColorNames = false) {
     modelo = (modelo || '').trim();
     variante = (variante || '').trim();
     marca = (marca || '').trim();
 
     // 1. Move color words from modelo → variante
     // IMPORTANT: Do NOT use .test() before .match() on /g regexes — lastIndex bug!
-    const colorInModel = modelo ? modelo.match(this.COLOR_WORDS_RE) : null;
+    const colorInModel = (!keepColorNames && modelo) ? modelo.match(this.COLOR_WORDS_RE) : null;
     if (colorInModel && colorInModel.length > 0) {
       const modeloNoColor = modelo.replace(this.COLOR_WORDS_RE, '').replace(/\s+/g, ' ').trim();
       const colorsToMove = colorInModel.join(' ');
@@ -264,7 +264,11 @@ const TextSanitizer = {
     }
 
     // 3. Remove category words from modelo (they don't belong there)
-    modelo = modelo.replace(this.CATEGORY_WORDS_RE, '').replace(/\s+/g, ' ').trim();
+        // SLICE 3 (Haimu switch specs): "Switch" is part of the switch NAME
+        // ("Brown Switch", "SeaSalt Switch") — keep it when keepColorNames is set.
+        if (!keepColorNames) {
+          modelo = modelo.replace(this.CATEGORY_WORDS_RE, '').replace(/\s+/g, ' ').trim();
+        }
 
     // 4. Remove price patterns from modelo and variante
     const PRICE_IN_FIELD_RE = /\$?\d{1,4}[.,]\d{2}\b|\b\d{1,4}[.,]\d{2}\s*(usd|dollars?)?\b/gi;
@@ -309,7 +313,10 @@ const TextSanitizer = {
     //     words that belong in the model name (e.g. "Wireless Controller", "Bluetooth Keyboard"),
     //     move them to modelo. This fixes cases like modelo="Ultimate" var="Wireless Controller Black"
     //     → modelo="Ultimate Wireless Controller" var="Black"
-    if (modelo && modelo.length < 20 && variante) {
+        // SLICE 4: a model ending in a code suffix letter ("G502 X", "M750 M") is
+        // already complete — do NOT pull type words from variante into it.
+        const codeSuffixRe = /\b[A-Z0-9]{2,}\s+[A-Z]$/i;
+        if (modelo && modelo.length < 20 && variante && !codeSuffixRe.test(modelo.trim())) {
       const TYPE_PREFIX_RE = /^((?:wired|wireless|bluetooth|2\.4g|tri[\s-]?mode|usb[\s-]?c|rgb)\s+)?(controller|keyboard|teclado|mouse|headset|auricular|earphone|gamepad|joystick|mousepad|numpad|switch|webcam|camera|speaker|monitor|chair)\b/i;
       const prefixMatch = variante.match(TYPE_PREFIX_RE);
       if (prefixMatch) {
@@ -477,7 +484,7 @@ const TextSanitizer = {
 
       // 1. Cross-audit
       if (typeof this.crossAuditFields === 'function') {
-        const audited = this.crossAuditFields(modelo, variante, marca, cat);
+        const audited = this.crossAuditFields(modelo, variante, marca, cat, !!item._keepColorNames);
         modelo = audited.modelo;
         variante = audited.variante;
         marca = audited.marca;

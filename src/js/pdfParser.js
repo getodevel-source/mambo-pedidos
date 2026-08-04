@@ -766,6 +766,11 @@ const PdfParser = {
     priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
     const pageProducts = [];
 
+        // SLICE 3 (KZ matrix): detect "Model Name" rows — horizontal bands of
+        // code-like tokens (EDCX/ZNA/DQS/ZAR/ZVX) under a "型号 / Model Name"
+        // header. Each band maps column X -> real model.
+        const modelNameRows = this.detectModelNameRows(rawElements, isPageNoise);
+
     // 4. Construir Bounding Box de Celda 2D determinística para cada Ancla de Precio
     for (let i = 0; i < priceAnchors.length; i++) {
       const anchor = priceAnchors[i];
@@ -854,6 +859,36 @@ const PdfParser = {
       }
 
       
+
+          // SLICE 3 (KZ matrix): if the first line is a pure color (a bleed from
+          // the PREVIOUS block's color row) and a Model Name row exists above in
+          // the same column, the real model is the Model Name token.
+          if (modelNameRows.length > 0) {
+            const pureColorRe = /^(transparent|black|white|silver|grey|gray|blue|red|pink|green|purple|gold|cyan|orange|brown|coffee|cream|teal|navy)$/i;
+            const firstLineIsColor = pureColorRe.test((rawModelo || '').trim());
+            const codeLess = /\b[A-Za-z]+\b/.test(rawModelo || '') && !/\d/.test(rawModelo || '');
+            const mnr = this.findModelNameRowAbove(modelNameRows, anchor.y);
+            if (mnr && (firstLineIsColor || !rawModelo || codeLess)) {
+              const colTok = this.findModelNameTokenAt(mnr, anchor.x);
+              if (colTok) {
+                // Only override when the current model does NOT already contain a
+                // token of the model-name row (keep ZVX PRO, AM16).
+                const curTokens = (rawModelo || '').split(/\s+/).map(w => w.toLowerCase());
+                const mnrHasToken = curTokens.some(w => mnr.tokens.some(t => t.text.toLowerCase().split(/\s+/).includes(w)));
+                if (firstLineIsColor || !rawModelo || !mnrHasToken) {
+                  // Keep the color as variant instead of model.
+                  if (firstLineIsColor) {
+                    rawVariante = (rawModelo + ' ' + rawVariante).replace(/\s+/g, ' ').trim();
+                  }
+                  rawModelo = colTok;
+                  // The Model Name token may also appear inside the cell text — drop
+                  // it from the variant to avoid duplication (KZ matrix).
+                  const tokLower = colTok.toLowerCase();
+                  rawVariante = rawVariante.split(/\s+/).filter(w => w.toLowerCase() !== tokLower).join(' ');
+                }
+              }
+            }
+          }
 if (!rawModelo) continue;
 
       const rawCombined = rawModelo + ' ' + rawVariante;
@@ -1012,9 +1047,20 @@ pageProducts.push({
     let lastInheritedModel = '';
     let lastInheritedBrand = '';
     let lastInheritedCat = '';
+    let lastInheritedPrice = 0;
 
     // Determinar la X de la columna de precios USD (promedio de anclas)
     const priceColX = priceAnchors.reduce((s, a) => s + a.x, 0) / priceAnchors.length;
+
+        // SLICE 3 (Haimu switch specs): a technical-parameters column sits between
+        // the name column and the price (tokens like "stroke:", "material:",
+        // "force:", "axle"). When present, numeric/material tokens in that band
+        // belong to specs (variante), never to the model name.
+        const specKwCount = rawElements.filter(el => {
+          if (el.x < 180 || el.x > priceColX - 60) return false;
+          return /(stroke:|material:|force:|cover|axle|bottoming|total\s*stroke|working\s*(stroke|force))/i.test(el.text);
+        }).length;
+        const hasSpecsColumn = specKwCount >= 4;
 
         // SLICE 1: cabeceras de tabla detectadas (Model | Color | Axis | Image | CNY | USD)
         const tableHeaders = this.detectTableHeaders(rawElements, priceColX);
@@ -1092,7 +1138,9 @@ pageProducts.push({
         const txt = el.text;
 
         // Filtrar ruido
-        if (isPageNoise(txt)) continue;
+        // SLICE 4: preserve single-letter model suffixes ("G502 X", "M750 M") in
+        // the model band — they are part of the code, not noise.
+        if (isPageNoise(txt) && !(el.x < 150 && /^[A-Z]$/.test(txt))) continue;
         if (isHeaderNoiseLine(txt)) continue;
 
         // Filtrar CNY: símbolo ¥ y números bare cerca de la columna de precios
@@ -1151,26 +1199,43 @@ pageProducts.push({
             const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material)\b/i.test(txt);
             const isColor = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|faker|wukong|myth|gunmetal|blackberry|periwinkle|neon|flash|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|arctic|fox|dream|whimsy|perilla|obsidian|any|tea)\b/i.test(txt);
 
-            if (isSwitchType || isSensorSpec || isConnectionType || isDescriptor) {
-              typeParts.push(txt);
-            } else if (isColor) {
-              // Colors ALWAYS go to variante, regardless of X position
-              colorParts.push(txt);
-            } else if (relX < 0.45) {
-              if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
-                typeParts.push(txt);
-              } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
-                // Ya hay un código en el modelo y este token está a la derecha
-                // y debajo del código — es el detalle/switch de la celda (ej:
-                // "Jade King" debajo de "68HE Ultra").
-                typeParts.push(txt);
-              } else {
-                nameParts.push(txt);
-                if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
-              }
+                if (isSwitchType || isSensorSpec || isConnectionType || isDescriptor) {
+                  // SLICE 3 (Haimu): in a switch-specs layout the left band
+                  // (x<180) holds the switch NAME (SeaSalt, Brown, Voice Actor),
+                  // while "Switch"/"Mechanical" there are part of that name.
+                  if (hasSpecsColumn && el.x < 60) {
+                    nameParts.push(txt);
+                    if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                  } else {
+                    typeParts.push(txt);
+                  }
+                } else if (isColor && !(hasSpecsColumn && el.x < 60)) {
+                  // Colors ALWAYS go to variante, regardless of X position.
+                  // SLICE 3 (Haimu): in the switch-name column (x<60) "Brown"/
+                  // "Blue"/"Red" are switch NAMES, not colors — handled below.
+                  colorParts.push(txt);
+                } else if (relX < 0.45) {
+                  if (hasSpecsColumn && el.x < 60) {
+                    nameParts.push(txt);
+                    if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                  } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
+                    typeParts.push(txt);
+                  } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
+                    // Ya hay un código en el modelo y este token está a la derecha
+                    // y debajo del código — es el detalle/switch de la celda (ej:
+                    // "Jade King" debajo de "68HE Ultra").
+                    typeParts.push(txt);
+                  } else {
+                    nameParts.push(txt);
+                    if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                  }
             } else if (relX < 0.85) {
               if (isColor) {
                 colorParts.push(txt);
+              } else if (hasSpecsColumn && /^[\d.]+(\s*(mm|mn|g|kg))?$|^[±±]$|^(pom|pa|pc|upe|pe|pet|fr4|ixpe|poron|brass|steel|silver)$/i.test(txt.trim())) {
+                // SLICE 3 (Haimu): numeric spec values and housing materials in
+                // the technical-parameters band go to variante, not the model.
+                typeParts.push(txt);
               } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
                 typeParts.push(txt);
               } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
@@ -1193,9 +1258,15 @@ pageProducts.push({
       const rowModelEmpty = !rawModelo;
       let modelFromSwap = false;
       let swapOriginalVariante = '';
+      let inheritedModelFlag = false;
+      let inheritedFromPrice = 0;
       if (!rawModelo && lastInheritedModel) {
         rawModelo = lastInheritedModel;
         // Don't swap — the color stays in variante
+        // SLICE 4: remember we inherited (the model may belong to the fused
+        // cell BELOW whose text is centered — price disambiguates later).
+        inheritedModelFlag = true;
+        inheritedFromPrice = lastInheritedPrice;
       } else if (!rawModelo && rawVariante) {
         // Sin herencia disponible — swap como último recurso: se marca para
         // backfill (la siguiente fila con modelo real corrige el modelo).
@@ -1211,7 +1282,7 @@ if (!rawModelo) continue;
       const detectedBrand = this.detectBrandFromTextLine(rawCombined, customBrands) || brandFallback || 'OTRO';
       const cat = this.detectCategory(rawCombined, detectedBrand);
 
-      const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
+          const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts, hasSpecsColumn);
       // Skip phantom rows: raw content is only a price/header token with no variant
       // (the RMB price column parsed as a row, or a "PRICE PRICE" header) — not a product.
       if (!(rawVariante || '').trim() && (/^\$?\d+([\.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
@@ -1272,8 +1343,12 @@ if (!rawModelo) continue;
         cellRawText: rawCombined,
         pageNum,
         x: anchor.x,
-        y: anchor.y
+        y: anchor.y,
+            _keepColorNames: hasSpecsColumn
       });
+      const pushedNow = pageProducts[pageProducts.length - 1];
+      pushedNow._inheritedModel = inheritedModelFlag;
+      pushedNow._inheritedFromPrice = inheritedFromPrice;
 
       // SLICE 2 backfill: esta fila tiene modelo real y las anteriores quedaron con
       // un swap de color/switch (celda de modelo fusionada con texto centrado).
@@ -1315,14 +1390,133 @@ if (!rawModelo) continue;
         lastInheritedModel = sanitized.modelo;
         lastInheritedBrand = detectedBrand;
         lastInheritedCat = cat;
+        lastInheritedPrice = anchor.price;
       }
     }
 
-    for (const p of pageProducts) { delete p._needsModel; }
+    // SLICE 4: fused-cell forward model. A row that inherited a model but whose
+    // price differs from the inherited model's price belongs to a NEW fused cell
+    // whose model text is centered BELOW (Logitech: "M750 M" below the first
+    // price row of its block). Bind by price + Y-overlap: the next row with a
+    // real (non-inherited) model and the SAME price wins.
+    for (let fi = 0; fi < pageProducts.length; fi++) {
+      const fused = pageProducts[fi];
+      if (!fused._inheritedModel) continue;
+      if (Math.abs(fused.fob - fused._inheritedFromPrice) < 0.01) continue; // same block, fine
+      // Price differs from the inherited model's price -> look ahead for a real
+      // model with the SAME price within a reasonable Y window.
+      const fob = fused.fob;
+      for (let fj = fi + 1; fj < pageProducts.length; fj++) {
+        const cand = pageProducts[fj];
+        if (cand._inheritedModel) continue; // also inherited, not a real model
+        if (Math.abs(cand.fob - fob) > 0.01) continue; // different price block
+        if (cand.y - fused.y > avgRowHeight * 1.5) break; // too far, not the same cell
+        if (cand.modelo && cand.modelo !== fused.modelo) {
+          const restoredVariante = fused.variante || '';
+          fused.modelo = cand.modelo;
+          fused.variante = restoredVariante;
+          fused.rawText = (fused.modelo + ' ' + restoredVariante).replace(/\s+/g, ' ').trim();
+          fused.cellRawText = fused.rawText;
+          fused.cat = this.detectCategory(fused.rawText, fused.marca);
+          fused.marca = this.detectBrandFromTextLine(fused.rawText, customBrands) || fused.marca || brandFallback || 'OTRO';
+        }
+        break;
+      }
+    }
+
+    for (const p of pageProducts) { delete p._needsModel; delete p._inheritedModel; delete p._inheritedFromPrice; }
     return pageProducts;
   },
 
-  sanitizeProductNames(rawModelo, rawVariante, brand, existingProducts = []) {
+  // SLICE 3 (KZ matrix): find horizontal bands of code-like tokens sitting just
+  // below a "型号 / Model Name" header. Returns [{ y, tokens: [{x, text}] }].
+  detectModelNameRows(rawElements, isPageNoise) {
+    const rows = [];
+    const band = {};
+    const headerLabels = [];
+    // Colors that look code-like but are NOT model names (KZ color rows).
+    const COLOR_TOK = /^(transparent|black|white|silver|grey|gray|blue|red|pink|green|purple|gold|cyan|orange|brown|coffee|cream|teal|navy|black\/cyan|silver\/black|grey\/cyan|black\/white)$/i;
+    for (const el of rawElements) {
+      if (isPageNoise && isPageNoise(el.text)) continue;
+      // Structural labels ("Model" / "Name") live far left; "型号" is filtered as
+      // CJK noise but the English pair survives and marks the header band.
+      if (el.x < 120 && /^(Model|Name|Model Name)$/.test(el.text.trim())) {
+        headerLabels.push(el.y);
+      }
+      if (/^[¥￥$]/.test(el.text)) continue;
+      if (this.extractUsdPrice(el.text) !== null) continue;
+      if (el.x < 120) continue; // model names are in the column area
+      if (COLOR_TOK.test(el.text.trim())) continue; // color row, not model row
+      const key = Math.round(el.y / 8);
+      (band[key] = band[key] || []).push({ x: el.x, y: el.y, text: el.text });
+    }
+    for (const key of Object.keys(band)) {
+      const toks = band[key];
+      if (toks.length < 2) continue;
+      toks.sort((a, b) => a.x - b.x);
+      // Model-name tokens: alphanumeric (allow mixed case: Libra, Sonata/),
+      // reject long pure-word descriptors (Version, Switches, Resolution) and
+      // short standalone suffixes (Hot, Pro, X) that follow a real token.
+      const codeLike = toks.filter(t => {
+        const s = t.text.trim();
+        if (!/^[A-Za-z0-9][A-Za-z0-9/-]{1,}$/.test(s)) return false;
+        if (/^[A-Za-z]{6,}$/.test(s)) return false;
+        // Price-row labels that repeat per column (KZ "Without mic" / "With mic")
+        // are NOT model names.
+        if (/^(mic|without|with|price|rmb|usd|version|edition|color|model)$/i.test(s)) return false;
+        return true;
+      });
+      if (codeLike.length < 2) continue;
+      // Cluster tokens closer than 60px (e.g. "ZVX" + "PRO" in one column), then
+      // require >= 2 clusters separated by >= 60px (multiple matrix columns).
+      const clusters = [];
+      for (const t of codeLike) {
+        const last = clusters[clusters.length - 1];
+        if (last && t.x - last.tokens[last.tokens.length - 1].x < 60) {
+          last.tokens.push(t);
+        } else {
+          clusters.push({ x: t.x, tokens: [t] });
+        }
+      }
+      if (clusters.length < 2) continue;
+      let ok = true;
+      for (let i = 1; i < clusters.length; i++) {
+        if (clusters[i].x - clusters[i - 1].x < 60) { ok = false; break; }
+      }
+      if (!ok) continue;
+      // The row must sit right under a "Model Name" header label.
+      const rowY = toks[0].y;
+      if (!headerLabels.some(hy => Math.abs(hy - rowY) <= 45)) continue;
+      const tokens = clusters.map(c => ({
+        x: c.tokens[0].x,
+        text: c.tokens.map(t => t.text).join(' ')
+      }));
+      rows.push({ y: rowY, tokens });
+    }
+    return rows.sort((a, b) => a.y - b.y);
+  },
+
+  // Nearest model-name row above (within 260px) the anchor.
+  findModelNameRowAbove(modelNameRows, anchorY) {
+    let best = null;
+    for (const r of modelNameRows) {
+      if (r.y >= anchorY - 5) continue;
+      if (anchorY - r.y > 260) continue;
+      if (!best || anchorY - r.y < anchorY - best.y) best = r;
+    }
+    return best;
+  },
+
+  // Token of the model-name row whose X is closest to anchorX.
+  findModelNameTokenAt(mnr, anchorX) {
+    let best = null;
+    for (const t of mnr.tokens) {
+      if (!best || Math.abs(t.x - anchorX) < Math.abs(best.x - anchorX)) best = t;
+    }
+    return best ? best.text : null;
+  },
+
+  sanitizeProductNames(rawModelo, rawVariante, brand, existingProducts = [], keepColorNames = false) {
     let modelo = (rawModelo || '').trim();
     let variante = (rawVariante || '').trim();
 
@@ -1354,8 +1548,10 @@ if (!rawModelo) continue;
 
     // 1d. Mover colores del modelo a variante
     const COLOR_EXTRACT_RE = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|gunmetal|blackberry|neon|arctic|translucent)\b/gi;
-    const colorMatches = modelo.match(COLOR_EXTRACT_RE);
-    if (colorMatches && colorMatches.length > 0) {
+        const colorMatches = modelo.match(COLOR_EXTRACT_RE);
+        // SLICE 3 (Haimu switch specs): "Brown"/"Blue"/"Red" are switch NAMES in
+        // the left name column, not colors — keep them in the model.
+        if (colorMatches && colorMatches.length > 0 && !keepColorNames) {
       const nonColorWords = modelo.replace(COLOR_EXTRACT_RE, '').replace(/\s+/g, ' ').trim();
       // ALWAYS move colors to variante — even if modelo becomes empty
       modelo = nonColorWords;

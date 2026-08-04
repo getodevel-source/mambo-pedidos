@@ -370,7 +370,7 @@
   },
   "neu": {
    "modelo": "X5 2.4Ghz/USB",
-   "variante": "Wired/Bluetooth Black",
+   "variante": "C Wired/Bluetooth Black",
    "status": "GREEN"
   }
  },
@@ -459,8 +459,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "Transparent",
-   "variante": "EDCX",
+   "modelo": "EDCX",
+   "variante": "Transparent",
    "status": "GREEN"
   }
  },
@@ -489,7 +489,7 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "High Resolution",
+   "modelo": "Libra",
    "variante": "",
    "status": "GREEN"
   }
@@ -534,8 +534,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "SeaSalt 47 5g",
-   "variante": "Mechanical Switch Silent Tactile",
+   "modelo": "SeaSalt Switch Silent",
+   "variante": "0.50mn Mechanical Switch Tactile 47",
    "status": "YELLOW"
   }
  },
@@ -549,8 +549,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "3.5 Midnight 52 5g 60",
-   "variante": "Mechanical Switch Linear Bottoming Blue",
+   "modelo": "Midnight Blue Switch",
+   "variante": "3.5 Mechanical Switch Linear 52",
    "status": "YELLOW"
   }
  },
@@ -564,8 +564,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "3.6 Flamingo 47 10g 55",
-   "variante": "Mechanical Switch Linear Bottoming",
+   "modelo": "Flamingo Switch",
+   "variante": "3.6 Mechanical Switch Linear 47",
    "status": "YELLOW"
   }
  },
@@ -579,8 +579,8 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "2.0 39 5g 54 4g",
-   "variante": "Mechanical Switch Tactile Bottoming Brown",
+   "modelo": "Brown Switch",
+   "variante": "2.0 0.50mn Mechanical Switch Tactile",
    "status": "YELLOW"
   }
  },
@@ -594,14 +594,14 @@
    "status": "YELLOW"
   },
   "neu": {
-   "modelo": "2.0 41 5g 54 4g Switch",
-   "variante": "Mechanical Bottoming Blue",
+   "modelo": "Blue Switch",
+   "variante": "2.0 0.50mn Mechanical Switch 41",
    "status": "YELLOW"
   }
  },
  {
   "id": 41,
-  "dist": 1,
+  "dist": 33,
   "veredicto": "CRITICO",
   "old": {
    "modelo": "Master Wireless Mouse",
@@ -610,7 +610,7 @@
   },
   "neu": {
    "modelo": "Master Wireless Mouse",
-   "variante": "Black",
+   "variante": "Grey",
    "status": "GREEN"
   }
  },
@@ -639,8 +639,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "M720 Wireless Mouse",
-   "variante": "Black",
+   "modelo": "M750 M",
+   "variante": "Wireless Mouse Black",
    "status": "GREEN"
   }
  },
@@ -654,8 +654,8 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "G502 Wired Mouse",
-   "variante": "Black",
+   "modelo": "G502 X",
+   "variante": "Wired Mouse Black",
    "status": "GREEN"
   }
  },
@@ -744,7 +744,7 @@
    "status": "GREEN"
   },
   "neu": {
-   "modelo": "Polar",
+   "modelo": "Huano",
    "variante": "Black",
    "status": "GREEN"
   }

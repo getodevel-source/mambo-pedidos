@@ -114,6 +114,10 @@ const Tests = {
     await this.testPersistenceWithEvidence();
     await this.testStoreFallbackRecovery();
     this.testImportabilityFilter();
+    this.testFase2Slice3KzMatrixModelName();
+    this.testFase2Slice3KzHighResolution();
+    this.testFase2Slice3HaimuSwitchName();
+    this.testFase2Slice4LogitechFusedCellForwardModel();
 
     const passed = this.results.filter(r => r.pass).length;
     const total = this.results.length;
@@ -2039,6 +2043,193 @@ const Tests = {
     const redR1 = redItem._evaluations.find(e => e.code === 'R1');
     this.assert(redR1.importability === 'REJECTED', 'RED R1 has REJECTED importability');
     this.assert(redR1.status === 'RED', 'RED R1 has RED status');
+  },
+  testFase2Slice3KzMatrixModelName() {
+    // KZ matrix layout: block with Model Name row (EDCX/ZNA/DQS/ZAR/ZVX) under
+    // the color row. The USD anchor at y=495 (block 2, col EDCX) must use the
+    // Model Name "EDCX" as modelo, NOT the previous block's color "Transparent".
+    const items = [
+      // Block 1 headers (EDA col)
+      { str: '型号', transform: [1,0,0,1,10,790] },
+      { str: 'EDA', transform: [1,0,0,1,163,792] },
+      { str: 'Blanced', transform: [1,0,0,1,187,792] },
+      { str: 'Edition', transform: [1,0,0,1,229,792] },
+      // Block 1 prices (col EDA at x~200)
+      { str: 'RMB', transform: [1,0,0,1,88,648] },
+      { str: 'PRICE', transform: [1,0,0,1,112,648] },
+      { str: '￥', transform: [1,0,0,1,198,648] },
+      { str: '40.25', transform: [1,0,0,1,207,648] },
+      { str: 'USD', transform: [1,0,0,1,88,621] },
+      { str: 'PRICE', transform: [1,0,0,1,110,621] },
+      { str: '$5.92', transform: [1,0,0,1,202,621] },
+      // Block 1 colors (Transparent = the poison that must NOT become modelo)
+      { str: 'Color', transform: [1,0,0,1,10,533] },
+      { str: 'Transparent', transform: [1,0,0,1,186,533] },
+      // Block 2 Model Name row (EDCX col at x~200)
+      { str: '型号', transform: [1,0,0,1,10,492] },
+      { str: 'Model', transform: [1,0,0,1,10,478] },
+      { str: 'Name', transform: [1,0,0,1,40,478] },
+      { str: 'EDCX', transform: [1,0,0,1,200,486] },
+      { str: 'ZNA', transform: [1,0,0,1,340,486] },
+      { str: 'DQS', transform: [1,0,0,1,477,486] },
+      // Block 2 prices (col EDCX at x~202)
+      { str: 'RMB', transform: [1,0,0,1,88,349] },
+      { str: 'PRICE', transform: [1,0,0,1,112,349] },
+      { str: '￥', transform: [1,0,0,1,198,349] },
+      { str: '18.40', transform: [1,0,0,1,207,349] },
+      { str: 'USD', transform: [1,0,0,1,88,322] },
+      { str: 'PRICE', transform: [1,0,0,1,110,322] },
+      { str: '$2.71', transform: [1,0,0,1,202,322] },
+      { str: '$10.99', transform: [1,0,0,1,338,322] },
+      { str: '$6.43', transform: [1,0,0,1,477,322] },
+      { str: 'Without', transform: [1,0,0,1,19,316] },
+      { str: 'mic', transform: [1,0,0,1,59,316] },
+      // Block 2 colors
+      { str: 'Color', transform: [1,0,0,1,10,236] },
+      { str: 'Grey/Cyan', transform: [1,0,0,1,191,236] }
+    ];
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], 'KZ', []);
+    const anyModelWithEdcx = products.some(p => p.modelo === 'EDCX' || p.modelo.includes('EDCX'));
+    this.assert(anyModelWithEdcx, 'FASE2-S3-KZ: EDCX apareció como modelo (matriz KZ)');
+    const anyTransparentModel = products.some(p => p.modelo === 'Transparent');
+    this.assert(!anyTransparentModel, 'FASE2-S3-KZ: "Transparent" (color del bloque 1) NO es modelo');
+  },
+
+  testFase2Slice3KzHighResolution() {
+    // KZ p7: descriptor "High Resolution" must not become the model; the real
+    // model is the header of its column block (Libra 高解析版 / Libra High Res).
+    const items = [
+      // Header row
+      { str: '型号', transform: [1,0,0,1,10,790] },
+      { str: 'Libra', transform: [1,0,0,1,185,790] },
+      { str: '均衡版', transform: [1,0,0,1,213,790] },
+      { str: 'Libra', transform: [1,0,0,1,317,790] },
+      { str: '高解析版', transform: [1,0,0,1,345,790] },
+      // Block 1 prices (col 1 x~200, col 2 x~340)
+      { str: 'USD', transform: [1,0,0,1,110,632] },
+      { str: 'PRICE', transform: [1,0,0,1,110,618] },
+      { str: '$4.57', transform: [1,0,0,1,202,626] },
+      { str: '$4.90', transform: [1,0,0,1,340,626] },
+      // Block 1 colors
+      { str: 'Color', transform: [1,0,0,1,10,556] },
+      { str: 'Black', transform: [1,0,0,1,199,556] },
+      { str: 'Black', transform: [1,0,0,1,337,556] },
+      // Block 2 Model Name row (Libra X / Sonata ...)
+      { str: '型号', transform: [1,0,0,1,10,500] },
+      { str: 'Model', transform: [1,0,0,1,10,486] },
+      { str: 'Name', transform: [1,0,0,1,40,486] },
+      { str: 'Libra', transform: [1,0,0,1,185,494] },
+      { str: 'X', transform: [1,0,0,1,213,494] },
+      { str: '版', transform: [1,0,0,1,220,494] },
+      { str: 'Sonata/', transform: [1,0,0,1,317,494] },
+      // Block 2 prices (col 1 x~200)
+      { str: 'USD', transform: [1,0,0,1,110,332] },
+      { str: 'PRICE', transform: [1,0,0,1,110,318] },
+      { str: '$50.57', transform: [1,0,0,1,202,326] },
+      { str: '$8.46', transform: [1,0,0,1,340,326] },
+      // Block 2 colors
+      { str: 'Color', transform: [1,0,0,1,10,246] },
+      { str: 'Black', transform: [1,0,0,1,199,246] },
+      { str: 'Black', transform: [1,0,0,1,337,246] }
+    ];
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], 'KZ', []);
+    const highRes = products.filter(p => p.modelo.includes('High Resolution'));
+    this.assert(highRes.length === 0, 'FASE2-S3-KZ: "High Resolution" no debe quedar como modelo (descriptor)');
+    const libra = products.filter(p => p.modelo.includes('Libra'));
+    this.assert(libra.length >= 1, 'FASE2-S3-KZ: "Libra" aparece como modelo (header del bloque)');
+  },
+
+  testFase2Slice3HaimuSwitchName() {
+    // Haimu switch catalogue: name in left column (x<140: "SeaSalt Switch"),
+    // specs in the middle (x~300-400), price right (x~545). The model must be
+    // the switch name, NOT the technical specs.
+    const items = [
+      // Header
+      { str: 'Switch', transform: [1,0,0,1,22,730] },
+      { str: 'Classification', transform: [1,0,0,1,85,722] },
+      { str: 'Style', transform: [1,0,0,1,207,722] },
+      { str: 'Technical', transform: [1,0,0,1,299,722] },
+      { str: 'Parameters', transform: [1,0,0,1,359,722] },
+      { str: 'CNY', transform: [1,0,0,1,475,722] },
+      { str: 'USD', transform: [1,0,0,1,543,722] },
+      // Row: SeaSalt Switch (name at x<140)
+      { str: 'SeaSalt', transform: [1,0,0,1,7,75] },
+      { str: 'Switch', transform: [1,0,0,1,42,75] },
+      { str: 'Mechanical', transform: [1,0,0,1,83,68] },
+      { str: 'Switch', transform: [1,0,0,1,136,68] },
+      { str: 'Silent', transform: [1,0,0,1,96,81] },
+      { str: 'Tactile', transform: [1,0,0,1,123,81] },
+      // Specs (must NOT be the model)
+      { str: 'Working', transform: [1,0,0,1,298,84] },
+      { str: 'stroke:', transform: [1,0,0,1,339,84] },
+      { str: '2.00', transform: [1,0,0,1,372,84] },
+      { str: 'Lower', transform: [1,0,0,1,306,75] },
+      { str: 'cover', transform: [1,0,0,1,337,75] },
+      { str: 'material:', transform: [1,0,0,1,363,75] },
+      { str: 'PA', transform: [1,0,0,1,405,75] },
+      { str: 'Working', transform: [1,0,0,1,315,62] },
+      { str: 'force:', transform: [1,0,0,1,356,62] },
+      { str: '47', transform: [1,0,0,1,384,62] },
+      { str: '5g', transform: [1,0,0,1,399,62] },
+      // Price
+      { str: '￥', transform: [1,0,0,1,476,75] },
+      { str: '1.56', transform: [1,0,0,1,486,75] },
+      { str: '$0.22', transform: [1,0,0,1,545,75] }
+    ];
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], 'Haimu', []);
+    const p = products[0];
+    this.assert(p && p.modelo.includes('SeaSalt'), 'FASE2-S3-Haimu: modelo incluye el nombre del switch "SeaSalt"');
+    this.assert(!/working|stroke|cover|material/i.test(p.modelo), 'FASE2-S3-Haimu: specs técnicas NO quedan en el modelo');
+  },
+
+  testFase2Slice4LogitechFusedCellForwardModel() {
+    // Logitech fused cell: row at y=554 has NO model text but price $29.57.
+    // The model "M750 M" is centered BELOW at y=587 with the same price — the
+    // anchor must bind to M750 M (by Y-overlap), not inherit M720 from above.
+    const items = [
+      { str: 'Logitech', transform: [1,0,0,1,55,700] },
+      { str: 'M720', transform: [1,0,0,1,96,700] },
+      { str: 'Wireless', transform: [1,0,0,1,186,700] },
+      { str: 'Mouse', transform: [1,0,0,1,227,700] },
+      { str: 'Black', transform: [1,0,0,1,308,700] },
+      { str: '￥', transform: [1,0,0,1,471,700] },
+      { str: '163.44', transform: [1,0,0,1,481,700] },
+      { str: '$24.04', transform: [1,0,0,1,542,700] },
+      // y=554 row: NO model name, price $29.57 (belongs to M750 M block below)
+      { str: 'Wireless', transform: [1,0,0,1,186,666] },
+      { str: 'Mouse', transform: [1,0,0,1,227,666] },
+      { str: 'Black', transform: [1,0,0,1,308,666] },
+      { str: '￥', transform: [1,0,0,1,471,666] },
+      { str: '201.08', transform: [1,0,0,1,481,666] },
+      { str: '$29.57', transform: [1,0,0,1,542,666] },
+      // y=587 row: model centered here (M750 M), same price
+      { str: 'Logitech', transform: [1,0,0,1,49,633] },
+      { str: 'M750', transform: [1,0,0,1,90,633] },
+      { str: 'M', transform: [1,0,0,1,119,633] },
+      { str: 'Wireless', transform: [1,0,0,1,186,633] },
+      { str: 'Mouse', transform: [1,0,0,1,227,633] },
+      { str: 'White', transform: [1,0,0,1,307,633] },
+      { str: '￥', transform: [1,0,0,1,471,633] },
+      { str: '201.08', transform: [1,0,0,1,481,633] },
+      { str: '$29.57', transform: [1,0,0,1,542,633] },
+      // y=620 row: M750 M Pink (same price, continues block)
+      { str: 'Wireless', transform: [1,0,0,1,186,600] },
+      { str: 'Mouse', transform: [1,0,0,1,227,600] },
+      { str: 'Pink', transform: [1,0,0,1,310,600] },
+      { str: '￥', transform: [1,0,0,1,471,600] },
+      { str: '201.08', transform: [1,0,0,1,481,600] },
+      { str: '$29.57', transform: [1,0,0,1,542,600] }
+    ];
+    const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], 'Logitech', []);
+    // Effective Y = viewportHeight(800) - transform[5]: empty row at 800-666=134,
+    // M750 M row at 800-633=167, M720 row at 800-700=100.
+    const rowEmpty = products.find(p => Math.abs(p.y - 134) < 6);
+    const rowM750 = products.find(p => Math.abs(p.y - 167) < 6);
+    const rowM720 = products.find(p => Math.abs(p.y - 100) < 6);
+    this.assert(rowEmpty, 'FASE2-S4-Logitech: fila sin modelo (y=134) extraída');
+    this.assert(rowEmpty && /M750/.test(rowEmpty.modelo), 'FASE2-S4-Logitech: fila vacía usa modelo M750 M (celda fusionada con texto debajo) en vez de heredar M720');
+    this.assert(rowM750 && /M750/.test(rowM750.modelo), 'FASE2-S4-Logitech: fila M750 M (y=167) modelo correcto');
+    this.assert(rowM720 && /M720/.test(rowM720.modelo), 'FASE2-S4-Logitech: fila M720 (y=100) modelo correcto');
   }
 };
 
