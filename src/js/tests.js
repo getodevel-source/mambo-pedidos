@@ -2295,11 +2295,13 @@ const Tests = {
       this.assert(products[0].status === 'YELLOW', 'Modelo color degrada a YELLOW');
     }
 
-    // --- truncado → YELLOW ---
+    // --- truncado → reparado (modelo limpio + variante) ---
     {
       const p = { ...base, modelo: 'F87 (light', status: 'GREEN' };
       const { products } = G.applyModelQualityGates([p]);
-      this.assert(products[0].status === 'YELLOW', 'Modelo truncado degrada a YELLOW');
+      this.assert(products[0].modelo === 'F87', 'Modelo truncado se repara (base del modelo)');
+      this.assert(/light/.test(products[0].variante), 'Parte truncada pasa a variante');
+      this.assert(products[0].status === 'GREEN', 'Modelo reparado conserva GREEN');
     }
 
     // --- watch model no degrada ---

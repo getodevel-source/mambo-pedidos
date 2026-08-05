@@ -1778,6 +1778,10 @@ if (!rawModelo) continue;
       }
     }
 
+
+    // Recover real model names for variant rows whose model is a bare color
+    // or status word (e.g. "Purple", "released") by adopting the parent row.
+    this.recoverGenericModelNames(products);
     return products;
   },
 
@@ -2249,6 +2253,65 @@ if (!rawModelo) continue;
 
   guessCategory(modelo, variante) {
     return this.detectCategory((modelo || '') + ' ' + (variante || ''), '');
+  },
+
+  /**
+   * Recovers real model names for rows whose extracted model is a bare color or
+   * status word (e.g. "Purple", "released", "Black") — a variant row that lost
+   * its parent. The parent is the nearest product above on the same page with
+   * the same brand+category and a non-generic model. The color moves to the
+   * variant and the parent model is adopted.
+   * @returns {number} number of recovered products
+   */
+  recoverGenericModelNames(products) {
+    const GENERIC_MODEL_RE = /^(transparent|black|white|silver|grey|gray|blue|red|pink|green|purple|gold|cyan|orange|brown|coffee|cream|teal|navy|released|new|upcoming)$/i;
+    let recovered = 0;
+    for (const p of products) {
+      const modelo = String(p.modelo || '').trim();
+      if (!modelo || !GENERIC_MODEL_RE.test(modelo)) continue;
+      if (typeof p.y !== 'number' || typeof p.pageNum !== 'number') continue;
+
+      // Candidate parents: same brand+category, non-generic model.
+      // Priority 1: same FOB (a color/status row is a variant of the row with
+      // the same price), on the same page OR the previous page (first row of a
+      // continuation block). Priority 2: nearest row above on the same page.
+      let sameFob = null;
+      let sameFobDist = Infinity;
+      let nearest = null;
+      let nearestDist = Infinity;
+
+      for (const q of products) {
+        if (q === p) continue;
+        if (String(q.cat || '').toUpperCase() !== String(p.cat || '').toUpperCase()) continue;
+        if (String(q.marca || '').toLowerCase() !== String(p.marca || '').toLowerCase()) continue;
+        const qModelo = String(q.modelo || '').trim();
+        if (!qModelo || GENERIC_MODEL_RE.test(qModelo)) continue;
+        const qPage = typeof q.pageNum === 'number' ? q.pageNum : null;
+        const qY = typeof q.y === 'number' ? q.y : null;
+        if (qY === null || qPage === null) continue;
+
+        const fobMatch = typeof p.fob === 'number' && typeof q.fob === 'number' &&
+          Math.abs(p.fob - q.fob) <= 0.01 && (qPage === p.pageNum || qPage === p.pageNum - 1);
+        if (fobMatch) {
+          const dist = Math.abs(p.y - qY) + (qPage === p.pageNum - 1 ? 500 : 0);
+          if (dist < sameFobDist) { sameFobDist = dist; sameFob = q; }
+          continue;
+        }
+        if (qPage === p.pageNum && qY < p.y) {
+          const dist = p.y - qY;
+          if (dist <= 250 && dist < nearestDist) { nearestDist = dist; nearest = q; }
+        }
+      }
+
+      const best = sameFob || nearest;
+      if (best) {
+        p.variante = (modelo + ' ' + String(p.variante || '')).replace(/\s+/g, ' ').trim();
+        p.modelo = best.modelo;
+        p._modelRecovered = true;
+        recovered += 1;
+      }
+    }
+    return recovered;
   },
 
   matchImagesToProductsGlobal(products, allImages) {

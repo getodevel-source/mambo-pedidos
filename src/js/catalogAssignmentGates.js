@@ -70,12 +70,15 @@ const CatalogAssignmentGates = {
     return this.imageIdentity(product && product.img) !== null;
   },
 
-  /** Normalized duplicate key: brand + category + lowercased model + FOB. */
+  /** Normalized duplicate key: brand + category + model + variant + FOB.
+   * Variant is included so color variants of the same model+price are NOT
+   * reported as duplicates — only truly repeated rows (same everything). */
   duplicateKey(product) {
     return [
       String(product.marca || '').trim().toLowerCase(),
       String(product.cat || '').trim().toUpperCase(),
       String(product.modelo || '').trim().toLowerCase().replace(/\s+/g, ' '),
+      String(product.variante || '').trim().toLowerCase().replace(/\s+/g, ' '),
       typeof product.fob === 'number' ? product.fob : null,
     ].join('|');
   },
@@ -267,13 +270,24 @@ const CatalogAssignmentGates = {
       }
 
       if (this.isTruncatedModel(modelo)) {
-        if (p.status === 'GREEN') {
-          p.status = 'YELLOW';
+        // Repair: split "F87 (light" into model "F87" + variant "light" — the
+        // truncated parenthesis belongs to the variant, not the model.
+        const parenIdx = modelo.indexOf('(');
+        if (parenIdx > 0) {
+          const baseModel = modelo.slice(0, parenIdx).trim();
+          const tail = modelo.slice(parenIdx).trim();
+          p.modelo = baseModel;
+          p.variante = (tail + ' ' + String(p.variante || '')).replace(/\s+/g, ' ').trim();
+          changes.push({ sku: p.sku, type: 'truncated-model-repaired', detail: `"${modelo}" -> modelo "${baseModel}", variante "${tail}"` });
+        } else {
+          if (p.status === 'GREEN') {
+            p.status = 'YELLOW';
+          }
+          if (!p.warnings.includes('Modelo truncado (paréntesis sin cerrar)')) {
+            p.warnings.push('Modelo truncado (paréntesis sin cerrar)');
+          }
+          changes.push({ sku: p.sku, type: 'truncated-model', detail: `modelo "${modelo}"` });
         }
-        if (!p.warnings.includes('Modelo truncado (paréntesis sin cerrar)')) {
-          p.warnings.push('Modelo truncado (paréntesis sin cerrar)');
-        }
-        changes.push({ sku: p.sku, type: 'truncated-model', detail: `modelo "${modelo}"` });
       }
     }
 
