@@ -351,6 +351,28 @@ const CatalogAssignmentGates = {
           p.modelo = baseModel;
           p.variante = (tail + ' ' + String(p.variante || '')).replace(/\s+/g, ' ').trim();
           changes.push({ sku: p.sku, type: 'truncated-model-repaired', detail: `"${modelo}" -> modelo "${baseModel}", variante "${tail}"` });
+        } else if (parenIdx === 0) {
+          // '(' AL INICIO: todo el contenido es variante; el modelo real es el
+          // token con formato de código adentro ('(Light AF82 screen' -> modelo
+          // 'AF82', variante 'Light screen'). Sin token con dígitos -> YELLOW
+          // (es una nota, no un modelo: '(Extra keycap need be purchased').
+          const inner = modelo.slice(1).trim();
+          const codeMatch = inner.match(/\b[A-Za-z][A-Za-z0-9]*\s?\d{1,4}[A-Za-z0-9-]*\b/);
+          if (codeMatch) {
+            const baseModel = codeMatch[0].trim();
+            p.modelo = baseModel;
+            const rest = inner.replace(codeMatch[0], '').replace(/\s+/g, ' ').trim();
+            p.variante = (rest + ' ' + String(p.variante || '')).replace(/\s+/g, ' ').trim();
+            changes.push({ sku: p.sku, type: 'truncated-model-repaired', detail: `"${modelo}" -> modelo "${baseModel}", variante "${p.variante}"` });
+          } else {
+            if (p.status === 'GREEN') {
+              p.status = 'YELLOW';
+            }
+            if (!p.warnings.includes('Modelo truncado (paréntesis sin cerrar)')) {
+              p.warnings.push('Modelo truncado (paréntesis sin cerrar)');
+            }
+            changes.push({ sku: p.sku, type: 'truncated-model', detail: `modelo "${modelo}"` });
+          }
         } else {
           if (p.status === 'GREEN') {
             p.status = 'YELLOW';
