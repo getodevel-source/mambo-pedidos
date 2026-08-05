@@ -20,6 +20,7 @@ module.exports = [
         AppUpdater: 'writable',
         AiCatalogEngine: 'writable',
         Calculator: 'writable',
+        CatalogAssignmentGates: 'writable',
         CatalogValidator: 'writable',
         FileImporter: 'writable',
         LocalLlm: 'writable',

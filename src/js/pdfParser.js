@@ -93,7 +93,7 @@ const PdfParser = {
       const enrichedProducts = await this.enrichProductsWithCellLlm(allProducts, customBrands);
 
       // Asignar SKU y formatear catálogo final
-      const finalProducts = this.finalizeCatalogProducts(enrichedProducts, brand, catalogLength, customBrands);
+      const finalProducts = this.finalizeCatalogProducts(enrichedProducts, brand, catalogLength, customBrands, allImages);
       return { brand, products: finalProducts };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
@@ -624,7 +624,9 @@ const PdfParser = {
     }
 
     if (cat === 'TECLADO' && aspect < 0.8) {
-      score -= 30;
+      // En relaxed el shape gate ya penalizó (45): no apilar otra penalización
+      // dura — las fotos retrato de teclados (ATK, aspect ~0.5) son legítimas.
+      score -= relaxed ? 10 : 30;
       warnings.push(`⚠️ Imagen muy estrecha (ratio ${aspect.toFixed(2)}) para un teclado`);
     }
 
@@ -667,7 +669,11 @@ const PdfParser = {
 
         const isCompatible = (COMPATIBLE[expectedColor] || []).includes(imgColor);
         if (!isCompatible) {
-          score -= 40;
+          // En backfill (relaxed) el mismatch de color es solo una señal débil:
+          // las fotos combo/producto traen el color dominante del fondo (SILVER/
+          // GRAY) mientras el texto dice "Black". Penalizar duro aquí + el penalty
+          // de shape (45) hundia el score a 15 y rechazaba la única foto real.
+          score -= relaxed ? 10 : 40;
           warnings.push(`⚠️ Color de imagen (${imgColor}) no coincide con el producto (${expectedColor})`);
         }
       }
@@ -1720,7 +1726,7 @@ if (!rawModelo) continue;
     return { modelo: modelo || (brand !== 'OTRO' ? `${brand} Item` : 'Producto'), variante };
   },
 
-  finalizeCatalogProducts(allProducts, brandFallback, baseLength = 0, customBrands = []) {
+  finalizeCatalogProducts(allProducts, brandFallback, baseLength = 0, customBrands = [], allImages = []) {
     const products = [];
     const seen = new Set();
 
@@ -1737,16 +1743,9 @@ if (!rawModelo) continue;
        p.marca = detectedBrand;
 
        const sourceWarnings = Array.isArray(p.warnings) ? p.warnings : [];
-       const sourceStatus = p.status;
-       const sourceConfidence = Number.isFinite(p.confidence) ? p.confidence : null;
-       const evalScore = this.evaluateItemConfidence(p);
-       p.sourceStatus = sourceStatus || p.sourceStatus;
-       p.sourceConfidence = sourceConfidence === null ? p.sourceConfidence : sourceConfidence;
+       p.sourceStatus = p.status || p.sourceStatus;
+       p.sourceConfidence = Number.isFinite(p.confidence) ? p.confidence : (p.sourceConfidence || null);
        p.sourceWarnings = [...sourceWarnings];
-       p.confidence = sourceConfidence === null ? evalScore.confidence : Math.min(sourceConfidence, evalScore.confidence);
-       p.status = evalScore.status;
-       p.warnings = [...new Set([...sourceWarnings, ...evalScore.warnings])];
-       p.qualityReason = p.warnings[0] || 'Sin observaciones';
 
       products.push(p);
     }
@@ -1782,6 +1781,28 @@ if (!rawModelo) continue;
     // Recover real model names for variant rows whose model is a bare color
     // or status word (e.g. "Purple", "released") by adopting the parent row.
     this.recoverGenericModelNames(products);
+
+    // Backfill global de imágenes (doble pase estricto + relajado): las filas
+    // que el engine por-fila dejó sin foto (fotos desplazadas de la columna,
+    // tiles anchas tipo Logitech, galerías desfasadas) reciben la mejor imagen
+    // restante de su página. Es el matcher bipartito por página.
+    if (allImages && allImages.length) {
+      this.matchImagesToProductsGlobal(products, allImages);
+    }
+
+    // Evaluar confianza DESPUÉS de todas las asignaciones de imagen (herencia
+    // por modelo + backfill global): evita warnings fantasma de "imagen
+    // faltante" en productos que sí terminaron con foto, y evalúa con el
+    // modelo ya recuperado (recoverGenericModelNames).
+    for (const p of products) {
+      const evalScore = this.evaluateItemConfidence(p);
+      const srcConf = (p.sourceConfidence === null || p.sourceConfidence === undefined) ? null : p.sourceConfidence;
+      p.confidence = srcConf === null ? evalScore.confidence : Math.min(srcConf, evalScore.confidence);
+      p.status = evalScore.status;
+      p.warnings = [...new Set([...(p.sourceWarnings || []), ...evalScore.warnings])];
+      p.qualityReason = p.warnings[0] || 'Sin observaciones';
+    }
+
     return products;
   },
 
@@ -1968,13 +1989,21 @@ if (!rawModelo) continue;
 
     if (!item.marca || item.marca === 'OTRO') critical.push('Marca no identificada');
     if (!item.cat || item.cat === 'OTRO') critical.push('Categoría no identificada');
-    if (!item.modelo || item.modelo.length < 3) critical.push('Modelo vacío o demasiado corto');
+    if (!item.modelo || item.modelo.length < 2) critical.push('Modelo vacío o demasiado corto');
 
     if (!Number.isFinite(Number(item.fob)) || Number(item.fob) <= 0) {
       critical.push('FOB inválido');
-    } else if (item.fob < 0.50 || item.fob > 350.00) {
-      confidence -= 15;
-      warnings.push(`Precio FOB USD ($${Number(item.fob).toFixed(2)}) inusual o fuera de rango habitual`);
+    } else {
+      // Range by category: switches legitimately cost $0.19 (SWITCH min 0.05),
+      // while a keyboard below $0.50 is suspicious. Reuse the validator ranges.
+      const range = (typeof CatalogValidator !== 'undefined' && CatalogValidator.PRICE_RANGES)
+        ? CatalogValidator.PRICE_RANGES[item.cat] : null;
+      const minFob = range ? Math.max(0.01, range.min * 0.5) : 0.50;
+      const maxFob = range ? range.max : 350.00;
+      if (item.fob < minFob || item.fob > maxFob) {
+        confidence -= 15;
+        warnings.push(`Precio FOB USD ($${Number(item.fob).toFixed(2)}) inusual o fuera de rango habitual`);
+      }
     }
 
     if (!this.isValidImageDataUrl(item.img)) {
@@ -2442,6 +2471,37 @@ if (!rawModelo) continue;
       const stillEmpty = pageProds.some((p, idx) => !assignedProds.has(idx) && !this.isValidImageDataUrl(p.img));
       if (stillEmpty && assignedImgs.size < pageImgs.length) {
         runGreedy(buildMatrix(true));
+      }
+
+      // Pase 3 (galería desfasada): tablas con la galería de fotos desplazada
+      // (tabla arriba y fotos ~400-500px debajo, o viceversa — AJAZZ/ATK/AULA).
+      // Las gates de distancia no pueden cubrirlo sin arriesgar fugas entre
+      // filas densas, así que cuando los productos sin imagen == imágenes
+      // libres (>=3) y el desplazamiento fila↔foto es UNIFORME (pitch
+      // constante), se alinean por orden de Y. El check de uniformidad
+      // discrimina el orden correcto: solo el mapeo fila-i ↔ foto-i produce
+      // distancias constantes; el mapeo invertido es errático y no aplica.
+      const stillEmptyIdx = [];
+      for (let i = 0; i < pageProds.length; i++) {
+        if (!assignedProds.has(i) && !this.isValidImageDataUrl(pageProds[i].img)) stillEmptyIdx.push(i);
+      }
+      const freeImgsIdx = [];
+      for (let j = 0; j < pageImgs.length; j++) if (!assignedImgs.has(j)) freeImgsIdx.push(j);
+      if (stillEmptyIdx.length >= 3 && freeImgsIdx.length === stillEmptyIdx.length) {
+        const prodsAsc = [...stillEmptyIdx].sort((a, b) => pageProds[a].y - pageProds[b].y);
+        const imgsAsc = [...freeImgsIdx].sort((a, b) => pageImgs[a].y - pageImgs[b].y);
+        const dists = prodsAsc.map((pi, k) => pageProds[pi].y - pageImgs[imgsAsc[k]].y);
+        const mid = dists[Math.floor(dists.length / 2)];
+        const uniform = dists.every(d => Math.abs(d - mid) <= Math.max(60, Math.abs(mid) * 0.2));
+        if (uniform) {
+          for (let k = 0; k < prodsAsc.length; k++) {
+            const prod = pageProds[prodsAsc[k]];
+            const img = pageImgs[imgsAsc[k]];
+            prod.img = this.isValidImageDataUrl(img.dataUrl) ? img.dataUrl : '-';
+            assignedProds.add(prodsAsc[k]);
+            assignedImgs.add(imgsAsc[k]);
+          }
+        }
       }
     }
   },

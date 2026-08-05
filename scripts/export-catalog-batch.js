@@ -176,6 +176,8 @@ global.SkuAllocator = null; // will be set after require
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 require('../src/js/textSanitizer.js');
 require('../src/js/skuAllocator.js');
+const CatalogValidator = require('../src/js/catalogValidator.js');
+global.CatalogValidator = CatalogValidator;
 const PdfParser = require('../src/js/pdfParser.js');
 const AiCatalogEngine = require('../src/js/aiCatalogEngine.js');
 global.AiCatalogEngine = AiCatalogEngine;

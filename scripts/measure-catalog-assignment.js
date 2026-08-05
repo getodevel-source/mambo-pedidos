@@ -64,7 +64,7 @@ if (result.duplicates.length) {
 
 // Exit: 0 only if no RED remains and placeholders are flagged (never GREEN).
 const reds = result.after.status.RED;
-const greenPlaceholders = result.after.products.filter(
+const greenPlaceholders = result.products.filter(
   p => p.status === 'GREEN' && !GATES.hasRealImage(p)
 ).length;
 console.log(`\nRED post-gates: ${reds} | GREEN sin imagen: ${greenPlaceholders}`);
