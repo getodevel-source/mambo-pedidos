@@ -2002,11 +2002,16 @@ if (!rawModelo) continue;
       // while a keyboard below $0.50 is suspicious. Reuse the validator ranges.
       const range = (typeof CatalogValidator !== 'undefined' && CatalogValidator.PRICE_RANGES)
         ? CatalogValidator.PRICE_RANGES[item.cat] : null;
+      const fobNum = Number(item.fob);
+      // Fail-closed (B4): una categoría sin rango conocido (OTRO/desconocida)
+      // NUNCA debe dejar un FOB extremo (<$0.05 o >$2000) en GREEN silencioso.
+      // La banda conservadora 0.50–350 es más estricta que el piso del spec y
+      // cubre el rango intermedio; se mantiene deliberadamente (duda → YELLOW).
       const minFob = range ? Math.max(0.01, range.min * 0.5) : 0.50;
       const maxFob = range ? range.max : 350.00;
-      if (item.fob < minFob || item.fob > maxFob) {
+      if (fobNum < minFob || fobNum > maxFob) {
         confidence -= 15;
-        warnings.push(`Precio FOB USD ($${Number(item.fob).toFixed(2)}) inusual o fuera de rango habitual`);
+        warnings.push(`Precio FOB USD ($${fobNum.toFixed(2)}) inusual o fuera de rango habitual`);
       }
     }
 

@@ -66,7 +66,17 @@ const CatalogValidator = {
     const cat = (item.cat || '').trim().toUpperCase();
     const fob = Number.parseFloat(item.fob);
 
-    if (!sku || sku === '-') critical.push('SKU vacío o inválido');
+    // ── B6: SKU fail-closed. Vacío, '-' o formato inválido (espacios o
+    // caracteres no alfanuméricos) → critical (RED). NO se exige el patrón
+    // exacto de SkuAllocator (MARCA-CAT-HEX8): los productos manuales y de
+    // CSV usan SKUs propios legítimos (ej 'MOU-001') que no deben rechazarse.
+    const SKU_VALID_RE = /^[A-Z0-9][A-Z0-9-]{2,49}$/i;
+
+    if (!sku || sku === '-') {
+      critical.push('SKU vacío o inválido');
+    } else if (!SKU_VALID_RE.test(sku)) {
+      critical.push(`SKU inválido ("${sku}" contiene caracteres no válidos)`);
+    }
 
     // ── R1: FOB válido ──
     if (!Number.isFinite(fob) || fob <= 0) {
@@ -120,11 +130,12 @@ const CatalogValidator = {
       violations.push(`Modelo y variante idénticos ("${modelo}")`);
     }
 
-    // ── R9: Imagen válida. Advisory only — no bloquea GREEN si el resto está perfecto. ──
+    // ── R9: Imagen válida. Regla DURA (fail-closed, AP-1): sin imagen válida
+    // → violation → YELLOW vía runFullValidation. Nunca advisory. ──
     const hasImage = typeof item.img === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(item.img.trim());
-    // R9 is advisory: missing image does NOT block GREEN when all other fields are clean.
-    // It only contributes to YELLOW when combined with other violations.
-    const r9Missing = !hasImage;
+    if (!hasImage) {
+      violations.push('Sin imagen de producto');
+    }
 
     // ── R10: Evidencia literal del FOB. ──
     const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
@@ -135,7 +146,8 @@ const CatalogValidator = {
     }
 
     // ── Semáforo ──
-    // R9 (missing image) is advisory: only blocks GREEN when combined with other violations
+    // R9 (missing image) is hard: it pushes a violation above, so a product
+    // with everything OK but no image lands on YELLOW (never RED, never GREEN).
         // ── R-model: honest model-quality gate ──
         // GREEN only certifies structural completeness; this stops the semaphore from
         // lying when the extracted model is actually dirty (datasheet specs, glued switch,
@@ -146,16 +158,11 @@ const CatalogValidator = {
           if (_mq.level === 'RED') _mq.reasons.forEach(r => critical.push(r));
           else if (_mq.level === 'YELLOW') _mq.reasons.forEach(r => violations.push(r));
         }
-    const nonImageViolations = violations.length; // R9 no longer pushes to violations
-
     let status = 'GREEN';
     if (critical.length > 0) {
       status = 'RED';
-    } else if (nonImageViolations >= 1) {
+    } else if (violations.length >= 1) {
       status = 'YELLOW';
-    } else if (r9Missing) {
-      // Image missing but all text fields perfect → GREEN with advisory
-      status = 'GREEN';
     }
 
     const totalChecks = 11;
@@ -445,8 +452,8 @@ const CatalogValidator = {
       r9Reason = hasImage ? 'Imagen válida' : 'Imagen faltante o inválida: requiere revisión';
     }
     evals.push(this._makeEval('R9',
-      hasImage ? 'PASS' : 'INFO',
-      hasImage ? 'GREEN' : 'GREEN',
+      hasImage ? 'PASS' : 'WARNING',
+      hasImage ? 'GREEN' : 'YELLOW',
       'IMPORTABLE',
       Object.assign({ observed: r9Observed, expected: 'data:image/png|jpeg|webp|gif', source: r9Source },
         imgEv ? { canvasDecode: imgEv.canvasDecode, pdfIdentity: imgEv.pdfIdentity, page: imgEv.page, association: imgEv.association } : {}),
@@ -471,8 +478,10 @@ const CatalogValidator = {
       r10Reason
     ));
 
-    // Apply upstream status: a RED/YELLOW from source cannot be promoted to GREEN
-    // Exception: R9 is advisory — stays GREEN regardless of upstream status
+    // Apply upstream status: a RED/YELLOW from source cannot be promoted to GREEN.
+    // R9 is exempt from upstream demotion: it measures the image field itself,
+    // and a valid image stays valid regardless of the row's overall status.
+    // (Missing image is already YELLOW via the R9 rule above.)
     if (sourceStatus === 'RED' || sourceStatus === 'YELLOW') {
       for (const e of evals) {
         if (e.status === 'GREEN' && e.code !== 'R9') {

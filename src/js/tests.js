@@ -561,13 +561,13 @@ const Tests = {
     this.assert(TextSanitizer.assessModelQuality('S98 Glacier Axis Universe', 'White', 'TECLADO', '').level === 'YELLOW', 'assessModelQuality: switch pegado -> YELLOW');
     this.assert(TextSanitizer.assessModelQuality('G502 HERO', 'Black', 'MOUSE', '').level === 'GREEN', 'assessModelQuality: modelo limpio -> GREEN');
     // Wired into the validator: specs model becomes RED (not importable)
-    const specs = CatalogValidator.validateItem({ sku: 'SW-1', marca: 'Haimu', modelo: 'PC 2.0 PA 39 5g POM', variante: 'Tactile', cat: 'SWITCH', fob: 0.12, grounded: true });
+    const specs = CatalogValidator.validateItem({ sku: 'SW-1', marca: 'Haimu', modelo: 'PC 2.0 PA 39 5g POM', variante: 'Tactile', cat: 'SWITCH', fob: 0.12, grounded: true, img: 'data:image/png;base64,AAAA' });
     this.assert(specs.status === 'RED', 'Validador: modelo de specs -> RED (no importable)');
     // Glued switch becomes YELLOW (importable, flagged)
-    const glued = CatalogValidator.validateItem({ sku: 'KB-1', marca: 'RK', modelo: 'S98 Glacier Axis Universe', variante: 'White', cat: 'TECLADO', fob: 45, grounded: true });
+    const glued = CatalogValidator.validateItem({ sku: 'KB-1', marca: 'RK', modelo: 'S98 Glacier Axis Universe', variante: 'White', cat: 'TECLADO', fob: 45, grounded: true, img: 'data:image/png;base64,AAAA' });
     this.assert(glued.status === 'YELLOW', 'Validador: switch pegado -> YELLOW (revisar)');
     // Clean model stays GREEN (no false downgrade)
-    const clean = CatalogValidator.validateItem({ sku: 'MS-1', marca: 'Logitech', modelo: 'G502 HERO', variante: 'Black', cat: 'MOUSE', fob: 43, grounded: true });
+    const clean = CatalogValidator.validateItem({ sku: 'MS-1', marca: 'Logitech', modelo: 'G502 HERO', variante: 'Black', cat: 'MOUSE', fob: 43, grounded: true, img: 'data:image/png;base64,AAAA' });
     this.assert(clean.status === 'GREEN', 'Validador: modelo limpio sigue GREEN (sin falso downgrade)');
   },
 
@@ -723,8 +723,8 @@ const Tests = {
   testMissingImageIsNotGreen() {
     const item = { sku: 'IMG-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: '-', grounded: true };
     const result = CatalogValidator.runFullValidation([item]);
-    this.assert(result.review.length === 0 && item.status === 'GREEN', 'Producto sin imagen queda verde (R9 advisory)');
-    this.assert(item.qualityReason === 'Sin observaciones' || item.qualityReason.includes('Imagen'), 'La razón del semáforo es coherente');
+    this.assert(result.review.length === 1 && item.status === 'YELLOW', 'Producto sin imagen NO queda verde (R9 fail-closed -> YELLOW)');
+    this.assert(item.qualityReason.includes('Sin imagen'), 'La razón del semáforo es coherente');
   },
 
   testUpstreamQualityCannotBePromoted() {
@@ -1269,7 +1269,7 @@ const Tests = {
     this.assert(badEvals[0].status === 'RED' && badEvals[0].code === 'R1', 'R1 RED para FOB inválido');
     this.assert(badEvals[1].status === 'RED' && badEvals[1].code === 'R2', 'R2 RED para modelo basura');
     this.assert(badEvals[6].status === 'YELLOW' && badEvals[6].code === 'R7', 'R7 YELLOW para variante numérica');
-    this.assert(badEvals[8].status === 'GREEN' && badEvals[8].code === 'R9', 'R9 GREEN para imagen faltante (advisory)');
+    this.assert(badEvals[8].status === 'YELLOW' && badEvals[8].code === 'R9', 'R9 YELLOW para imagen faltante (fail-closed)');
     this.assert(badEvals[9].status === 'RED' && badEvals[9].code === 'R10', 'R10 RED para grounding ausente');
 
     // R10 false grounding → YELLOW (not RED)
@@ -1417,7 +1417,7 @@ const Tests = {
     this.assert(agg.canonicalGroupCount === 10, 'canonicalGroupCount=10 en fixtures');
     for (let i = 1; i <= 10; i++) {
       const code = 'R' + i;
-      const expected = (code === 'R9') ? 0 : 1; // R9 is advisory GREEN
+      const expected = 1; // all R1-R10 are hard now (R9 included: missing image = violation)
       this.assert(agg.violationsByCode[code] === expected,
         `${code}=${expected} violación en fixtures (actual=${agg.violationsByCode[code]})`);
     }
@@ -1444,9 +1444,9 @@ const Tests = {
     };
     const mixedEvals = CatalogValidator.evaluateItem(mixedRow);
     const r9Mixed = mixedEvals.find(e => e.code === 'R9');
-    this.assert(r9Mixed.status === 'GREEN' && r9Mixed.importability === 'IMPORTABLE',
-      'R9 GREEN/IMPORTABLE con imagen faltante (advisory) en fila mixta');
-    // Upstream RED cannot be promoted (except R9 which is advisory GREEN)
+    this.assert(r9Mixed.status === 'YELLOW' && r9Mixed.importability === 'IMPORTABLE',
+      'R9 YELLOW/IMPORTABLE con imagen faltante (fail-closed) en fila mixta');
+    // Upstream RED cannot be promoted (except R9 which is YELLOW, not GREEN)
     this.assert(mixedEvals.filter(e => e.code !== 'R9').every(e => e.status !== 'GREEN'),
       'Upstream RED impide que evaluaciones no-R9 sean GREEN');
   },
@@ -1531,8 +1531,8 @@ const Tests = {
     };
     const evals2 = CatalogValidator.evaluateItem(rowNoImage);
     const r9b = evals2.find(e => e.code === 'R9');
-    this.assert(r9b.status === 'GREEN', 'R9 GREEN con evidencia de imagen ausente (advisory)');
-    this.assert(r9b.severity === 'INFO', 'R9 severity INFO con imagen ausente (advisory)');
+    this.assert(r9b.status === 'YELLOW', 'R9 YELLOW con evidencia de imagen ausente (fail-closed)');
+    this.assert(r9b.severity === 'WARNING', 'R9 severity WARNING con imagen ausente (fail-closed)');
     this.assert(r9b.importability === 'IMPORTABLE', 'R9 IMPORTABLE con imagen ausente');
     this.assert(r9b.reason.length > 0, 'R9 reason no vacío con imagen ausente');
     this.assert(r9b.evidence.canvasDecode === 'absent' || r9b.evidence.observed.includes('absent'),
@@ -1976,7 +1976,7 @@ const Tests = {
     const loadedItem2 = loadResult.items.find(i => i.sku === 'E2E-002');
     this.assert(loadedItem2 !== undefined, 'YELLOW item (missing image) preserved in storage');
     const r9 = loadedItem2._evaluations ? loadedItem2._evaluations.find(e => e.code === 'R9') : null;
-    this.assert(r9 && r9.status === 'GREEN', 'R9 GREEN survived persistence (advisory)');
+    this.assert(r9 && r9.status === 'YELLOW', 'R9 YELLOW survived persistence (fail-closed)');
   },
 
   async testStoreFallbackRecovery() {
