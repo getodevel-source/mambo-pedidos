@@ -2097,6 +2097,43 @@ if (!rawModelo) continue;
       warnings.push('Imagen faltante o inválida: requiere revisión');
     }
 
+    // Grounding literal del modelo (B1, fail-closed): la primera palabra
+    // alfanumérica del modelo debe aparecer en el texto crudo de su celda/fila.
+    // Si no, el modelo pudo mezclarse (specs de otra columna, fila mal unida)
+    // -> YELLOW. Solo aplica cuando hay texto crudo (paths espaciales) y la
+    // celda contiene un CÓDIGO de producto alternativo: si la celda es solo
+    // variante/color/estado (ej 'Purple', 'released Color New Red'), el modelo
+    // vino por herencia de familia y es legítimo — no se degrada.
+    const cellText = (item.cellRawText || item.rawText || '').trim();
+    if (cellText && item.modelo) {
+      const firstWordMatch = item.modelo.match(/[A-Za-z0-9][A-Za-z0-9.\-]*/);
+      const firstWord = firstWordMatch ? firstWordMatch[0] : '';
+      // Comparación sin espacios: 'A7V3Pro+' debe matchear 'A7 V3 Pro+ Red'.
+      const cellFlat = cellText.replace(/\s+/g, '').toLowerCase();
+      const firstFlat = firstWord.replace(/[\s-]/g, '').toLowerCase();
+      // Tolerancia de prefijo: 'Mars75' es evidencia de 'Mar 75 wired...' del
+      // PDF (el modelo une 'Mar' + '75' + marca 'MARS'); un prefijo de >=3
+      // chars compartido alcanza. 'PAW3950MAX' vs 'V8 Black' no comparte nada.
+      let hasEvidence = firstFlat.length >= 2 && cellFlat.includes(firstFlat);
+      if (!hasEvidence && firstFlat.length >= 3) {
+        for (let k = 3; k <= Math.min(5, firstFlat.length); k++) {
+          if (cellFlat.includes(firstFlat.slice(0, k))) { hasEvidence = true; break; }
+        }
+      }
+      if (!hasEvidence && firstFlat.length >= 4) {
+        // La celda debe contener un CÓDIGO de producto alternativo (no solo
+        // variante/color/estado/tipo): si no, el modelo vino por herencia de
+        // familia y es legítimo.
+        const CODE_NOISE_RE = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|dark|light|transparent|released|new|upcoming|color|wired|wireless|bluetooth|2\.4g|usb|model|price|rmb|usd|cny|keyboard|mouse|controller|headset|earphone|earbuds|numpad|mousepad|webcam|camera|microphone|switch|chair|desk|hub|adapter|cable|stand|gamepad|dock|receiver|mechanical|magnetic|tri|mode|keycap|engraving)\b/gi;
+        const codeWords = cellText.replace(CODE_NOISE_RE, ' ').replace(/[^\w\u00C0-\u024F]+/g, ' ').trim().split(/\s+/).filter(w => w.length >= 2 && !/^\d+$/.test(w) && !/^\d+([.,]\d+)?(mn|mm|g|n|hz|khz|mv|mah|db|ms|rpm|kg|v|w|dpi|ips|pf|f|k)\b/i.test(w));
+        if (codeWords.length >= 1) {
+          if (process.env.P1_DEBUG) console.error(`[GRND] "${item.modelo}" | first="${firstWord}" | cell="${cellText.slice(0, 80)}" | codes=${codeWords.join(',')}`);
+          confidence -= 20;
+          warnings.push(`Modelo "${item.modelo}" sin evidencia literal en el texto de la celda`);
+        }
+      }
+    }
+
     const grounded = item.grounded !== undefined ? item.grounded : item.isGroundedFob;
     if (grounded === false) {
       confidence -= 25;
