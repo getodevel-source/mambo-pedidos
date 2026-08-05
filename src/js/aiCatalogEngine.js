@@ -250,6 +250,17 @@ ${chunkText}
       const cleanLine = line.replace(priceMatch[0], '').replace(/\s+/g, ' ').trim();
       if (cleanLine.length < 3) continue;
 
+      // Skip header/section rows: títulos de sección bilingües (chino+inglés)
+      // y filas de cabecera de tabla (ej. "型号 Model Name LS01" en catálogos
+      // KZ, "升级线及配件 Upgrade Cables and"). El precio de la fila header es
+      // el del primer producto de la sección, no un producto real.
+      const HEADER_LINE_RE = /^(型号|规格|参数|名称|图片|颜色|价格|升级|配件|附件|产品|特性|说明)/;
+      if (HEADER_LINE_RE.test(cleanLine) || /model\s*name/i.test(cleanLine)) continue;
+      // Cabecera de columna "Product Picture Model No.#" (catálogos AULA).
+      if (/product\s*picture\s*model/i.test(cleanLine)) continue;
+      // Título de sección bilingüe: 2-6 ideogramas seguidos de texto latino.
+      if (/^[\u4e00-\u9fff]{2,6}\s+[A-Za-z]/.test(cleanLine)) continue;
+
       const marca = this.extractBrandFromRawText(cleanLine, customBrands) || 'OTRO';
 
       // Use TextSanitizer for proper model/variant separation instead of substring(0,50)

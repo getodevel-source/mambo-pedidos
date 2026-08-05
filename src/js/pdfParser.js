@@ -400,7 +400,11 @@ const PdfParser = {
                       pageNum, y, x,
                       width: outW, height: outH,
                       pdfWidth: imgW, pdfHeight: imgH,
-                      centerY: y + (imgH / 2),
+                      // centerY must use the RENDERED height (outH): pdf.js reports
+                      // the native bitmap size (imgH), which for high-res photos
+                      // rendered small is hundreds of points larger — the row
+                      // engine's Y-band filter then misses every image.
+                      centerY: y + (outH / 2),
                       dataUrl: finalDataUrl,
                       dominantColor
                     });
@@ -2476,30 +2480,89 @@ if (!rawModelo) continue;
       // Pase 3 (galería desfasada): tablas con la galería de fotos desplazada
       // (tabla arriba y fotos ~400-500px debajo, o viceversa — AJAZZ/ATK/AULA).
       // Las gates de distancia no pueden cubrirlo sin arriesgar fugas entre
-      // filas densas, así que cuando los productos sin imagen == imágenes
-      // libres (>=3) y el desplazamiento fila↔foto es UNIFORME (pitch
-      // constante), se alinean por orden de Y. El check de uniformidad
-      // discrimina el orden correcto: solo el mapeo fila-i ↔ foto-i produce
-      // distancias constantes; el mapeo invertido es errático y no aplica.
+      // filas densas, así que cuando los productos sin imagen tienen una
+      // galería alineable por orden de Y (offset UNIFORME, pitch constante) se
+      // alinean fila-i ↔ foto-i. Usa las imágenes crudas de la página (no el
+      // dedup global): fotos idénticas repetidas (mismo switch, mismo cable
+      // en 2 colores) son compartición legítima, no duplicados.
       const stillEmptyIdx = [];
       for (let i = 0; i < pageProds.length; i++) {
         if (!assignedProds.has(i) && !this.isValidImageDataUrl(pageProds[i].img)) stillEmptyIdx.push(i);
       }
-      const freeImgsIdx = [];
-      for (let j = 0; j < pageImgs.length; j++) if (!assignedImgs.has(j)) freeImgsIdx.push(j);
-      if (stillEmptyIdx.length >= 3 && freeImgsIdx.length === stillEmptyIdx.length) {
+      // Productos con foto COMPARTIDA dentro de la página (el row engine no
+      // trackea imágenes usadas: dos filas pueden elegir la misma foto). El
+      // secundario buscará su propia imagen libre en el backfill de huérfanas;
+      // si no hay, conserva la compartida (los gates la auditan luego).
+      const sharedIdx = [];
+      const pageUrlCount = {};
+      for (const p of pageProds) {
+        if (this.isValidImageDataUrl(p.img)) pageUrlCount[p.img] = (pageUrlCount[p.img] || 0) + 1;
+      }
+      for (let i = 0; i < pageProds.length; i++) {
+        const p = pageProds[i];
+        if (assignedProds.has(i) || stillEmptyIdx.includes(i)) continue;
+        if (this.isValidImageDataUrl(p.img) && pageUrlCount[p.img] > 1) sharedIdx.push(i);
+      }
+      const usedUrls = new Set();
+      for (const j of assignedImgs) usedUrls.add(pageImgs[j].dataUrl);
+      // Imágenes tomadas: las del greedy + las que ya tienen dueño en la página
+      // (fila con imagen válida que no es huérfana ni compartida). Evita que el
+      // backfill vuelva a elegir la foto compartida o robe la de otra fila.
+      const orphanSet = new Set([...stillEmptyIdx, ...sharedIdx]);
+      for (let i = 0; i < pageProds.length; i++) {
+        const p = pageProds[i];
+        if (orphanSet.has(i)) continue;
+        if (this.isValidImageDataUrl(p.img)) usedUrls.add(p.img);
+      }
+      const fullPageImgs = (allImages || []).filter(img => img.pageNum === pNum && !usedUrls.has(img.dataUrl));
+      if (stillEmptyIdx.length >= 3 && fullPageImgs.length >= stillEmptyIdx.length) {
         const prodsAsc = [...stillEmptyIdx].sort((a, b) => pageProds[a].y - pageProds[b].y);
-        const imgsAsc = [...freeImgsIdx].sort((a, b) => pageImgs[a].y - pageImgs[b].y);
-        const dists = prodsAsc.map((pi, k) => pageProds[pi].y - pageImgs[imgsAsc[k]].y);
-        const mid = dists[Math.floor(dists.length / 2)];
-        const uniform = dists.every(d => Math.abs(d - mid) <= Math.max(60, Math.abs(mid) * 0.2));
-        if (uniform) {
-          for (let k = 0; k < prodsAsc.length; k++) {
+        const imgsAsc = fullPageImgs.slice().sort((a, b) => a.y - b.y);
+        const np = prodsAsc.length;
+        const maxShift = imgsAsc.length - np;
+        let best = null;
+        for (let shift = 0; shift <= maxShift; shift++) {
+          const dists = prodsAsc.map((pi, k) => pageProds[pi].y - imgsAsc[shift + k].y);
+          const mid = dists[Math.floor(dists.length / 2)];
+          const dev = Math.max(...dists.map(d => Math.abs(d - mid)));
+          if (dev > Math.max(60, Math.abs(mid) * 0.2)) continue;
+          if (!best || dev < best.dev) best = { shift, dev };
+        }
+        if (best) {
+          for (let k = 0; k < np; k++) {
             const prod = pageProds[prodsAsc[k]];
-            const img = pageImgs[imgsAsc[k]];
+            const img = imgsAsc[best.shift + k];
             prod.img = this.isValidImageDataUrl(img.dataUrl) ? img.dataUrl : '-';
             assignedProds.add(prodsAsc[k]);
-            assignedImgs.add(imgsAsc[k]);
+          }
+        }
+      } else if ((stillEmptyIdx.length + sharedIdx.length) >= 1 && (stillEmptyIdx.length + sharedIdx.length) <= 6 && fullPageImgs.length >= 3) {
+        // Huérfanas individuales: la foto de la fila está ~250-700px debajo del
+        // texto (layout foto-bajo-texto con espacio variable). El fallback del
+        // row engine (distY < -160) y las gates del matcher (distYRaw < -100)
+        // las dejan afuera. La imagen libre MÁS CERCANA en Y (dentro de 700px)
+        // que pase la validación relaxed es la de su propia fila: las vecinas
+        // ya consumieron las suyas (excluidas vía usedUrls). También entran
+        // los productos con foto compartida en la página (sharedIdx): buscan
+        // su propia foto antes de que los gates los desasignen.
+        const orphans = [...stillEmptyIdx, ...sharedIdx].sort((a, b) => pageProds[a].y - pageProds[b].y);
+        let freeSorted = fullPageImgs.slice().sort((a, b) => a.y - b.y);
+        for (const pi of orphans) {
+          const prod = pageProds[pi];
+          let bestImg = null;
+          let bestDist = Infinity;
+          for (const img of freeSorted) {
+            const distY = prod.y - (img.centerY || (img.y + (img.height || 0) / 2));
+            if (distY > 460 || distY < -700) continue;
+            const validation = this.validateImageForProduct(img, prod, true);
+            if (!validation.valid) continue;
+            if (Math.abs(distY) < bestDist) { bestDist = Math.abs(distY); bestImg = img; }
+          }
+          if (bestImg) {
+            prod.img = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
+            assignedProds.add(pi);
+            usedUrls.add(bestImg.dataUrl);
+            freeSorted = freeSorted.filter(i => i !== bestImg);
           }
         }
       }
