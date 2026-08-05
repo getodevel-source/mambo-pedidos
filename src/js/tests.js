@@ -85,6 +85,7 @@ const Tests = {
     this.testOnDemandZeroIdleMemoryGuarantee();
     await this.testCellStructuredLlmPipeline();
     this.testAppUpdaterModule();
+    this.testCatalogAssignmentGates();
     this.testUpdaterConfigValidation();
     this.testInfraImprovements();
     this.testReliabilityLayers();
@@ -2230,7 +2231,101 @@ const Tests = {
     this.assert(rowEmpty && /M750/.test(rowEmpty.modelo), 'FASE2-S4-Logitech: fila vacía usa modelo M750 M (celda fusionada con texto debajo) en vez de heredar M720');
     this.assert(rowM750 && /M750/.test(rowM750.modelo), 'FASE2-S4-Logitech: fila M750 M (y=167) modelo correcto');
     this.assert(rowM720 && /M720/.test(rowM720.modelo), 'FASE2-S4-Logitech: fila M720 (y=100) modelo correcto');
-  }
+  },
+
+  testCatalogAssignmentGates() {
+    if (typeof CatalogAssignmentGates === 'undefined') {
+      this.assert(false, 'Modulo CatalogAssignmentGates no está definido');
+      return;
+    }
+    const G = CatalogAssignmentGates;
+    const base = {
+      sku: 'S1', cat: 'TECLADO', marca: 'Atk', modelo: 'X1', variante: '',
+      fob: 10, img: '-', status: 'GREEN', warnings: [], grounded: true, importable: true,
+    };
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    // --- imagen: cross-categoría desasigna ---
+    {
+      const a = { ...base, sku: 'A1', cat: 'TECLADO', img: PNG, status: 'GREEN' };
+      const b = { ...base, sku: 'A2', cat: 'MOUSE', img: PNG, status: 'GREEN' };
+      const { products } = G.applyImageIntegrityGates([a, b]);
+      const kb = products.find(p => p.sku === 'A2');
+      this.assert(kb.img === '-', 'Imagen cross-categoría se desasigna del producto secundario');
+      this.assert(kb.warnings.some(w => w.includes('categor')), 'Warning de cross-categoría presente');
+    }
+
+    // --- imagen: rebrand con identidad exacta conserva ---
+    {
+      const a = { ...base, sku: 'B1', marca: 'Irok', modelo: 'Mer68 Max', cat: 'TECLADO', img: PNG, status: 'GREEN' };
+      const b = { ...base, sku: 'B2', marca: 'Mars', modelo: 'Mer68 Max', cat: 'TECLADO', img: PNG, status: 'GREEN' };
+      const { products } = G.applyImageIntegrityGates([a, b]);
+      this.assert(products.every(p => p.img === PNG), 'Rebrand con marca+modelo+cat idénticos conserva la imagen');
+    }
+
+    // --- imagen: cross-marca sin identidad desasigna ---
+    {
+      const a = { ...base, sku: 'C1', marca: 'Atk', modelo: 'Babypink', cat: 'TECLADO', img: PNG, status: 'GREEN' };
+      const b = { ...base, sku: 'C2', marca: 'Vgn', modelo: 'Dragonfly VXE Dongle', cat: 'MOUSE', img: PNG, status: 'GREEN' };
+      const { products } = G.applyImageIntegrityGates([a, b]);
+      const loser = products.find(p => p.sku === 'C2');
+      this.assert(loser.img === '-', 'Imagen cross-marca sin identidad de modelo se desasigna');
+    }
+
+    // --- placeholder nunca GREEN ---
+    {
+      const p = { ...base, img: '-', status: 'GREEN' };
+      const { products } = G.applyImageIntegrityGates([p]);
+      this.assert(products[0].status === 'YELLOW', 'Placeholder degrada GREEN → YELLOW');
+      this.assert(products[0].warnings.includes('Sin imagen'), 'Warning "Sin imagen" presente');
+    }
+
+    // --- template model → RED no importable ---
+    {
+      const p = { ...base, modelo: 'Product Picture Model No.#', status: 'GREEN', importable: true };
+      const { products } = G.applyModelQualityGates([p]);
+      this.assert(products[0].status === 'RED', 'Modelo de plantilla degrada a RED');
+      this.assert(products[0].importable === false, 'Modelo de plantilla no es importable');
+    }
+
+    // --- color model → YELLOW ---
+    {
+      const p = { ...base, modelo: 'Purple', status: 'GREEN' };
+      const { products } = G.applyModelQualityGates([p]);
+      this.assert(products[0].status === 'YELLOW', 'Modelo color degrada a YELLOW');
+    }
+
+    // --- truncado → YELLOW ---
+    {
+      const p = { ...base, modelo: 'F87 (light', status: 'GREEN' };
+      const { products } = G.applyModelQualityGates([p]);
+      this.assert(products[0].status === 'YELLOW', 'Modelo truncado degrada a YELLOW');
+    }
+
+    // --- watch model no degrada ---
+    {
+      const p = { ...base, modelo: 'Air', status: 'GREEN' };
+      const { products } = G.applyModelQualityGates([p]);
+      this.assert(products[0].status === 'GREEN', 'Modelo watch (línea real, e.g. ATK Air) no degrada');
+    }
+
+    // --- duplicados detectados ---
+    {
+      const a = { ...base, sku: 'D1', marca: '8bitdo', modelo: 'Ultimate 2C', cat: 'CONTROLLER', fob: 27.46 };
+      const b = { ...base, sku: 'D2', marca: '8bitdo', modelo: 'Ultimate 2C', cat: 'CONTROLLER', fob: 27.46 };
+      const dups = G.detectDuplicates([a, b]);
+      this.assert(dups.length === 1, 'Duplicado marca+modelo+cat+fob detectado');
+      this.assert(dups[0].count === 2, 'Grupo duplicado cuenta 2 productos');
+    }
+
+    // --- métricas ---
+    {
+      const p = { ...base, img: '-', status: 'YELLOW' };
+      const m = G.computeMetrics([p]);
+      this.assert(m.placeholder === 1 && m.placeholderRate === 1, 'Métrica de placeholder correcta');
+      this.assert(m.status.YELLOW === 1, 'Métrica de status correcta');
+    }
+  },
 };
 
 if (typeof window !== 'undefined') window.Tests = Tests;

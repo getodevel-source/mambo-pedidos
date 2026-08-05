@@ -582,7 +582,7 @@ const PdfParser = {
     return /^data:image\/(?:png|jpe?g|webp|gif);(?:base64,[a-z0-9+/=\s]+|[^\s]+)$/i.test(value.trim());
   },
 
-  validateImageForProduct(img, product) {
+  validateImageForProduct(img, product, relaxed = false) {
     const warnings = [];
     let score = 100;
 
@@ -600,10 +600,20 @@ const PdfParser = {
     const COMPACT_CATS = ['MOUSE', 'AURICULAR', 'HEADSET', 'CONTROLLER', 'SWITCH'];
     const WIDE_CATS = ['TECLADO', 'MOUSEPAD'];
     if (COMPACT_CATS.includes(cat) && aspect > 1.9) {
-      return { valid: false, score: 0, warnings: [`🚫 Imagen ancha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+      if (relaxed) {
+        score -= 45;
+        warnings.push(`⚠️ Imagen ancha (ratio ${aspect.toFixed(2)}) — aceptada en backfill`);
+      } else {
+        return { valid: false, score: 0, warnings: [`🚫 Imagen ancha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+      }
     }
     if (WIDE_CATS.includes(cat) && aspect < 0.65) {
-      return { valid: false, score: 0, warnings: [`🚫 Imagen estrecha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+      if (relaxed) {
+        score -= 45;
+        warnings.push(`⚠️ Imagen estrecha (ratio ${aspect.toFixed(2)}) — aceptada en backfill`);
+      } else {
+        return { valid: false, score: 0, warnings: [`🚫 Imagen estrecha (ratio ${aspect.toFixed(2)}) incompatible con ${cat}`] };
+      }
     }
 
     // 1b. Low-resolution thumbnail: content/color unreliable at tiny sizes (e.g. Razer
@@ -913,24 +923,56 @@ if (!rawModelo) continue;
           if (!this.isValidImageDataUrl(img.dataUrl)) return false;
           return true;
         });
+            // Fallback por página: si la celda X no contiene ninguna imagen
+            // (páginas con foto a la izquierda y texto a la derecha, e.g. Logitech),
+            // buscar las imágenes de la página cercanas en Y con gates relajadas.
+            if (!candidateImgs.length) {
+              const pageImgsForRow = pageImages.filter(img => {
+                if (img.pageNum !== pageNum) return false;
+                const distX = Math.abs(img.x - anchor.x);
+                const distY = anchor.y - img.y;
+                if (distX > 420 || distY > 460 || distY < -160) return false;
+                return true;
+              });
+              if (pageImgsForRow.length) {
+                const productForImage = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
+                const scored = pageImgsForRow.map(img => {
+                  const distX = Math.abs(img.x - anchor.x);
+                  const distY = anchor.y - img.y;
+                  const validation = this.validateImageForProduct(img, productForImage, true);
+                  if (!validation.valid) return null;
+                  const dist = Math.hypot(distX * 1.5, Math.max(0, distY));
+                  return { img, score: dist + (100 - validation.score) * 150 };
+                }).filter(Boolean).sort((a, b) => a.score - b.score);
+                if (scored[0]) {
+                  matchedImg = scored[0].img.dataUrl;
+                }
+              }
+            }
+
 
         if (candidateImgs.length) {
           const productForImage = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
-          const scored = candidateImgs.map(img => {
+          const scoreCandidates = (relaxed) => candidateImgs.map(img => {
             const distX = Math.abs(img.x - anchor.x);
             const distY = anchor.y - img.y;
-            const validation = this.validateImageForProduct(img, productForImage);
+            const validation = this.validateImageForProduct(img, productForImage, relaxed);
             if (!validation.valid) return null;
 
             const dist = Math.hypot(distX * 1.5, Math.max(0, distY));
             return { img, score: dist + (100 - validation.score) * 150 };
           }).filter(Boolean);
 
-          scored.sort((a, b) => a.score - b.score);
+          let scored = scoreCandidates(false).sort((a, b) => a.score - b.score);
+          // Fallback relajado: si el shape gate rechazó todas las fotos de la celda
+          // (páginas con fotos anchas tipo Logitech), aceptar la mejor con penalty.
+          if (!scored.length) {
+            scored = scoreCandidates(true).sort((a, b) => a.score - b.score);
+          }
           if (scored[0]) {
             matchedImg = scored[0].img.dataUrl;
           }
-        }
+          }
       }
 
       
@@ -1303,25 +1345,54 @@ if (!rawModelo) continue;
           return true;
         });
 
+        // Fallback por página: si la celda Y no contiene imágenes (fotos desplazadas
+        // fuera del rango de la fila), buscar las de la página con rango amplio.
+        if (!candidateImgs.length) {
+          const pageImgsForRow = pageImages.filter(img => {
+            if (img.pageNum !== pageNum) return false;
+            const imgCenterY = img.centerY || img.y;
+            const distY = anchor.y - imgCenterY;
+            if (distY > 460 || distY < -160) return false;
+            return true;
+          });
+          if (pageImgsForRow.length) {
+            const productForRow = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
+            const scored = pageImgsForRow.map(img => {
+              const imgCenterY = img.centerY || img.y;
+              const distY = anchor.y - imgCenterY;
+              const validation = this.validateImageForProduct(img, productForRow, true);
+              if (!validation.valid) return null;
+              const dist = Math.hypot(distY * 1.5, Math.max(0, distY));
+              return { img, score: dist + (100 - validation.score) * 150 };
+            }).filter(Boolean).sort((a, b) => a.score - b.score);
+            if (scored[0]) {
+              matchedImg = scored[0].img.dataUrl;
+            }
+          }
+        }
+
         if (candidateImgs.length) {
           // Validar cada candidata y elegir la mejor (score + distancia)
           const product = { cat, modelo: sanitized.modelo, variante: sanitized.variante };
-          let bestImg = null;
-          let bestScore = -1;
-
-          for (const img of candidateImgs) {
-            const validation = this.validateImageForProduct(img, product);
-            if (!validation.valid) continue;
-            const imgCenterY = img.centerY || img.y;
-            const dist = Math.abs(imgCenterY - anchor.y);
-            const combined = validation.score - dist; // mayor score, menor distancia
-            if (combined > bestScore) {
-              bestScore = combined;
-              bestImg = img;
+          const pickBest = (relaxed) => {
+            let best = null;
+            let bestScore = -1;
+            for (const img of candidateImgs) {
+              const validation = this.validateImageForProduct(img, product, relaxed);
+              if (!validation.valid) continue;
+              const imgCenterY = img.centerY || img.y;
+              const dist = Math.abs(imgCenterY - anchor.y);
+              const combined = validation.score - dist; // mayor score, menor distancia
+              if (combined > bestScore) {
+                bestScore = combined;
+                best = img;
+              }
             }
-          }
-
-          if (bestImg) {
+            return best;
+          };
+          // Fallback relajado: mismo criterio que la sección 1 — si el shape gate
+          // rechazó todas las fotos, aceptar la mejor con penalty.
+          let bestImg = pickBest(false) || pickBest(true);if (bestImg) {
             matchedImg = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
           }
         }
@@ -2213,79 +2284,101 @@ if (!rawModelo) continue;
       const pageImgs = uniqueImages.filter(img => img.pageNum === pNum);
       if (!pageProds.length || !pageImgs.length) continue;
 
-      const costMatrix = [];
-      for (let i = 0; i < pageProds.length; i++) {
-        const p = pageProds[i];
-        const rowCost = [];
-
-        for (let j = 0; j < pageImgs.length; j++) {
-          const img = pageImgs[j];
-          const distX = Math.abs(img.x - p.x);
-          const distYRaw = p.y - img.y;
-
-          // Hard gate: demasiado lejos → Infinity (no asignar). Gates ajustados
-          // (distX 300→200, distY 400→250) para evitar fugas entre columnas/filas densas.
-          if (distX > 200 || distYRaw > 250 || distYRaw < -100) {
-            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation: null });
-            continue;
-          }
-
-          const validation = this.validateImageForProduct(img, p);
-
-          // Hard gate: validación visual fallida → Infinity
-          if (!validation.valid) {
-            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation });
-            continue;
-          }
-
-          let penalty = (100 - validation.score) * 150;
-          if (img.y > p.y + 10) penalty += 40000;
-          if (distX > 160) penalty += 25000;
-
-          const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
-          rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty, validation });
-        }
-        costMatrix.push(rowCost);
-      }
-
       const assignedProds = new Set();
       const assignedImgs = new Set();
       const MAX_SCORE = 50000;
 
-      while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
-        let minPair = null;
-
+      // Matriz de costos por página. relaxed=true afloja las gates duras
+      // (shape gate → penalty, distancias mayores) para el backfill.
+      const buildMatrix = (relaxed) => {
+        const costMatrix = [];
         for (let i = 0; i < pageProds.length; i++) {
-          if (assignedProds.has(i)) continue;
+          const p = pageProds[i];
+          const rowCost = [];
+
           for (let j = 0; j < pageImgs.length; j++) {
-            if (assignedImgs.has(j)) continue;
-            const pair = costMatrix[i][j];
-            if (pair.totalScore === Infinity) continue;
-            if (!minPair || pair.totalScore < minPair.totalScore) {
-              minPair = pair;
+            const img = pageImgs[j];
+            const distX = Math.abs(img.x - p.x);
+            const distYRaw = p.y - img.y;
+
+            // Hard gate: demasiado lejos → Infinity (no asignar). Gates ajustados
+            // (distX 300→200, distY 400→250) para evitar fugas entre columnas/filas densas.
+            // El backfill (relaxed) NO relaja la distancia — solo el shape gate.
+            const distXLimit = 200;
+            const yUpper = 250;
+            const yLower = -100;
+            if (distX > distXLimit || distYRaw > yUpper || distYRaw < yLower) {
+              rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation: null });
+              continue;
+            }
+
+            const validation = this.validateImageForProduct(img, p, relaxed);
+
+            // Hard gate: validación visual fallida → Infinity
+            if (!validation.valid) {
+              rowCost.push({ imgIdx: j, prodIdx: i, totalScore: Infinity, distX, distYRaw, penalty: Infinity, validation });
+              continue;
+            }
+
+            let penalty = (100 - validation.score) * 150;
+            if (img.y > p.y + 10) penalty += (relaxed ? 20000 : 40000);
+            if (distX > 160) penalty += 25000;
+
+            const baseDist = Math.hypot(distX * 1.5, Math.max(0, distYRaw) * 1.0);
+            rowCost.push({ imgIdx: j, prodIdx: i, totalScore: baseDist + penalty, distX, distYRaw, penalty, validation });
+          }
+          costMatrix.push(rowCost);
+        }
+        return costMatrix;
+      };
+
+      const runGreedy = (costMatrix) => {
+        while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
+          let minPair = null;
+
+          for (let i = 0; i < pageProds.length; i++) {
+            if (assignedProds.has(i)) continue;
+            for (let j = 0; j < pageImgs.length; j++) {
+              if (assignedImgs.has(j)) continue;
+              const pair = costMatrix[i][j];
+              if (pair.totalScore === Infinity) continue;
+              if (!minPair || pair.totalScore < minPair.totalScore) {
+                minPair = pair;
+              }
             }
           }
+
+          if (!minPair || minPair.totalScore > MAX_SCORE) break;
+
+          const winnerProd = pageProds[minPair.prodIdx];
+          const winnerImg = pageImgs[minPair.imgIdx];
+
+          winnerProd.img = this.isValidImageDataUrl(winnerImg.dataUrl) ? winnerImg.dataUrl : '-';
+          if (minPair.validation && minPair.validation.warnings.length) {
+            winnerProd.imgWarnings = minPair.validation.warnings;
+          }
+          // Wire image evidence for R9 contract (Slice 2)
+          winnerProd.imageEvidence = this.buildImageEvidence(
+            winnerProd._pdfIdentity || 'unknown',
+            pNum,
+            winnerImg,
+            winnerProd.sku || '',
+            'matched'
+          );
+          assignedProds.add(minPair.prodIdx);
+          assignedImgs.add(minPair.imgIdx);
         }
+      };
 
-        if (!minPair || minPair.totalScore > MAX_SCORE) break;
+      // Pase 1: asignación estricta (gates duras).
+      runGreedy(buildMatrix(false));
 
-        const winnerProd = pageProds[minPair.prodIdx];
-        const winnerImg = pageImgs[minPair.imgIdx];
-
-        winnerProd.img = this.isValidImageDataUrl(winnerImg.dataUrl) ? winnerImg.dataUrl : '-';
-        if (minPair.validation && minPair.validation.warnings.length) {
-          winnerProd.imgWarnings = minPair.validation.warnings;
-        }
-        // Wire image evidence for R9 contract (Slice 2)
-        winnerProd.imageEvidence = this.buildImageEvidence(
-          winnerProd._pdfIdentity || 'unknown',
-          pNum,
-          winnerImg,
-          winnerProd.sku || '',
-          'matched'
-        );
-        assignedProds.add(minPair.prodIdx);
-        assignedImgs.add(minPair.imgIdx);
+      // Pase 2 (backfill): productos que quedaron sin imagen reciben la mejor
+      // imagen restante con gates relajadas (shape gate → penalty). Recupera
+      // páginas cuyas fotos son todas anchas (Logitech product + specs tiles).
+      const stillEmpty = pageProds.some((p, idx) => !assignedProds.has(idx) && !this.isValidImageDataUrl(p.img));
+      if (stillEmpty && assignedImgs.size < pageImgs.length) {
+        runGreedy(buildMatrix(true));
       }
     }
   },
