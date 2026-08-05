@@ -653,6 +653,18 @@ const Tests = {
     const clean = res.products.find(p => p.sku === 'TST-002');
     this.assert(dirty.status === 'YELLOW', 'Fail-closed: modelo con keyword de categoría + dígito -> YELLOW');
     this.assert(clean.status === 'GREEN', 'Fail-closed: nombre de producto real (Retro Receiver Saturn, sin dígito) sigue GREEN');
+
+    // Switch line exemption: 'Switch' in a SWITCH-category model is the product
+    // line name (Haimu Ice Silver Switch), not contamination — stays GREEN.
+    // Specs-led models ('3.0 0.50mn Switch 44 55') still degrade.
+    const swRes = G.runAll([
+      { sku: 'SWT-001', status: 'GREEN', marca: 'Haimu', modelo: 'Ice Silve Switch PA12', variante: 'Tactile', cat: 'SWITCH', fob: 0.15, img: 'data:image/png;base64,AAAA', grounded: true },
+      { sku: 'SWT-002', status: 'GREEN', marca: 'Haimu', modelo: '3.0 0.50mn Switch 44 55', variante: 'Pink Blue', cat: 'SWITCH', fob: 0.15, img: 'data:image/png;base64,BBBB', grounded: true }
+    ]);
+    const swLine = swRes.products.find(p => p.sku === 'SWT-001');
+    const swSpecs = swRes.products.find(p => p.sku === 'SWT-002');
+    this.assert(swLine.status === 'GREEN', 'Switch con Switch en el nombre de línea (Ice Silve Switch PA12) -> GREEN');
+    this.assert(swSpecs.status === 'YELLOW', 'Switch con specs numéricas al inicio (3.0 0.50mn Switch...) -> YELLOW');
   },
 
   testSkuFailClosed() {

@@ -312,6 +312,14 @@ const CatalogAssignmentGates = {
       // Receiver Saturn', 'Charging Dock Xbox' y los nombres de switch Haimu
       // son líneas de producto reales (0 falsos positivos).
       if (this.isMidModelTypeKeyword(modelo) && /\d/.test(modelo)) {
+        // Excepción: para cat SWITCH, 'Switch' en el modelo es el nombre de
+        // línea (Haimu 'Ice Silver Switch PA12') — solo degrada si el modelo
+        // EMPIEZA con specs numéricas ('3.0 0.50mn Switch 44 55' = basura).
+        const isSwitchLine = /switch/i.test(modelo) && String(p.cat || '').toUpperCase() === 'SWITCH' && !/^\s*\d/.test(modelo);
+        if (isSwitchLine) {
+          changes.push({ sku: p.sku, type: 'watch-model', detail: `modelo "${modelo}" (línea de switch con Switch en el nombre)` });
+          continue;
+        }
         if (p.status === 'GREEN') {
           p.status = 'YELLOW';
         }
