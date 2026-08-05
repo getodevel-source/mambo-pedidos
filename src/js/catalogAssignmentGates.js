@@ -45,10 +45,18 @@ const AMBIGUOUS_MODEL_WORDS = ['standard', 'bill', 'business'];
 // Real-looking product-line words: reported in the audit but never change
 // status (a one-word model like "Air" or "Lake" is a valid ATK product line).
 const WATCH_MODEL_WORDS = [
-  'magnetic', 'star', 'ultra', 'max', 'extreme', 'starlight', 'lake',
+  'magnetic', 'star', 'starry', 'ultra', 'max', 'extreme', 'starlight', 'lake',
   'pearl', 'lemon', 'lilac', 'air', 'pro', 'plus', 'lite', 'mini',
   'classic', 'retro', 'ultra',
 ];
+
+// Keywords de tipo/categoría que pertenecen a la variante, nunca al modelo.
+// Misma lista que el sanitizer (PdfParser.moveTrailingTypeKeyword): si una
+// aparece ADENTRO del modelo (no como última palabra — esa ya la mueve el
+// sanitizer) la extracción mezcló el tipo en el modelo → fail-closed YELLOW.
+// Con \b para no matchear compuestos ('ShadowSwitch', 'LatteSwitch',
+// 'Standard', 'Keyboards').
+const TYPE_KEYWORDS_RE = /\b(mouse|keyboard|controller|headset|earphone|earbuds|numpad|mousepad|webcam|camera|microphone|switch|chair|desk|hub|adapter|cable|stand|gamepad|dock|receiver)\b/i;
 
 const CatalogAssignmentGates = {
   PLACEHOLDER_IMAGE,
@@ -57,6 +65,7 @@ const CatalogAssignmentGates = {
   BARE_STATUS_WORDS,
   AMBIGUOUS_MODEL_WORDS,
   WATCH_MODEL_WORDS,
+  TYPE_KEYWORDS_RE,
 
   /** Normalized image identity: only real data URLs participate in sharing checks. */
   imageIdentity(img) {
@@ -123,6 +132,27 @@ const CatalogAssignmentGates = {
     const open = (modelo.match(/\(/g) || []).length;
     const close = (modelo.match(/\)/g) || []).length;
     return open > close;
+  },
+
+  /** True when the model is a single bare type/category word (e.g. 'Receiver', 'Keyboard'). */
+  isBareTypeWordModel(modelo) {
+    if (typeof modelo !== 'string' || !modelo.trim()) return false;
+    const text = modelo.trim().toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text || /\s/.test(text)) return false;
+    return this.TYPE_KEYWORDS_RE.test(text);
+  },
+
+  /**
+   * True when a standalone type keyword appears INSIDE the model (not as the
+   * last word — the sanitizer moves trailing keywords to the variant). Uses
+   * word boundaries so compounds ('ShadowSwitch', 'LatteSwitch', 'Standard',
+   * 'Keyboards') never match.
+   */
+  isMidModelTypeKeyword(modelo) {
+    if (typeof modelo !== 'string' || !modelo.trim()) return false;
+    const words = modelo.trim().split(/\s+/);
+    if (words.length < 2) return false;
+    return this.TYPE_KEYWORDS_RE.test(words.slice(0, -1).join(' '));
   },
 
   /**
@@ -214,6 +244,29 @@ const CatalogAssignmentGates = {
       }
     }
 
+    // --- weak image match policy: fail-closed, never GREEN on weak evidence ---
+    // imgWarnings de VALIDACIÓN VISUAL (registradas por validateImageForProduct
+    // vía matchImagesToProductsGlobal). SOLO la señal de foto posiblemente
+    // EQUIVOCADA degrada: imagen casi monocromática = fondo sin producto.
+    // El color dominante distinto a la variante NO degrada (fotos combo
+    // mouse+teclado SILVER/GRAY son la evidencia correcta de estos catálogos —
+    // verificada en Logitech 23/23); la asignación vía backfill/galería/
+    // huérfana tampoco (mecanismos verificados: AJAZZ 11/11, Irok 7/7). Esas
+    // señales quedan como warning VISIBLE en el preview, sin mentir el semáforo.
+    const WEAK_IMG_WARNING_RE = [
+      /casi monocrom[áa]tica/i,       // foto que es casi todo fondo → dudosa
+    ];
+    for (const p of result) {
+      if (p.status !== 'GREEN') continue;
+      const imgWarnings = Array.isArray(p.imgWarnings) ? p.imgWarnings : [];
+      if (!imgWarnings.some(w => WEAK_IMG_WARNING_RE.some(re => re.test(w)))) continue;
+      p.status = 'YELLOW';
+      if (!p.warnings.includes('Imagen con coincidencia débil')) {
+        p.warnings.push('Imagen con coincidencia débil');
+      }
+      changes.push({ sku: p.sku, type: 'weak-image-match', detail: imgWarnings.join(' | ') });
+    }
+
     return { products: result, changes };
   },
 
@@ -263,6 +316,36 @@ const CatalogAssignmentGates = {
         continue;
       }
 
+      // Fail-closed (WS1): keyword de tipo ADENTRO del modelo (no al final — esa
+      // la mueve el sanitizer a variante) Y el modelo lleva un código (dígito)
+      // → la extracción mezcló el tipo en el modelo ('Keyboard F75', 'Mouse
+      // G102', 'Ice Silve Switch PA12'). Sin dígito NO se degrada: 'Retro
+      // Receiver Saturn', 'Charging Dock Xbox' y los nombres de switch Haimu
+      // son líneas de producto reales (0 falsos positivos).
+      if (this.isMidModelTypeKeyword(modelo) && /\d/.test(modelo)) {
+        if (p.status === 'GREEN') {
+          p.status = 'YELLOW';
+        }
+        if (!p.warnings.includes('Keyword de categoría dentro del modelo (contaminación)')) {
+          p.warnings.push('Keyword de categoría dentro del modelo (contaminación)');
+        }
+        changes.push({ sku: p.sku, type: 'mid-model-type-keyword', detail: `modelo "${modelo}"` });
+        continue;
+      }
+
+      // Fail-closed (WS1): modelo es SOLO una palabra de tipo/categoría
+      // ('Receiver', 'Keyboard', 'Switch') — no es un nombre de producto.
+      if (this.isBareTypeWordModel(modelo)) {
+        if (p.status === 'GREEN') {
+          p.status = 'YELLOW';
+        }
+        if (!p.warnings.includes('Modelo es solo una palabra de tipo/categoría')) {
+          p.warnings.push('Modelo es solo una palabra de tipo/categoría');
+        }
+        changes.push({ sku: p.sku, type: 'bare-type-word-model', detail: `modelo "${modelo}"` });
+        continue;
+      }
+
       if (this.isWatchModel(modelo)) {
         // No cambia status: solo se reporta en el audit (puede ser una línea real).
         changes.push({ sku: p.sku, type: 'watch-model', detail: `modelo "${modelo}"` });
@@ -288,6 +371,20 @@ const CatalogAssignmentGates = {
           }
           changes.push({ sku: p.sku, type: 'truncated-model', detail: `modelo "${modelo}"` });
         }
+      }
+
+      // Fail-closed (B3): categoría dudosa — GREEN con cat OTRO no tiene
+      // evidencia de tipo en absoluto. (Una regla literal "sin keyword de tipo
+      // en modelo+variante" fue evaluada y descartada: degradaría 1141/2315
+      // productos reales cuya categoría viene de patrones de código — AK820
+      // Pro, AJ139 Pro, 8BitDo Ultimate — violando la política de 0 falsos
+      // positivos.)
+      if (p.status === 'GREEN' && String(p.cat || '').toUpperCase() === 'OTRO') {
+        p.status = 'YELLOW';
+        if (!p.warnings.includes('Categoría dudosa: OTRO sin evidencia de tipo')) {
+          p.warnings.push('Categoría dudosa: OTRO sin evidencia de tipo');
+        }
+        changes.push({ sku: p.sku, type: 'doubtful-category', detail: 'cat OTRO sin keyword de tipo' });
       }
     }
 

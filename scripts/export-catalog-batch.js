@@ -239,6 +239,8 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
         warnings: p.warnings || [], confidence: p.confidence, grounded: !!p.grounded,
         sourceFile: fileName, qualityReason: p.qualityReason || 'Sin observaciones',
         pageNum: p.pageNum, x: p.x, y: p.y,
+        imgWarnings: Array.isArray(p.imgWarnings) ? p.imgWarnings : undefined,
+        sourceStatus: p.sourceStatus,
       }));
       allExported.push(...exported);
       perFile.push({ file: fileName, brand, count: exported.length, placeholders: exported.filter(p => p.img === '-').length });

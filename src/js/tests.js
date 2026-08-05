@@ -628,8 +628,8 @@ const Tests = {
     const pBlack = products.find(p => p.variante.includes('Black'));
     const pWhite = products.find(p => p.variante.includes('White'));
 
-    this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless Controller' && pBlack.img === 'data:image/png;base64,AAAA', 'Producto 1 (Black) extrajo modelo limpio y su foto de celda aislada');
-    this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless Controller' && pWhite.img === 'data:image/png;base64,BBBB', 'Producto 2 (White) extrajo modelo limpio y su foto de celda aislada');
+    this.assert(pBlack && pBlack.modelo === 'Ultimate 2 Wireless' && pBlack.variante.includes('Controller') && pBlack.img === 'data:image/png;base64,AAAA', 'Producto 1 (Black) extrajo modelo limpio (sin keyword de categoría) y su foto de celda aislada');
+    this.assert(pWhite && pWhite.modelo === 'Ultimate 2 Wireless' && pWhite.variante.includes('Controller') && pWhite.img === 'data:image/png;base64,BBBB', 'Producto 2 (White) extrajo modelo limpio (sin keyword de categoría) y su foto de celda aislada');
   },
 
   testDoorToDoorCustomsLiquidation() {

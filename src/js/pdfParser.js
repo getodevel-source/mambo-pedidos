@@ -1658,6 +1658,22 @@ if (!rawModelo) continue;
     }
     modelo = uniqueModWords.join(' ');
 
+    // 1f. Ruido de tipo/estado al final del modelo → variante (WS1):
+    //     'Ultimate 2C Controller' → modelo 'Ultimate 2C', variante 'Controller';
+    //     'Combo MK120 Mouse' → modelo 'MK120', variante 'Combo Mouse';
+    //     'Xbox Keyboard' → modelo 'Xbox', variante 'Keyboard';
+    //     'Lake Released' → modelo 'Lake', variante 'New Green Released'.
+    //     NUNCA toca pro|wireless|ultra|max|bluetooth|wired|mechanical|gaming
+    //     (sufijos legítimos). No toca colores, así que corre también en
+    //     layouts de specs de switch (keepColorNames=true) — las guardas de
+    //     moveTrailingTypeKeyword protegen los nombres compuestos
+    //     ('LatteSwitch', 'ShadowSwitch') y los descriptores puros.
+    {
+      const moved = this.moveTrailingTypeKeyword(modelo, variante);
+      modelo = moved.modelo;
+      variante = moved.variante;
+    }
+
     // 2. Si el modelo resultante es puramente numérico/decimal (ej: "235.75" o "$120"), no dejar el precio como modelo
     if (/^\$?\d+([\.,]\d+)?$/.test(modelo) || /^\d+$/.test(modelo)) {
       if (variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
@@ -1730,6 +1746,52 @@ if (!rawModelo) continue;
     return { modelo: modelo || (brand !== 'OTRO' ? `${brand} Item` : 'Producto'), variante };
   },
 
+  /**
+   * Mueve ruido de tipo/estado desde el FINAL del modelo hacia la variante (WS1).
+   * Reglas (solo si el modelo tiene >= 2 palabras):
+   *  - Última palabra = keyword de tipo (mouse|keyboard|controller|headset|earphone|
+   *    earbuds|numpad|mousepad|webcam|camera|microphone|switch|chair|desk|hub|
+   *    adapter|cable|stand|gamepad|dock|receiver) → variante.
+   *  - Última palabra = estado (released|new|upcoming) → variante.
+   *  - 'combo' como primera palabra es ruido → variante ('Combo MK120 Mouse' →
+   *    modelo 'MK120', variante 'Combo Mouse').
+   * Se aplica en loop (una fila puede arrastrar 'Charing Dock Mouse' →
+   * 'Charing Dock'). Guarda: no deja un descriptor puro como modelo
+   * ('Wireless Keyboard' no se toca: 'Wireless' solo no es un modelo). Nunca
+   * toca pro|wireless|ultra|max|bluetooth|wired|mechanical|gaming (sufijos
+   * legítimos de línea).
+   */
+  moveTrailingTypeKeyword(modelo, variante) {
+    const TYPE_TAIL_RE = /\b(mouse|keyboard|controller|headset|earphone|earbuds|numpad|mousepad|webcam|camera|microphone|switch|chair|desk|hub|adapter|cable|stand|gamepad|dock|receiver)$/i;
+    const STATUS_TAIL_RE = /^(released|new|upcoming)$/i;
+    const DESCRIPTOR_ONLY_RE = /^(combo|wired|wireless|bluetooth|mechanical|gaming|optical|rgb|silent|magnetic|hall|usb|2\.4g|pro|ultra|max)$/i;
+    let m = String(modelo || '').trim();
+    let v = String(variante || '').trim();
+    let guard = 0;
+    while (guard++ < 5) {
+      const words = m.split(/\s+/);
+      if (words.length < 2) break;
+      const last = words[words.length - 1];
+      const isTypeTail = TYPE_TAIL_RE.test(last);
+      const isStatusTail = STATUS_TAIL_RE.test(last);
+      if (isTypeTail || isStatusTail) {
+        const remaining = words.slice(0, -1);
+        // No dejes un descriptor puro como modelo ('Combo Mouse' → no 'Combo').
+        if (remaining.length === 1 && DESCRIPTOR_ONLY_RE.test(remaining[0])) break;
+        m = remaining.join(' ');
+        v = (v + ' ' + last).replace(/\s+/g, ' ').trim();
+        continue;
+      }
+      if (/^combo$/i.test(words[0])) {
+        m = words.slice(1).join(' ');
+        v = (words[0] + ' ' + v).replace(/\s+/g, ' ').trim();
+        continue;
+      }
+      break;
+    }
+    return { modelo: m, variante: v };
+  },
+
   finalizeCatalogProducts(allProducts, brandFallback, baseLength = 0, customBrands = [], allImages = []) {
     const products = [];
     const seen = new Set();
@@ -1738,6 +1800,18 @@ if (!rawModelo) continue;
       const p = allProducts[i];
       const detectedBrand = p.marca !== 'OTRO' ? p.marca : (brandFallback || 'OTRO');
       const cat = p.cat;
+
+      // Limpieza universal de tipo/estado al final del modelo (WS1): los paths
+      // que NO pasan por sanitizeProductNames (fallback de texto plano del AI
+      // engine, items del LLM) pueden traer la categoría pegada al modelo
+      // ('Ultimate 2C Controller', 'Xbox Keyboard'). Acá el fix es idempotente:
+      // los productos ya limpios no cambian. Se aplica ANTES del dedup para que
+      // la identidad use el modelo limpio.
+      {
+        const moved = this.moveTrailingTypeKeyword(p.modelo || '', p.variante || '');
+        p.modelo = moved.modelo;
+        p.variante = moved.variante;
+      }
 
       const key = (detectedBrand + '|' + p.modelo.substring(0, 50) + '|' + p.variante.substring(0, 30) + '|' + p.fob).toLowerCase();
       if (seen.has(key)) continue;
@@ -2353,6 +2427,15 @@ if (!rawModelo) continue;
   },
 
   matchImagesToProductsGlobal(products, allImages) {
+    // Marcadores de coincidencia débil (fail-closed). El matcher registra en
+    // imgWarnings las advertencias de VALIDACIÓN VISUAL reales (color no
+    // coincide, casi monocromática, shape aceptada en backfill). NO se marcan
+    // los mecanismos de recuperación por sí mismos (pase relajado, huérfanas
+    // por proximidad, alineación de galería): están verificados como fuentes
+    // de fotos correctas en estos catálogos (fotos combo mouse+teclado, AJAZZ
+    // 11/11, Irok 7/7). Degradarlos en masa volvería inutilizable el semáforo
+    // (1072 YELLOW medidos). El gate weak-image degrada SOLO por señales de
+    // foto posiblemente equivocada (casi monocromática = fondo sin producto).
     if (!products || !products.length) return;
     products.forEach(product => {
       if (!this.isValidImageDataUrl(product.img)) {
@@ -2433,7 +2516,7 @@ if (!rawModelo) continue;
         return costMatrix;
       };
 
-      const runGreedy = (costMatrix) => {
+      const runGreedy = (costMatrix, relaxed) => {
         while (assignedProds.size < pageProds.length && assignedImgs.size < pageImgs.length) {
           let minPair = null;
 
@@ -2472,14 +2555,14 @@ if (!rawModelo) continue;
       };
 
       // Pase 1: asignación estricta (gates duras).
-      runGreedy(buildMatrix(false));
+      runGreedy(buildMatrix(false), false);
 
       // Pase 2 (backfill): productos que quedaron sin imagen reciben la mejor
       // imagen restante con gates relajadas (shape gate → penalty). Recupera
       // páginas cuyas fotos son todas anchas (Logitech product + specs tiles).
       const stillEmpty = pageProds.some((p, idx) => !assignedProds.has(idx) && !this.isValidImageDataUrl(p.img));
       if (stillEmpty && assignedImgs.size < pageImgs.length) {
-        runGreedy(buildMatrix(true));
+        runGreedy(buildMatrix(true), true);
       }
 
       // Pase 3 (galería desfasada): tablas con la galería de fotos desplazada
@@ -2557,18 +2640,29 @@ if (!rawModelo) continue;
           const prod = pageProds[pi];
           let bestImg = null;
           let bestDist = Infinity;
+          let bestValidation = null;
           for (const img of freeSorted) {
             const distY = prod.y - (img.centerY || (img.y + (img.height || 0) / 2));
             if (distY > 460 || distY < -700) continue;
             const validation = this.validateImageForProduct(img, prod, true);
             if (!validation.valid) continue;
-            if (Math.abs(distY) < bestDist) { bestDist = Math.abs(distY); bestImg = img; }
+            if (Math.abs(distY) < bestDist) { bestDist = Math.abs(distY); bestImg = img; bestValidation = validation; }
           }
           if (bestImg) {
             prod.img = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
             assignedProds.add(pi);
             usedUrls.add(bestImg.dataUrl);
             freeSorted = freeSorted.filter(i => i !== bestImg);
+            // Conserva los warnings de VALIDACIÓN VISUAL del ganador (color,
+            // casi monocromática) — el gate weak-image los evalúa; el marcador
+            // de 'huérfana por proximidad' por sí solo NO degrada (mecanismo
+            // verificado: galerías desplazadas de Irok/AULA/RK asignan bien).
+            if (bestValidation && bestValidation.warnings && bestValidation.warnings.length) {
+              if (!Array.isArray(prod.imgWarnings)) prod.imgWarnings = [];
+              for (const w of bestValidation.warnings) {
+                if (!prod.imgWarnings.includes(w)) prod.imgWarnings.push(w);
+              }
+            }
           }
         }
       }
