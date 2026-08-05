@@ -1877,7 +1877,10 @@ if (!rawModelo) continue;
       const srcConf = (p.sourceConfidence === null || p.sourceConfidence === undefined) ? null : p.sourceConfidence;
       p.confidence = srcConf === null ? evalScore.confidence : Math.min(srcConf, evalScore.confidence);
       p.status = evalScore.status;
-      p.warnings = [...new Set([...(p.sourceWarnings || []), ...evalScore.warnings])];
+      // Fusionar imgWarnings (validación visual del matcher: monocromática,
+      // color mismatch, shape) a warnings para que el preview los muestre.
+      const imgW = Array.isArray(p.imgWarnings) ? p.imgWarnings : [];
+      p.warnings = [...new Set([...(p.sourceWarnings || []), ...evalScore.warnings, ...imgW])];
       p.qualityReason = p.warnings[0] || 'Sin observaciones';
     }
 

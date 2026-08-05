@@ -55,6 +55,9 @@ const Tests = {
     this.testTopDownDirectionalGate();
     this.testFamilyTitleColorProfile();
     this.testGlobalBipartiteMatching();
+    this.testMoveTrailingTypeKeyword();
+    this.testModelQualityGatesFailClosed();
+    this.testSkuFailClosed();
     this.testHeaderPriorityRowContext();
     this.testTableHeaderNoiseFilter();
     this.testSpatialCellGridExtraction();
@@ -609,6 +612,56 @@ const Tests = {
     ];
     const products = PdfParser.extractPageProductsByCellGrid(items, 800, 1, [], '8BitDo', []);
     this.assert(products.length === 0, 'Grid Engine v5 ignoró correctamente la fila de encabezado de tabla "Model Color Price RMB USD"');
+  },
+
+  testMoveTrailingTypeKeyword() {
+    // Trailing type word moves to variant
+    let r = PdfParser.moveTrailingTypeKeyword('Ultimate 2C Controller', 'Green');
+    this.assert(r.modelo === 'Ultimate 2C' && r.variante === 'Green Controller', 'moveTrailingTypeKeyword: Controller al final -> variante');
+    // Status word moves to variant
+    r = PdfParser.moveTrailingTypeKeyword('Lake Released', 'New Green');
+    this.assert(r.modelo === 'Lake' && r.variante.includes('Released'), 'moveTrailingTypeKeyword: Released (estado) -> variante');
+    // Leading combo moves to variant
+    r = PdfParser.moveTrailingTypeKeyword('Combo MK120 Mouse', 'Black');
+    this.assert(r.modelo === 'MK120' && r.variante.includes('Combo'), 'moveTrailingTypeKeyword: Combo inicial -> variante');
+    // Compound names are protected (no word boundary inside)
+    r = PdfParser.moveTrailingTypeKeyword('Caramel LatteSwitch', 'White');
+    this.assert(r.modelo === 'Caramel LatteSwitch', 'moveTrailingTypeKeyword: LatteSwitch (compuesto) NO se toca');
+    // Pure descriptor is not left as model
+    r = PdfParser.moveTrailingTypeKeyword('Magnetic Keyboard', 'Black');
+    this.assert(r.modelo === 'Magnetic Keyboard', 'moveTrailingTypeKeyword: descriptor puro NO se toca');
+    // Legitimate suffix untouched
+    r = PdfParser.moveTrailingTypeKeyword('G502 Wireless', 'Black');
+    this.assert(r.modelo === 'G502 Wireless', 'moveTrailingTypeKeyword: sufijo Wireless (legítimo) NO se toca');
+  },
+
+  testModelQualityGatesFailClosed() {
+    const G = global.CatalogAssignmentGates || CatalogAssignmentGates;
+    // Mid-model type keyword detected (the GATE decides with the digit rule)
+    this.assert(G.isMidModelTypeKeyword('Keyboard F75') === true, 'isMidModelTypeKeyword: Keyboard F75 detecta');
+    this.assert(G.isMidModelTypeKeyword('Retro Receiver Saturn') === true, 'isMidModelTypeKeyword: detecta keyword en el medio (el gate exige dígito)');
+    // Bare type word as model -> YELLOW
+    this.assert(G.isBareTypeWordModel('Receiver') === true, 'isBareTypeWordModel: Receiver detecta');
+    this.assert(G.isBareTypeWordModel('LatteSwitch') === false, 'isBareTypeWordModel: LatteSwitch (compuesto) NO');
+    // End-to-end: dirty model degrades, legitimate stays GREEN (status inicial
+    // GREEN — runAll solo degrada, no asigna status)
+    const res = G.runAll([
+      { sku: 'TST-001', status: 'GREEN', marca: 'Aula', modelo: 'Keyboard F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: true },
+      { sku: 'TST-002', status: 'GREEN', marca: '8BitDo', modelo: 'Retro Receiver Saturn', variante: 'Gray', cat: 'CONTROLLER', fob: 12, img: 'data:image/png;base64,BBBB', grounded: true }
+    ]);
+    const dirty = res.products.find(p => p.sku === 'TST-001');
+    const clean = res.products.find(p => p.sku === 'TST-002');
+    this.assert(dirty.status === 'YELLOW', 'Fail-closed: modelo con keyword de categoría + dígito -> YELLOW');
+    this.assert(clean.status === 'GREEN', 'Fail-closed: nombre de producto real (Retro Receiver Saturn, sin dígito) sigue GREEN');
+  },
+
+  testSkuFailClosed() {
+    const good = CatalogValidator.validateItem({ sku: 'AUL-TEC-4B7A9C2F', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: true });
+    this.assert(good.status === 'GREEN', 'SKU generado válido -> GREEN');
+    const bad = CatalogValidator.validateItem({ sku: 'SKU CON ESPACIOS!', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: true });
+    this.assert(bad.status === 'RED' && bad.critical.some(c => c.includes('SKU')), 'SKU con caracteres inválidos -> RED');
+    const manual = CatalogValidator.validateItem({ sku: 'MOU-001', marca: 'AULA', modelo: 'F75', variante: 'Black', cat: 'TECLADO', fob: 35, img: 'data:image/png;base64,AAAA', grounded: true });
+    this.assert(manual.status === 'GREEN', 'SKU manual legítimo (MOU-001) -> GREEN (no se exige formato generado)');
   },
 
   testSpatialCellGridExtraction() {
