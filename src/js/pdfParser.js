@@ -2536,7 +2536,8 @@ if (!rawModelo) continue;
             assignedProds.add(prodsAsc[k]);
           }
         }
-      } else if ((stillEmptyIdx.length + sharedIdx.length) >= 1 && (stillEmptyIdx.length + sharedIdx.length) <= 6 && fullPageImgs.length >= 3) {
+      } else if ((stillEmptyIdx.length + sharedIdx.length) >= 1 && (stillEmptyIdx.length + sharedIdx.length) <= 20 && fullPageImgs.length >= 3) {
+        if (process.env.P3_DEBUG) console.log(`[P3] p${pNum} empty=${stillEmptyIdx.length} shared=${sharedIdx.length} free=${fullPageImgs.length}`);
         // Huérfanas individuales: la foto de la fila está ~250-700px debajo del
         // texto (layout foto-bajo-texto con espacio variable). El fallback del
         // row engine (distY < -160) y las gates del matcher (distYRaw < -100)
