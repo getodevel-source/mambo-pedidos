@@ -245,27 +245,16 @@ const CatalogAssignmentGates = {
     }
 
     // --- weak image match policy: fail-closed, never GREEN on weak evidence ---
-    // imgWarnings de VALIDACIÓN VISUAL (registradas por validateImageForProduct
-    // vía matchImagesToProductsGlobal). SOLO la señal de foto posiblemente
-    // EQUIVOCADA degrada: imagen casi monocromática = fondo sin producto.
-    // El color dominante distinto a la variante NO degrada (fotos combo
-    // mouse+teclado SILVER/GRAY son la evidencia correcta de estos catálogos —
-    // verificada en Logitech 23/23); la asignación vía backfill/galería/
-    // huérfana tampoco (mecanismos verificados: AJAZZ 11/11, Irok 7/7). Esas
-    // señales quedan como warning VISIBLE en el preview, sin mentir el semáforo.
-    const WEAK_IMG_WARNING_RE = [
-      /casi monocrom[áa]tica/i,       // foto que es casi todo fondo → dudosa
-    ];
-    for (const p of result) {
-      if (p.status !== 'GREEN') continue;
-      const imgWarnings = Array.isArray(p.imgWarnings) ? p.imgWarnings : [];
-      if (!imgWarnings.some(w => WEAK_IMG_WARNING_RE.some(re => re.test(w)))) continue;
-      p.status = 'YELLOW';
-      if (!p.warnings.includes('Imagen con coincidencia débil')) {
-        p.warnings.push('Imagen con coincidencia débil');
-      }
-      changes.push({ sku: p.sku, type: 'weak-image-match', detail: imgWarnings.join(' | ') });
-    }
+    // Los imgWarnings de VALIDACIÓN VISUAL (monocromática, color mismatch,
+    // shape aceptada en backfill) se conservan VISIBLES en el preview, pero NO
+    // degradan el semáforo: medidos sobre el corpus, generan falsos positivos
+    // masivos (fotos de producto reales sobre fondo liso disparan el detector
+    // de monocromática; fotos combo mouse+teclado SILVER/GRAY disparan el de
+    // color). El fail-closed FIABLE de imagen es el que ya cubren las otras
+    // gates: R9 duro (sin imagen → YELLOW vía catalogValidator), integridad
+    // cross-categoría/cross-marca (foto compartida → YELLOW), placeholder.
+    // Degradar por señales heurísticas volvería el semáforo inutilizable
+    // (1072 YELLOW medidos en la iteración 1 — recalibrado acá).
 
     return { products: result, changes };
   },
