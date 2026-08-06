@@ -1,4 +1,4 @@
-const fs = require('fs');
+const _fs = require('fs');
 const path = require('path');
 
 global.window = global;
@@ -65,6 +65,24 @@ global.Tests = require(jsPath('tests.js'));
 (async () => {
   const result = await Tests.runAll();
   if (result.failed > 0) process.exitCode = 1;
+
+  // Suite de UI (jsdom) — integrada al runner oficial (loop de calidad)
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'quality', 'ui-smoke-tests.js')], { stdio: 'inherit' });
+  } catch (uiErr) {
+    console.error('❌ UI smoke tests FAILED: ' + (uiErr.message || uiErr));
+    process.exitCode = 1;
+  }
+
+  // Suite de lógica de negocio (Calculator/Quote/SKU/Storage) — loop de calidad
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'quality', 'logic-tests.js')], { stdio: 'inherit' });
+  } catch (logicErr) {
+    console.error('❌ Logic tests FAILED: ' + (logicErr.message || logicErr));
+    process.exitCode = 1;
+  }
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

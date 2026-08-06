@@ -231,7 +231,7 @@ const SkuAllocator = {
     }
 
     // Check for ambiguous history/selection references
-    const catalogSkus = new Set(catalog.map(i => this.normalizeSku(i.sku)).filter(Boolean));
+    const _catalogSkus = new Set(catalog.map(i => this.normalizeSku(i.sku)).filter(Boolean));
     for (const orphan of (audit.orphanedHistory || [])) {
       ambiguous.push({ sku: orphan, domain: 'history', reason: 'Not found in catalog' });
     }

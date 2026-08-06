@@ -74,7 +74,7 @@ function analyzeQuality(products, filename) {
     if (!p.fob || p.fob <= 0) noPrice++;
     if (!p.marca || p.marca === 'OTRO') noBrand++;
     if (!p.cat || p.cat === 'OTRO') noCat++;
-    if (/^\$?\d+([\.,]\d+)?$/.test(p.modelo)) priceAsModel++;
+    if (/^\$?\d+([.,]\d+)?$/.test(p.modelo)) priceAsModel++;
     if (p.modelo && p.modelo.trim().length <= 3 && !/^\$?\d/.test(p.modelo)) tooShortModel++;
   }
 

@@ -44,8 +44,8 @@ const TextSanitizer = {
   ],
 
   CORPORATE_NOISE_REGEX: /\b(co\.\s*,?\s*ltd\.?|technology\s+co\.|ltd\.?|inc\.?|corp\.?|company|limited)\b/gi,
-  HEADER_NOISE_REGEX: /^(CNY|RMB|USD|EUR|PRICE|COLOR|MODEL|PICTURE|IMAGE|SPEC|REMARK|MOQ|FOB|\.|\-|\s)+$/i,
-  MONEY_NOISE_REGEX: /\b(CNY|RMB|USD|EUR)\s*\$?[\d\.,]+\b/gi,
+  HEADER_NOISE_REGEX: /^(CNY|RMB|USD|EUR|PRICE|COLOR|MODEL|PICTURE|IMAGE|SPEC|REMARK|MOQ|FOB|\.|-|\s)+$/i,
+  MONEY_NOISE_REGEX: /\b(CNY|RMB|USD|EUR)\s*\$?[\d.,]+\b/gi,
   PRICE_DECIMAL_REGEX: /^\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?$/,
 
   /**
@@ -58,7 +58,7 @@ const TextSanitizer = {
     let variante = (item.variante || item.color || '').toString().trim();
     let marca = (item.marca || '').toString().trim();
     let cat = (item.cat || '').toString().trim().toUpperCase();
-    let fob = parseFloat(item.fob) || 0;
+    const fob = parseFloat(item.fob) || 0;
 
     // 1. Limpieza de Modelo
     modelo = modelo.replace(this.CORPORATE_NOISE_REGEX, '');
@@ -77,13 +77,13 @@ const TextSanitizer = {
 
     // 1c. Purely numeric modelo (a size/key count/price, e.g. "68") is noise -> empty it
     //     so the real model is recovered from variante in the reverse audit.
-    if (/^\$?\d+([\.,]\d+)?$/.test(modelo.trim())) {
+    if (/^\$?\d+([.,]\d+)?$/.test(modelo.trim())) {
       modelo = '';
     }
 
     // 2. Limpieza de Variante / Color
     if (variante) {
-      if (this.PRICE_DECIMAL_REGEX.test(variante) || /^[\d\.,\s]+$/.test(variante) || this.HEADER_NOISE_REGEX.test(variante)) {
+      if (this.PRICE_DECIMAL_REGEX.test(variante) || /^[\d.,\s]+$/.test(variante) || this.HEADER_NOISE_REGEX.test(variante)) {
         variante = '';
       } else {
         variante = variante.replace(/\s+/g, ' ').trim();
@@ -135,7 +135,7 @@ const TextSanitizer = {
 
     // 4c. Zero-identity row: no model (or numeric-only), no variant, no brand, no category
     //     -> pure noise (e.g. a stray RMB price column parsed as a product row). Drop it.
-    const modeloIsNoise = (!modelo || modelo.length < 2 || /^\$?\d+([\.,]\d+)?$/.test(modelo));
+    const modeloIsNoise = (!modelo || modelo.length < 2 || /^\$?\d+([.,]\d+)?$/.test(modelo));
     if (modeloIsNoise && !variante && (!marca || marca === 'OTRO') && (!cat || cat === 'OTRO')) {
       return null;
     }
@@ -149,7 +149,7 @@ const TextSanitizer = {
     // 5a. Post-audit guard: crossAudit can strip the last meaningful token out of modelo
     //     (e.g. "68 V3" -> V3 moved to variante -> modelo degenerates to "68"). If modelo
     //     ended up as noise while variante still holds content, recover the model from it.
-    if (/^(item|list|earphones?|products?|producto|none|n\/a|undefined|null|[-.]|\$?\d+([\.,]\d+)?)$/i.test(modelo.trim()) && variante) {
+    if (/^(item|list|earphones?|products?|producto|none|n\/a|undefined|null|[-.]|\$?\d+([.,]\d+)?)$/i.test(modelo.trim()) && variante) {
       const recovered = this.crossAuditFields('', variante, marca, cat, !!item._keepColorNames);
       modelo = recovered.modelo;
       variante = recovered.variante;
@@ -287,7 +287,6 @@ const TextSanitizer = {
       const modelWords = [];
       const remainingVar = [];
       for (const w of varWords) {
-        const lower = w.toLowerCase();
         // Reset lastIndex before each test — /g regex state bug prevention
         this.COLOR_WORDS_RE.lastIndex = 0;
         this.CONNECTION_WORDS_RE.lastIndex = 0;

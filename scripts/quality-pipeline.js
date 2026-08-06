@@ -1,259 +1,147 @@
 #!/usr/bin/env node
 /**
- * Mambo Pedidos — Automated Validation Loop
- * 
- * Processes all 13 PDFs through extraction + sanitization + R1-R10 validation.
- * Reports GREEN/YELLOW/RED counts. Exit 0 = all GREEN.
- * 
- * Usage: node scripts/quality-pipeline.js [--verbose] [--pdf path]
+ * Mambo Pedidos — Automated Validation Loop (v2)
+ *
+ * Auditoría OFICIAL basada en el PIPELINE REAL de producción:
+ *   export-catalog-batch.js (extracción espacial + sanitize + finalize +
+ *   match de imágenes + gates) + measure-catalog-assignment.js (medición
+ *   post-gates). El antiguo extractor de anclas de precio (findPriceAnchors)
+ *   se deprecó: reportaba 2201 productos no-GREEN cuando el pipeline real da
+ *   97% GREEN — señal divergente que rompía el loop de calidad.
+ *
+ * Criterios de PASS (fail-closed, alineados al harness del loop):
+ *   - RED post-gates === 0
+ *   - 0 GREEN sin imagen
+ *   - 0 cross-categoría post-gates
+ *   - 0 duplicados
+ *   - GREEN >= 90% del total
+ *
+ * Uso:
+ *   node scripts/quality-pipeline.js [--verbose] [--quick] [--export path]
+ *   --verbose : imprime el output completo del export + medición
+ *   --quick   : corre UN solo catálogo (CATALOG_FILTER env, default 8BitDo)
+ *   --export  : usa un export existente (no re-corre el batch)
+ *   --pdf name: alias de --quick con ese filtro de catálogo
+ *
+ * Exit: 0 = PASS, 1 = FAIL (productos no conformes), 2 = error de corrida.
+ * Escribe quality-report.json con el resumen.
  */
 
 const fs = require('fs');
 const path = require('path');
-const TextSanitizer = require('../src/js/textSanitizer.js');
-const CatalogValidator = require('../src/js/catalogValidator.js');
+const os = require('os');
+const { execFileSync } = require('child_process');
 
 const VERBOSE = process.argv.includes('--verbose');
+const QUICK = process.argv.includes('--quick');
+const EXPORT_ARG = process.argv.find((a, i) => process.argv[i - 1] === '--export');
 const PDF_FILTER = process.argv.find((a, i) => process.argv[i - 1] === '--pdf');
-const CATALOG_DIR = 'C:\\Mambo\\Catalogos';
+const REPO = path.resolve(__dirname, '..');
+const RUNNER = path.join(REPO, 'scripts', 'export-catalog-batch.js');
+const MEASURE = path.join(REPO, 'scripts', 'measure-catalog-assignment.js');
 
-let pdfjs;
-try { pdfjs = require('pdfjs-dist/legacy/build/pdf.js'); }
-catch { pdfjs = require('pdfjs-dist'); }
+const GREEN_MIN_PCT = 90;
 
-const KNOWN_BRANDS = [
-  'REDRAGON','LOGITECH','RAZER','HYPERX','CORSAIR','AULA','AJAZZ',
-  'MACHENIKE','8BITDO','ATTACK SHARK','VGN','VXE','FLYDIGI','DARMOSHARK',
-  'LAMZU','WLMOUSE','KEYCHRON','VSG','KZ','HAIMU','POLAROID','GAMESIR',
-  'MADLIONS','ATK','IROK','MCHOSE','ROYAL KLUDGE','RK','8BITDO','KEYBOARD_SWITCH'
-];
 
-const COLOR_RE = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|gunmetal|blackberry|neon|arctic|translucent|dark|light|wukong|myth|faker|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|fox|dream|whimsy|perilla|tea|flash)\b/i;
-const CURRENCY_NOISE = /[￥¥元]\s*/g;
-const GARBAGE_RE = /^(item|producto|product|\.|-|n\/a|undefined|null|none)$/i;
-
-function brandFromFilename(filename) {
-  const upper = filename.toUpperCase().replace(/[-_.]/g, ' ');
-  for (const b of KNOWN_BRANDS) { if (upper.includes(b)) return b; }
-  if (upper.includes('KEYBOARD SWITCH')) return 'KEYBOARD_SWITCH';
-  if (upper.includes('迈从')) return 'MCHOSE';
-  return null;
+function node(cmd) {
+  // Foreground dentro del parent: node falla silenciosamente en background.
+  return execFileSync(process.execPath, cmd, {
+    cwd: REPO,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    timeout: 600000 // batch completo ~8-10 min
+  });
 }
 
-function findPriceAnchors(textItems) {
-  const anchors = [];
-  for (const item of textItems) {
-    const txt = item.str.trim();
-    const m = txt.match(/^\$?\s*(\d+[\.,]\d{1,2})$/);
-    if (m) {
-      const price = parseFloat(m[1].replace(',', '.'));
-      if (price > 0 && price < 9999) {
-        anchors.push({ x: item.transform[4], y: item.transform[5], price });
-      }
-    }
-  }
-  return anchors;
-}
-
-function extractTableRows(textItems, priceAnchors) {
-  if (!priceAnchors.length) return [];
-
-  // Deduplicate: keep only the rightmost price per Y-row (USD column)
-  // RMB prices are at lower X, USD at higher X
-  priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
-  const deduped = [];
-  for (const anchor of priceAnchors) {
-    const last = deduped[deduped.length - 1];
-    if (last && Math.abs(last.y - anchor.y) < 10) {
-      // Same row — keep the rightmost (higher X = USD)
-      if (anchor.x > last.x) deduped[deduped.length - 1] = anchor;
-    } else {
-      deduped.push(anchor);
-    }
-  }
-  priceAnchors = deduped;
-
-  const priceColX = priceAnchors.reduce((s, a) => s + a.x, 0) / priceAnchors.length;
-  const products = [];
-  let lastModel = '';
-  priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
-
-  const rowBounds = [];
-  for (let i = 0; i < priceAnchors.length; i++) {
-    const top = i === 0 ? priceAnchors[i].y + 80 : (priceAnchors[i].y + priceAnchors[i - 1].y) / 2;
-    const bottom = i === priceAnchors.length - 1 ? priceAnchors[i].y - 80 : (priceAnchors[i].y + priceAnchors[i + 1].y) / 2;
-    rowBounds.push({ top, bottom, anchor: priceAnchors[i] });
-  }
-
-  for (const row of rowBounds) {
-    const { top, bottom, anchor } = row;
-    const rowItems = textItems.filter(item => {
-      const y = item.transform[5], x = item.transform[4], txt = item.str.trim();
-      if (!txt || y > top || y < bottom || x >= priceColX * 0.85) return false;
-      if (/^[￥¥$€£]/.test(txt) || /^\d+[\.,]?\d*$/.test(txt)) return false;
-      return true;
-    });
-
-    const nameParts = [], colorParts = [], typeParts = [];
-    for (const item of rowItems) {
-      const txt = item.str.trim();
-      const x = item.transform[4];
-      const relX = priceColX > 0 ? x / priceColX : 0.5;
-      const isColor = COLOR_RE.test(txt);
-      const isConn = /\b(bluetooth|wired|wireless|2\.4g|tri[\s-]?mode|usb[\s-]?c|rgb)\b/i.test(txt);
-      if (isColor) colorParts.push(txt);
-      else if (isConn) typeParts.push(txt);
-      else if (relX < 0.45) nameParts.push(txt);
-      else if (txt.length <= 15 && !/\s/.test(txt)) typeParts.push(txt);
-      else nameParts.push(txt);
-    }
-
-    let rawModelo = nameParts.join(' ').replace(CURRENCY_NOISE, '').replace(/\s+/g, ' ').trim();
-    let rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
-
-    // Header noise filter: skip rows where modelo is table header text
-    const HEADER_NOISE = /\b(USD|PRICE|RMB|CNY|MODEL|COLOR|NO\.|SKU|EAN|BARCODE|PRODUCT|ITEM|QTY|QUANTITY|MATERIAL|AXLE|CORE|BOTTOMING)\b|型号|颜色|价格|产品|数量/i;
-    if (HEADER_NOISE.test(rawModelo)) continue;
-
-    if (!rawModelo && lastModel) rawModelo = lastModel;
-    else if (!rawModelo && rawVariante) { rawModelo = rawVariante; rawVariante = ''; }
-    if (!rawModelo) continue;
-
-    const combined = rawModelo + ' ' + rawVariante;
-    let marca = 'OTRO';
-    const upper = combined.toUpperCase();
-    for (const b of KNOWN_BRANDS) { if (upper.includes(b)) { marca = b; break; } }
-    if (marca !== 'OTRO') {
-      rawModelo = rawModelo.replace(new RegExp('\\b' + marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i'), '').replace(/\s+/g, ' ').trim();
-    }
-
-    if (rawModelo && rawModelo.length > 2 && !GARBAGE_RE.test(rawModelo)) lastModel = rawModelo;
-
-    products.push({ sku: 'TMP-' + products.length, marca, modelo: rawModelo, variante: rawVariante, cat: 'OTRO', fob: anchor.price, img: '-', grounded: true });
-  }
-  return products;
+function parseMeasure(stdout) {
+  const out = {};
+  // Medir SIEMPRE del bloque post-gates ("=== DESPUÉS de gates ===").
+  // El bloque pre-gates es la extracción cruda: sus cross-cat/status no
+  // reflejan el producto final.
+  const post = stdout.split('=== DESPUÉS de gates ===')[1] || stdout;
+  const status = post.match(/status:\s*G=(\d+)\s+Y=(\d+)\s+R=(\d+)/);
+  if (status) { out.green = +status[1]; out.yellow = +status[2]; out.red = +status[3]; }
+  out.total = (post.match(/total:\s*(\d+)/) || [])[1] && +post.match(/total:\s*(\d+)/)[1];
+  out.crossCat = (post.match(/cross-categoría:\s*(\d+)/) || [])[1] && +post.match(/cross-categoría:\s*(\d+)/)[1];
+  out.crossBrand = (post.match(/cross-marca sin identidad:\s*(\d+)/) || [])[1] && +post.match(/cross-marca sin identidad:\s*(\d+)/)[1];
+  out.duplicates = (post.match(/duplicados:\s*(\d+) grupos/) || [])[1] && +post.match(/duplicados:\s*(\d+) grupos/)[1];
+  out.greenNoImg = (post.match(/GREEN sin imagen:\s*(\d+)/) || [])[1] && +post.match(/GREEN sin imagen:\s*(\d+)/)[1];
+  out.redPostGates = (post.match(/RED post-gates:\s*(\d+)/) || [])[1] && +post.match(/RED post-gates:\s*(\d+)/)[1];
+  return out;
 }
 
 async function main() {
-  let pdfPaths;
-  if (PDF_FILTER) pdfPaths = [PDF_FILTER];
-  else {
-    pdfPaths = fs.readdirSync(CATALOG_DIR).filter(f => f.endsWith('.pdf')).map(f => path.join(CATALOG_DIR, f));
-  }
+  let exportPath = EXPORT_ARG;
+  let perFile = null;
 
-  console.log(`\n🔬 MAMBO VALIDATION LOOP — ${pdfPaths.length} PDFs\n`);
+  console.log('\n🔬 MAMBO AUDIT — pipeline real (export + measure post-gates)\n');
   console.log('═'.repeat(70));
 
-  let allProducts = [];
-  const perFile = [];
+  const filter = PDF_FILTER || (QUICK ? (process.env.CATALOG_FILTER || '8BitDo') : null);
 
-  for (const pdfPath of pdfPaths) {
-    const name = path.basename(pdfPath);
-    const fileBrand = brandFromFilename(name);
-    try {
-      const data = new Uint8Array(fs.readFileSync(pdfPath));
-      const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
-      let fileProducts = [];
-
-      for (let p = 1; p <= doc.numPages; p++) {
-        const page = await doc.getPage(p);
-        const content = await page.getTextContent();
-        const anchors = findPriceAnchors(content.items);
-        if (!anchors.length) continue;
-        const products = extractTableRows(content.items, anchors);
-        if (fileBrand) products.forEach(prod => { if (!prod.marca || prod.marca === 'OTRO') prod.marca = fileBrand; });
-        products.forEach(prod => {
-          const sanitized = TextSanitizer.sanitizeItem(prod, []);
-          if (sanitized) fileProducts.push(sanitized);
-        });
-      }
-
-      // Run R1-R10 validation
-      CatalogValidator.runFullValidation(fileProducts);
-
-      const green = fileProducts.filter(p => p.status === 'GREEN').length;
-      const yellow = fileProducts.filter(p => p.status === 'YELLOW').length;
-      const red = fileProducts.filter(p => p.status === 'RED').length;
-      const allGreen = yellow === 0 && red === 0;
-
-      perFile.push({ name, total: fileProducts.length, green, yellow, red, allGreen });
-      allProducts.push(...fileProducts);
-
-      const icon = allGreen ? '🟢' : red > 0 ? '🔴' : '🟡';
-      console.log(`  ${icon} ${name.padEnd(42)} ${String(fileProducts.length).padStart(4)} prod · G=${green} Y=${yellow} R=${red}`);
-
-      if (VERBOSE && !allGreen) {
-        const yellowItems = fileProducts.filter(p => p.status === 'YELLOW').slice(0, 3);
-        for (const item of yellowItems) {
-          const reasons = (item.warnings || []).slice(0, 2).join('; ');
-          console.log(`      Y: marca="${item.marca}" modelo="${(item.modelo || '').substring(0, 30)}" → ${reasons}`);
-        }
-      }
-    } catch (err) {
-      console.log(`  ❌ ${name.padEnd(42)} ERROR: ${err.message}`);
-    }
+  if (!exportPath) {
+    exportPath = path.join(os.tmpdir(), `export-audit-${Date.now()}.json`);
+    const args = [RUNNER, exportPath];
+    if (filter) process.env.CATALOG_FILTER = filter;
+    console.log(`  ⚙️  Exportando ${filter ? `catálogo filtrado: ${filter}` : 'los 13 catálogos'} (~${filter ? 'segundos' : '8-10 min'})...\n`);
+    const exportOut = node(args);
+    if (VERBOSE) console.log(exportOut);
+    // "Por catálogo: 8BitDo-2026:89" → resumen por archivo
+    perFile = (exportOut.match(/Por catálogo: ([^:]+):(\d+)/g) || []).map(l => {
+      const m = l.match(/Por catálogo: (.+):(\d+)/);
+      return { name: m[1], total: +m[2] };
+    });
   }
 
-  // Global stats
-  const totalGreen = allProducts.filter(p => p.status === 'GREEN').length;
-  const totalYellow = allProducts.filter(p => p.status === 'YELLOW').length;
-  const totalRed = allProducts.filter(p => p.status === 'RED').length;
-  const totalAll = allProducts.length;
-  const greenPct = Math.round((totalGreen / Math.max(1, totalAll)) * 100);
+  console.log(`\n  📏 Midiendo post-gates...\n`);
+  const measureOut = node([MEASURE, exportPath]);
+  if (VERBOSE) console.log(measureOut);
 
-  console.log('\n' + '═'.repeat(70));
-  console.log(`\n  📊 RESULTADO GLOBAL: ${totalAll} productos`);
-  console.log(`  🟢 GREEN:  ${totalGreen} (${greenPct}%)`);
-  console.log(`  🟡 YELLOW: ${totalYellow} (${Math.round((totalYellow / Math.max(1, totalAll)) * 100)}%)`);
-  console.log(`  🔴 RED:    ${totalRed} (${Math.round((totalRed / Math.max(1, totalAll)) * 100)}%)`);
-
-  // Show top YELLOW reasons
-  if (totalYellow > 0) {
-    const reasonCounts = {};
-    for (const p of allProducts.filter(p => p.status === 'YELLOW')) {
-      for (const w of (p.warnings || [])) {
-        const short = w.substring(0, 60);
-        reasonCounts[short] = (reasonCounts[short] || 0) + 1;
-      }
-    }
-    const topReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    console.log(`\n  TOP RAZONES YELLOW:`);
-    for (const [reason, count] of topReasons) {
-      console.log(`    ${String(count).padStart(4)} | ${reason}`);
-    }
+  const m = parseMeasure(measureOut);
+  if (!m.total || m.total === 0) {
+    console.error('❌ No se pudo medir el export (¿pipeline roto?). Ver quality-pipeline.js');
+    process.exit(2);
   }
 
-  // Show RED samples
-  if (totalRed > 0) {
-    console.log(`\n  EJEMPLOS RED:`);
-    for (const p of allProducts.filter(p => p.status === 'RED').slice(0, 5)) {
-      const reasons = (p.warnings || []).join('; ');
-      console.log(`    marca="${p.marca}" modelo="${(p.modelo || '').substring(0, 30)}" cat=${p.cat} fob=${p.fob} → ${reasons}`);
-    }
+  const greenPct = Math.round((m.green / m.total) * 100);
+  console.log('═'.repeat(70));
+  console.log(`\n  📊 RESULTADO (post-gates): ${m.total} productos`);
+  console.log(`  🟢 GREEN:  ${m.green} (${greenPct}%)`);
+  console.log(`  🟡 YELLOW: ${m.yellow} (${Math.round((m.yellow / m.total) * 100)}%)`);
+  console.log(`  🔴 RED:    ${m.red} (${Math.round((m.red / m.total) * 100)}%)`);
+  console.log(`  🖼️  GREEN sin imagen: ${m.greenNoImg} | cross-cat: ${m.crossCat} | cross-marca: ${m.crossBrand}`);
+  console.log(`  🔁 Duplicados: ${m.duplicates} grupos`);
+
+  if (perFile && perFile.length) {
+    console.log(`\n  RESUMEN POR ARCHIVO:`);
+    for (const f of perFile) console.log(`    ${String(f.total).padStart(4)} prod | ${f.name}`);
+  }
+
+  const checks = [
+    ['RED post-gates = 0', m.red === 0],
+    ['0 GREEN sin imagen', m.greenNoImg === 0],
+    ['0 cross-categoría', m.crossCat === 0],
+    ['0 duplicados', m.duplicates === 0],
+    [`GREEN ≥ ${GREEN_MIN_PCT}%`, greenPct >= GREEN_MIN_PCT]
+  ];
+  console.log(`\n  CRITERIOS FAIL-CLOSED:`);
+  let pass = true;
+  for (const [label, ok] of checks) {
+    console.log(`    ${ok ? '✅' : '❌'} ${label}`);
+    if (!ok) pass = false;
   }
 
   console.log('\n' + '═'.repeat(70));
+  console.log(`\n  ${pass ? '✅ AUDIT PASS' : '❌ AUDIT FAIL — revisar criterios fallidos'}\n`);
 
-  // Per-file summary
-  console.log(`\n  RESUMEN POR ARCHIVO:`);
-  for (const f of perFile.sort((a, b) => (a.allGreen ? 1 : 0) - (b.allGreen ? 1 : 0) || a.green - b.green)) {
-    const icon = f.allGreen ? '🟢' : f.red > 0 ? '🔴' : '🟡';
-    console.log(`  ${icon} ${f.name.padEnd(42)} G=${String(f.green).padStart(4)} Y=${String(f.yellow).padStart(3)} R=${String(f.red).padStart(2)}`);
-  }
-
-  const allGreenGlobal = totalYellow === 0 && totalRed === 0;
-  console.log(`\n  ${allGreenGlobal ? '✅ ALL GREEN — PASS' : '❌ FAIL — ' + (totalYellow + totalRed) + ' productos no GREEN'}\n`);
-
-  // Write report
-  const report = {
+  fs.writeFileSync(path.join(REPO, 'quality-report.json'), JSON.stringify({
     timestamp: new Date().toISOString(),
-    total: totalAll, green: totalGreen, yellow: totalYellow, red: totalRed,
-    greenPct, allGreen: allGreenGlobal,
-    perFile: perFile.map(f => ({ name: f.name, ...f }))
-  };
-  fs.writeFileSync('quality-report.json', JSON.stringify(report, null, 2), 'utf-8');
+    total: m.total, green: m.green, yellow: m.yellow, red: m.red,
+    greenPct, greenNoImg: m.greenNoImg, crossCat: m.crossCat,
+    duplicates: m.duplicates, pass, perFile
+  }, null, 2), 'utf-8');
 
-  process.exit(allGreenGlobal ? 0 : 1);
+  process.exit(pass ? 0 : 1);
 }
 
 main().catch(err => { console.error(err); process.exit(2); });

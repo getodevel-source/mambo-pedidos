@@ -172,7 +172,7 @@ const CatalogAssignmentGates = {
       byImage.get(identity).push(p);
     }
 
-    for (const [identity, group] of byImage) {
+    for (const [_identity, group] of byImage) {
       const cats = new Set(group.map(p => String(p.cat || '').toUpperCase()));
       if (cats.size <= 1) continue;
 
@@ -197,7 +197,7 @@ const CatalogAssignmentGates = {
     // (verified rebrand, e.g. Irok/Mars "Mer68 Max" — same factory, same photo).
     // Brand is deliberately NOT part of the identity key: a rebrand is exactly
     // when the brand differs and the model is identical.
-    for (const [identity, group] of byImage) {
+    for (const [_identity, group] of byImage) {
       const brands = new Set(group.map(p => String(p.marca || '').trim().toLowerCase()));
       if (brands.size <= 1) continue;
 
@@ -446,7 +446,7 @@ const CatalogAssignmentGates = {
     let crossBrandNoIdentity = 0;
     let sharedImages = 0;
     let sharedProductCount = 0;
-    for (const [identity, group] of byImage) {
+    for (const [_identity, group] of byImage) {
       const cats = new Set(group.map(p => String(p.cat || '').toUpperCase()));
       const brands = new Set(group.map(p => String(p.marca || '').trim().toLowerCase()));
       if (group.length > 1) { sharedImages += 1; sharedProductCount += group.length; }

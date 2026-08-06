@@ -197,7 +197,7 @@ const SpreadsheetHarness = {
       if (tmpDir && fs.existsSync(tmpDir)) {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
-    } catch (e) { /* best effort */ }
+    } catch { /* best effort */ }
   }
 };
 

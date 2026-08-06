@@ -722,7 +722,7 @@ const Tests = {
   testCorporateNoiseSanitizer() {
     const res1 = PdfParser.sanitizeProductNames('Co., Ltd. 235.75', 'Purple Switch', '8BitDo');
     this.assert(res1.modelo !== 'Co., Ltd. 235.75' && !res1.modelo.includes('Co., Ltd.'), 'Limpió la razón social Co., Ltd. del nombre del modelo');
-    this.assert(!/^\$?\d+([\.,]\d+)?$/.test(res1.modelo), 'Reemplazó el precio numérico desnudo por un modelo descriptivo válido');
+    this.assert(!/^\$?\d+([.,]\d+)?$/.test(res1.modelo), 'Reemplazó el precio numérico desnudo por un modelo descriptivo válido');
 
     const res2 = TextSanitizer.parseModelAndVariant('Shenzhen Technology Co., Ltd. Ultimate Controller', '8BitDo');
     this.assert(res2.modelo.length > 0, 'TextSanitizer eliminó la razón social manteniendo el modelo real');
@@ -1240,7 +1240,7 @@ const Tests = {
 
   testRemainingGaps() {
     // #6: Short ambiguous tokens get reduced confidence
-    const ambiguous = PdfParser.detectCategoryWithEvidence('Machenike K500 A5 keyboard', '');
+    const _ambiguous = PdfParser.detectCategoryWithEvidence('Machenike K500 A5 keyboard', '');
     // "A5" is ambiguous but "keyboard" should match TECLADO first (higher priority in pattern list)
     // Let's test a case where ONLY the ambiguous token matches
     const ambiguousOnly = PdfParser.detectCategoryWithEvidence('Model A5', '');
@@ -1264,8 +1264,8 @@ const Tests = {
 
     // #11: Empty modelo items should never be considered equivalent
     // (Tested via SkuAllocator.isEquivalent which uses identityKey)
-    const emptyA = { marca: '', modelo: '', variante: '', cat: '' };
-    const emptyB = { marca: '', modelo: '', variante: '', cat: '' };
+    const _emptyA = { marca: '', modelo: '', variante: '', cat: '' };
+    const _emptyB = { marca: '', modelo: '', variante: '', cat: '' };
     // These have the same identityKey but the importFlow guard prevents dedup on empty modelo
     this.assert(typeof SkuAllocator.isEquivalent === 'function', '#11: isEquivalent disponible');
 

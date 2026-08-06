@@ -30,7 +30,7 @@ const AppUpdater = {
         }
         return ver;
       }
-    } catch (e) {}
+    } catch { }
     return this.CURRENT_VERSION;
   },
 
@@ -77,7 +77,6 @@ const AppUpdater = {
     this.isChecking = true;
 
     await this.syncVersionFromRust();
-    const activeVer = this.getCurrentVersion();
 
     if (userInitiated) {
       toast('🔄 Buscando actualizaciones...', 'info');
@@ -269,7 +268,7 @@ const AppUpdater = {
         let timeout = null;
 
         const cleanup = () => {
-          if (channel) { try { channel.onmessage = null; } catch (e) {} channel = null; }
+          if (channel) { try { channel.onmessage = null; } catch { } channel = null; }
           if (timeout) { clearTimeout(timeout); timeout = null; }
         };
 
@@ -294,7 +293,7 @@ const AppUpdater = {
               }
             };
           }
-        } catch (e) {
+        } catch {
           channel = null;
         }
 
@@ -348,7 +347,7 @@ const AppUpdater = {
       const parsed = new URL(url);
       return ['http:', 'https:'].includes(parsed.protocol) &&
         ['github.com', 'www.github.com', 'instagram.com', 'www.instagram.com'].includes(parsed.hostname);
-    } catch (e) {
+    } catch {
       return false;
     }
   },

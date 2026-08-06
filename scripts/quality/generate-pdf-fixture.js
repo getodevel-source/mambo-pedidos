@@ -29,18 +29,18 @@ function buildPdf() {
   // Catalog
   const catalogNum = addObj('<< /Type /Catalog /Pages 2 0 R >>');
   // Pages
-  const pagesNum = addObj('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  const _pagesNum = addObj('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
   // Page
-  const pageNum = addObj(
+  const _pageNum = addObj(
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources << /XObject << /Img0 5 0 R >> >> >>'
   );
   // Content stream: draw the image at position (50, 100) with size 40x40
   const stream = 'q 40 0 0 40 50 100 cm /Img0 Do Q';
-  const contentNum = addObj(
+  const _contentNum = addObj(
     `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
   );
   // Image XObject
-  const imgStream = PNG_4X4_RED.toString('binary');
+  const _imgStream = PNG_4X4_RED.toString('binary');
   const imageNum = addObj(
     `<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${PNG_4X4_RED.length} >>\nstream\n`
   );

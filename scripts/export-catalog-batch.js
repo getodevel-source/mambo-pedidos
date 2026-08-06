@@ -205,7 +205,9 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
     console.error(`❌ La carpeta ${CATALOG_DIR} no existe`);
     process.exit(1);
   }
-  const files = fs.readdirSync(CATALOG_DIR).filter(f => f.toLowerCase().endsWith('.pdf'));
+  const files = fs.readdirSync(CATALOG_DIR)
+    .filter(f => f.toLowerCase().endsWith('.pdf'))
+    .filter(f => !process.env.CATALOG_FILTER || f.includes(process.env.CATALOG_FILTER));
   console.log(`🔍 Reprocesando ${files.length} catálogos en ${CATALOG_DIR}...\n`);
 
   const allExported = [];

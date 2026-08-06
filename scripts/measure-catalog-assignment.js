@@ -11,7 +11,7 @@
  */
 
 const fs = require('fs');
-const path = require('path');
+const _path = require('path');
 const GATES = require('../src/js/catalogAssignmentGates.js');
 
 const file = process.argv[2];

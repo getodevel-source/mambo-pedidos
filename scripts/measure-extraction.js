@@ -104,7 +104,7 @@ async function dumpItems(pdfName, pageNums) {
   // to capture rawElements + priceAnchors for this page.
   const origGrid = PdfParser.extractPageProductsByCellGrid.bind(PdfParser);
   const origRows = PdfParser.extractPageProductsByTableRows.bind(PdfParser);
-  let captured = [];
+  const captured = [];
   PdfParser.extractPageProductsByCellGrid = async function (items, viewportHeight, pageNum2, pageImages, brandFallback, customBrands, existingProducts) {
     if (pages.includes(pageNum2)) {
       const rawElements = items.filter(i => i.str && i.str.trim()).map(i => ({

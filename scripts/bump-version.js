@@ -20,7 +20,7 @@ function getPackageVersion() {
 
 function checkVersions() {
   const targetVer = getPackageVersion();
-  let errors = [];
+  const errors = [];
 
   console.log(`🔍 Verificando coherencia de versión contra baseline package.json (v${targetVer})...`);
 
@@ -137,7 +137,7 @@ function bumpVersion(newVer) {
   latestJson.version = newVer;
   latestJson.pub_date = new Date().toISOString();
   if (latestJson.platforms) {
-    for (const [platform, info] of Object.entries(latestJson.platforms)) {
+    for (const [_platform, info] of Object.entries(latestJson.platforms)) {
       if (info.url) {
         info.url = info.url
           .replace(/\/v\d+\.\d+\.\d+\//g, `/v${newVer}/`)

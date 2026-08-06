@@ -16,7 +16,7 @@ const path = require('path');
 
 // Load modules
 const CatalogValidator = require('../src/js/catalogValidator.js');
-const TextSanitizer = require('../src/js/textSanitizer.js');
+const _TextSanitizer = require('../src/js/textSanitizer.js');
 
 // Parse args
 const args = process.argv.slice(2);

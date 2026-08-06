@@ -39,7 +39,7 @@ const AppStorage = {
     try {
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : defaultValue;
-    } catch (e) {
+    } catch {
       return defaultValue;
     }
   },
@@ -123,11 +123,11 @@ const AppStorage = {
       try {
         await this.storeInstance.delete(key);
         await this.storeInstance.save();
-      } catch (e) {}
+      } catch {}
     }
     try {
       localStorage.removeItem(key);
-    } catch (e) {}
+    } catch {}
   },
 
   // Helpers específicos
@@ -204,7 +204,7 @@ const AppStorage = {
     const mimeMatch = dataUrl.match(/^data:image\/(\w+);/i);
     const mime = mimeMatch ? mimeMatch[1].toLowerCase() : 'unknown';
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/i, '');
-    let sha256 = '';
+    let sha256;
     try {
       if (typeof require === 'function') {
         const crypto = require('crypto');
@@ -215,7 +215,7 @@ const AppStorage = {
         for (let i = 0; i < base64.length; i++) { h = ((h << 5) - h + base64.charCodeAt(i)) | 0; }
         sha256 = Math.abs(h).toString(16).padStart(8, '0');
       }
-    } catch (e) { sha256 = 'error'; }
+    } catch { sha256 = 'error'; }
     const id = `img_${sha256.substring(0, 16)}`;
     return {
       id,

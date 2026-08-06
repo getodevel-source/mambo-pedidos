@@ -7,7 +7,20 @@
 const Calculator = {
   parseNum(val, defaultVal) {
     if (val === null || val === undefined || val === '') return defaultVal;
-    const str = String(val).replace(',', '.');
+    let str = String(val).trim();
+    const hasComma = str.includes(',');
+    const hasDot = str.includes('.');
+    if (hasComma && hasDot) {
+      // Formato AR '1.234,56' → miles=punto, decimal=coma
+      // Formato US '1,234.56' → miles=coma, decimal=punto
+      if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+      } else {
+        str = str.replace(/,/g, '');
+      }
+    } else if (hasComma) {
+      str = str.replace(',', '.');
+    }
     const parsed = parseFloat(str);
     return !isNaN(parsed) ? parsed : defaultVal;
   },
@@ -61,7 +74,7 @@ const Calculator = {
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
 
-    let flete = 0;
+    let flete;
     if (config.fleteModo === 'peso' && config.pesoKg > 0 && config.costoPorKg > 0) {
       flete = config.pesoKg * config.costoPorKg;
     } else {

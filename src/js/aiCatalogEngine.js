@@ -36,12 +36,14 @@ const AiCatalogEngine = {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const totalPages = pdf.numPages;
 
-    const allProducts = [];
     let detectedBrand = 'OTRO';
 
+    // Fase 1: lectura de páginas (rápida, sin IA) — separada del batch para
+    // poder detectar la marca antes de disparar las consultas al modelo.
+    const pagesText = [];
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       if (typeof onProgress === 'function') {
-        try { onProgress(pageNum, totalPages); } catch (e) {}
+        try { onProgress(pageNum, totalPages); } catch {}
       }
 
       const page = await pdf.getPage(pageNum);
@@ -51,14 +53,21 @@ const AiCatalogEngine = {
       if (pageNum <= 3 && detectedBrand === 'OTRO') {
         detectedBrand = this.extractBrandFromRawText(pageRawText, customBrands) || 'OTRO';
       }
+      pagesText.push(pageRawText);
+    }
 
-      // CAPA 2: Extracción Guiada por IA Local para el Chunk de la Página
+    // Fase 2 (loop de calidad 05/08): extracción IA en BATCH con concurrencia
+    // limitada (antes secuencial: 1 round-trip por página = N×latencia).
+    const results = await this._runPool(pagesText, async (pageRawText, i) => {
+      const pageNum = i + 1;
       const extractedItems = await this.extractPageChunkWithAI(pageRawText, pageNum, customBrands);
+      // CAPA 3: Puerta de Fact-Checking & Grounding
+      return this.groundAndVerifyExtractedItems(extractedItems, pageRawText, pageNum);
+    }, 3, onProgress);
 
-      // CAPA 3: Puerta de Fact-Checking & Grounding (Verificación Literal de Precios)
-      const verifiedItems = this.groundAndVerifyExtractedItems(extractedItems, pageRawText, pageNum);
-
-      allProducts.push(...verifiedItems);
+    const allProducts = [];
+    for (const items of results) {
+      if (Array.isArray(items)) allProducts.push(...items);
     }
 
     return {
@@ -68,10 +77,44 @@ const AiCatalogEngine = {
   },
 
   /**
+   * Pool de ejecución con concurrencia limitada (batch para el motor local).
+   * Preserva el orden de entrada, aísla fallos por ítem (null en la posición
+   * fallida) y reporta progreso por ítem completado. Concurrencia 3 por
+   * defecto: un modelo local (Ollama/LM Studio) degrada con más llamadas
+   * concurrentes (VRAM/memoria del prompt).
+   */
+  async _runPool(items, worker, concurrency = 3, onProgress = null) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const results = new Array(items.length);
+    let next = 0;
+    let done = 0;
+
+    const runWorker = async () => {
+      while (next < items.length) {
+        const i = next++;
+        try {
+          results[i] = await worker(items[i], i);
+        } catch (e) {
+          results[i] = null;
+          console.warn(`[AiCatalogEngine._runPool] ítem ${i} falló:`, e && e.message ? e.message : e);
+        }
+        done++;
+        if (typeof onProgress === 'function') {
+          try { onProgress(done, items.length); } catch {}
+        }
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, runWorker);
+    await Promise.all(workers);
+    return results;
+  },
+
+  /**
    * CAPA 1: Chunking de planillas Excel/CSV enviando bloques a la IA Local
    */
   async processSpreadsheetWithLocalAI(file, customBrands = [], onProgress = null) {
-    let rawText = '';
+    let rawText;
     const ext = file.name.split('.').pop().toLowerCase();
 
     if (ext === 'csv') {
@@ -85,22 +128,24 @@ const AiCatalogEngine = {
 
     const lines = rawText.split('\n').filter(l => l.trim().length > 0);
     const chunkSize = 25; // 25 filas por prompt para mantener el contexto ultra compacto
-    const totalChunks = Math.ceil(lines.length / chunkSize);
 
     const allProducts = [];
     const brand = this.extractBrandFromFilename(file.name, customBrands);
 
+    const chunks = [];
     for (let i = 0; i < lines.length; i += chunkSize) {
-      const chunkNum = Math.floor(i / chunkSize) + 1;
-      if (typeof onProgress === 'function') {
-        try { onProgress(chunkNum, totalChunks); } catch (e) {}
-      }
+      chunks.push(lines.slice(i, i + chunkSize).join('\n'));
+    }
 
-      const chunkText = lines.slice(i, i + chunkSize).join('\n');
+    // Batch con concurrencia limitada (antes secuencial chunk por chunk)
+    const results = await this._runPool(chunks, async (chunkText, i) => {
+      const chunkNum = i + 1;
       const extractedItems = await this.extractPageChunkWithAI(chunkText, chunkNum, customBrands);
-      const verifiedItems = this.groundAndVerifyExtractedItems(extractedItems, chunkText, chunkNum);
+      return this.groundAndVerifyExtractedItems(extractedItems, chunkText, chunkNum);
+    }, 3, onProgress);
 
-      allProducts.push(...verifiedItems);
+    for (const verifiedItems of results) {
+      if (Array.isArray(verifiedItems)) allProducts.push(...verifiedItems);
     }
 
     return { brand, products: allProducts };
@@ -241,7 +286,7 @@ ${chunkText}
     const items = [];
 
     for (const line of lines) {
-      const priceMatch = line.match(/\b\$?\s*(\d+[\.,]\d{1,2})\b/);
+      const priceMatch = line.match(/\b\$?\s*(\d+[.,]\d{1,2})\b/);
       if (!priceMatch) continue;
 
       const fob = parseFloat(priceMatch[1].replace(',', '.'));
@@ -264,7 +309,7 @@ ${chunkText}
       const marca = this.extractBrandFromRawText(cleanLine, customBrands) || 'OTRO';
 
       // Use TextSanitizer for proper model/variant separation instead of substring(0,50)
-      let modelo = cleanLine;
+      let modelo;
       let variante = '';
       if (typeof TextSanitizer !== 'undefined') {
         // Remove brand prefix before parsing

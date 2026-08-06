@@ -12,7 +12,7 @@ const path = require('path');
 
 // Load modules
 const TextSanitizer = require('../src/js/textSanitizer.js');
-const CatalogValidator = require('../src/js/catalogValidator.js');
+const _CatalogValidator = require('../src/js/catalogValidator.js');
 
 // Color regex (no /g to avoid lastIndex issues in audit)
 const COLOR_RE = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|gunmetal|blackberry|neon|arctic|translucent|matte|glossy|negro|blanco|rosa|azul|rojo|verde|violeta|gris|plateado|dorado|naranja|marron|amarillo)\b/i;
@@ -103,10 +103,10 @@ function auditProduct(item, idx, source) {
 let pdfjs;
 try {
   pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
-} catch (e) {
+} catch {
   try {
     pdfjs = require('pdfjs-dist');
-  } catch (e2) {
+  } catch {
     console.error('❌ pdfjs-dist not available. Run: npm install pdfjs-dist');
     process.exit(1);
   }
@@ -131,7 +131,7 @@ function simulateExtraction(pages) {
   for (const page of pages) {
     const lines = page.text.split(/\n+/);
     for (const line of lines) {
-      const priceMatch = line.match(/\$?\s*(\d+[\.,]\d{1,2})\b/);
+      const priceMatch = line.match(/\$?\s*(\d+[.,]\d{1,2})\b/);
       if (!priceMatch) continue;
       const fob = parseFloat(priceMatch[1].replace(',', '.'));
       if (fob <= 0 || fob > 9999) continue;
@@ -190,7 +190,7 @@ async function main() {
       const sanitized = rawProducts.map(p => TextSanitizer.sanitizeItem(p));
       
       // Audit each
-      let fileIssues = [];
+      const fileIssues = [];
       for (let i = 0; i < sanitized.length; i++) {
         const issues = auditProduct(sanitized[i], i, name);
         fileIssues.push(...issues);

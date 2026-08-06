@@ -319,97 +319,98 @@ const PdfParser = {
         const y = ctm ? viewport.height - (Number(ctm[5]) || 0) : 0;
 
           if (typeof document !== 'undefined') {
-            const canvas = document.createElement('canvas');
-            canvas.width = imgObj.width;
-            canvas.height = imgObj.height;
-            const ctx = canvas.getContext('2d');
+            // HOT SPOT FIX (05/08): escalar ANTES de rasterizar. El canvas se
+            // creaba al tamaño NATIVO de la foto (4000px+ en AULA/MCHOSE →
+            // ~1-2s de rasterización por imagen → 262s por catálogo). Ahora el
+            // bitmap se dibuja ESCALADO directo al canvas final (MAX_DIM 150).
+            const MAX_DIM = 150;
+            const scalePre = Math.min(1, MAX_DIM / Math.max(imgObj.width, imgObj.height));
+            const outW = Math.max(1, Math.round(imgObj.width * scalePre));
+            const outH = Math.max(1, Math.round(imgObj.height * scalePre));
 
-            if (ctx) {
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
+            let finalDataUrl = '';
+            let colorCtx = null;
 
-              let drewSuccessfully = false;
-              if (imgObj.bitmap) {
+            if (imgObj.bitmap) {
+              const canvas = document.createElement('canvas');
+              canvas.width = outW;
+              canvas.height = outH;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
                 try {
-                  ctx.drawImage(imgObj.bitmap, 0, 0);
-                  drewSuccessfully = true;
-                } catch (e) {}
+                  ctx.drawImage(imgObj.bitmap, 0, 0, outW, outH);
+                  finalDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                  colorCtx = ctx;
+                } catch (e) { finalDataUrl = ''; }
               }
-
-              if (!drewSuccessfully && imgObj.data) {
-                const imgData = ctx.createImageData(imgObj.width, imgObj.height);
-                const totalPixels = imgObj.width * imgObj.height;
-                if (imgObj.data.length === totalPixels * 4) {
-                  imgData.data.set(imgObj.data);
-                  ctx.putImageData(imgData, 0, 0);
-                  drewSuccessfully = true;
-                } else if (imgObj.data.length === totalPixels * 3) {
-                  let srcIdx = 0;
-                  let dstIdx = 0;
-                  for (let p = 0; p < totalPixels; p++) {
-                    imgData.data[dstIdx] = imgObj.data[srcIdx];
-                    imgData.data[dstIdx + 1] = imgObj.data[srcIdx + 1];
-                    imgData.data[dstIdx + 2] = imgObj.data[srcIdx + 2];
-                    imgData.data[dstIdx + 3] = 255;
-                    srcIdx += 3;
-                    dstIdx += 4;
+            } else if (imgObj.data) {
+              // Datos crudos sin bitmap (modo Node/runner: bitmap es null).
+              // HOT SPOT FIX v2 (05/08): escalado DIRECTAMENTE desde los datos
+              // crudos (nearest-neighbor, O(150×150)) — nunca se convierte ni
+              // se encodea el tamaño nativo (4000px+ = 16M px en JS puro por
+              // imagen → AULA 262s). Antes: conversión RGBA nativa + encode
+              // nativo + segundo encode. Ahora: 22.5k px de trabajo por imagen.
+              const totalPixels = imgObj.width * imgObj.height;
+              const channels = imgObj.data.length / totalPixels; // 4, 3 o 1
+              if (channels === 4 || channels === 3 || channels === 1) {
+                const srcW = imgObj.width;
+                const srcH = imgObj.height;
+                const scaled = new Uint8ClampedArray(outW * outH * 4);
+                const d = imgObj.data;
+                const ch = channels;
+                // Bilinear (2×2 vecinos) — suaviza como el resize del canvas
+                // original pero O(150×150), sin tocar el tamaño nativo.
+                for (let y = 0; y < outH; y++) {
+                  const syf = (y / outH) * (srcH - 1);
+                  const sy = Math.min(srcH - 2, Math.floor(syf));
+                  const fy = syf - sy;
+                  for (let x = 0; x < outW; x++) {
+                    const sxf = (x / outW) * (srcW - 1);
+                    const sx = Math.min(srcW - 2, Math.floor(sxf));
+                    const fx = sxf - sx;
+                    const i00 = (sy * srcW + sx) * ch;
+                    const i10 = i00 + ch;
+                    const i01 = i00 + srcW * ch;
+                    const i11 = i01 + ch;
+                    const dd = (y * outW + x) * 4;
+                    for (let c = 0; c < 3; c++) {
+                      const v = (d[i00 + c] * (1 - fx) + d[i10 + c] * fx) * (1 - fy) +
+                                (d[i01 + c] * (1 - fx) + d[i11 + c] * fx) * fy;
+                      scaled[dd + c] = v;
+                    }
+                    scaled[dd + 3] = ch === 4 ? d[i00 + 3] : 255;
                   }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = outW;
+                canvas.height = outH;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  const imgData = ctx.createImageData(outW, outH);
+                  imgData.data.set(scaled);
                   ctx.putImageData(imgData, 0, 0);
-                  drewSuccessfully = true;
-                } else if (imgObj.data.length === totalPixels) {
-                  let srcIdx = 0;
-                  let dstIdx = 0;
-                  for (let p = 0; p < totalPixels; p++) {
-                    const val = imgObj.data[srcIdx++];
-                    imgData.data[dstIdx] = val;
-                    imgData.data[dstIdx + 1] = val;
-                    imgData.data[dstIdx + 2] = val;
-                    imgData.data[dstIdx + 3] = 255;
-                    dstIdx += 4;
-                  }
-                  ctx.putImageData(imgData, 0, 0);
-                  drewSuccessfully = true;
+                  try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
+                  colorCtx = ctx;
                 }
               }
+            }
 
-              if (drewSuccessfully) {
-                // Background removal DISABLED — import raw image as-is per user request
-                // this.cleanImageBackground(ctx, imgObj.width, imgObj.height);
-
-                // Visible pixel gate DISABLED — no longer needed without bg removal
-                // Comprimir: limitar canvas a 150px max (thumbnails no necesitan más)
-                const MAX_DIM = 150;
-                let outW = canvas.width, outH = canvas.height;
-                let finalDataUrl = '';
-                try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
-                if (canvas.width > MAX_DIM || canvas.height > MAX_DIM) {
-                  const scale = MAX_DIM / Math.max(canvas.width, canvas.height);
-                  outW = Math.round(canvas.width * scale);
-                  outH = Math.round(canvas.height * scale);
-                  const smallCanvas = document.createElement('canvas');
-                    smallCanvas.width = outW;
-                    smallCanvas.height = outH;
-                    const sctx = smallCanvas.getContext('2d');
-                    sctx.drawImage(canvas, 0, 0, outW, outH);
-                    try { finalDataUrl = smallCanvas.toDataURL('image/jpeg', 0.85); } catch (e) { finalDataUrl = ''; }
-                  }
-
-                  if (this.isValidImageDataUrl(finalDataUrl)) {
-                    const dominantColor = this.extractDominantColor(ctx, imgW, imgH);
-                    pageImages.push({
-                      pageNum, y, x,
-                      width: outW, height: outH,
-                      pdfWidth: imgW, pdfHeight: imgH,
-                      // centerY must use the RENDERED height (outH): pdf.js reports
-                      // the native bitmap size (imgH), which for high-res photos
-                      // rendered small is hundreds of points larger — the row
-                      // engine's Y-band filter then misses every image.
-                      centerY: y + (outH / 2),
-                      dataUrl: finalDataUrl,
-                      dominantColor
-                    });
-                  }
-              }
+            if (this.isValidImageDataUrl(finalDataUrl)) {
+              const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              pageImages.push({
+                pageNum, y, x,
+                width: outW, height: outH,
+                pdfWidth: imgW, pdfHeight: imgH,
+                // centerY must use the RENDERED height (outH): pdf.js reports
+                // the native bitmap size (imgH), which for high-res photos
+                // rendered small is hundreds of points larger — the row
+                // engine's Y-band filter then misses every image.
+                centerY: y + (outH / 2),
+                dataUrl: finalDataUrl,
+                dominantColor
+              });
             }
           }
       }
@@ -2474,6 +2475,68 @@ if (!rawModelo) continue;
     return recovered;
   },
 
+  /**
+   * Asignación de costo mínimo (Kuhn-Munkres / húngaro, O(n^3)).
+   * costMatrix: n×n con costos (Infinity = prohibido, se usa BIG).
+   * Devuelve [{ prodIdx, imgIdx }] — la asignación óptima global.
+   */
+  hungarianAssign(costMatrix, n) {
+    const BIG = 1e12;
+    const c = costMatrix.map(row => row.map(v => (Number.isFinite(v) ? v : BIG)));
+    const u = new Array(n + 1).fill(0);
+    const v = new Array(n + 1).fill(0);
+    const p = new Array(n + 1).fill(0);
+    const way = new Array(n + 1).fill(0);
+    for (let i = 1; i <= n; i++) {
+      p[0] = i;
+      let j0 = 0;
+      const minv = new Array(n + 1).fill(BIG);
+      const used = new Array(n + 1).fill(false);
+      let guard = 0;
+      do {
+        // Guard anti-loop infinito (fix 05/08): el do-while del húngaro nunca
+        // necesita más de n iteraciones (cada una marca used[j0]). Si un caso
+        // degenerado (matriz con BIG/valores repetidos) lo hace ciclar, se
+        // corta y la fila queda sin asignar — fail-closed, el greedy ya corrió.
+        if (++guard > n + 1) break;
+        used[j0] = true;
+        const i0 = p[j0];
+        let delta = Infinity;
+        let j1 = -1;
+        for (let j = 1; j <= n; j++) {
+          if (used[j]) continue;
+          const cur = c[i0 - 1][j - 1] - u[i0] - v[j];
+          if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+          if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+        }
+        if (j1 === -1) break; // sin columnas alcanzables: matriz degenerada
+        for (let j = 0; j <= n; j++) {
+          if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+          else { minv[j] -= delta; }
+        }
+        j0 = j1;
+      } while (p[j0] !== 0);
+      let guard2 = 0;
+      do {
+        // Guard anti-loop (fix 05/08): la reconstrucción del camino vía way[]
+        // puede ciclar si la matriz degenerada dejó way con un ciclo (medido
+        // en 8BitDo p7: cuelgue infinito). Se corta a n+1 pasos — la fila
+        // queda sin asignar (fail-closed, el greedy ya corrió).
+        if (++guard2 > n + 1) break;
+        const j1 = way[j0];
+        p[j0] = p[j1];
+        j0 = j1;
+      } while (j0);
+    }
+    const assignment = [];
+    for (let j = 1; j <= n; j++) {
+      if (p[j] > 0 && c[p[j] - 1][j - 1] < BIG) {
+        assignment.push({ prodIdx: p[j] - 1, imgIdx: j - 1 });
+      }
+    }
+    return assignment;
+  },
+
   matchImagesToProductsGlobal(products, allImages) {
     // Marcadores de coincidencia débil (fail-closed). El matcher registra en
     // imgWarnings las advertencias de VALIDACIÓN VISUAL reales (color no
@@ -2515,7 +2578,6 @@ if (!rawModelo) continue;
       const pageProds = products.filter(p => p.pageNum === pNum);
       const pageImgs = uniqueImages.filter(img => img.pageNum === pNum);
       if (!pageProds.length || !pageImgs.length) continue;
-
       const assignedProds = new Set();
       const assignedImgs = new Set();
       const MAX_SCORE = 50000;
@@ -2612,6 +2674,59 @@ if (!rawModelo) continue;
       if (stillEmpty && assignedImgs.size < pageImgs.length) {
         runGreedy(buildMatrix(true), true);
       }
+
+      // Pase 4 (re-optimización húngara — SOLO páginas con fotos compartidas):
+      // cuando 2+ productos de la página comparten el MISMO dataUrl (el row
+      // engine dio la misma foto al par TECLADO/MOUSE de una línea), el greedy
+      // no deshace el cruce y las gates cross-cat desasignan al secundario.
+      // La asignación de costo mínimo global (Kuhn-Munkres) le da a cada
+      // producto su mejor foto. Solo se aplica un cambio si el nuevo par es
+      // ESTRICTAMENTE mejor que el actual (los productos bien asignados no se
+      // tocan; los que tienen su foto fuera de las gates la conservan).
+      // NOTA ORQUESTADOR (2026-08-05): DESACTIVADO por defecto — mide un
+      // colgado (1 catálogo >600s vs 13 catálogos en ~500s sin él). Activar
+      // con HUNGARIAN_P4=1 SOLO tras arreglar el rendimiento (loop infinito
+      // o costo explosivo en hungarianAssign).
+      if (process.env.HUNGARIAN_P4 === '1') {
+      {
+        const urlCount = {};
+        for (const pp of pageProds) {
+          if (this.isValidImageDataUrl(pp.img)) urlCount[pp.img] = (urlCount[pp.img] || 0) + 1;
+        }
+        const hasShared = Object.values(urlCount).some(c => c > 1);
+        if (hasShared && pageProds.length > 1) {
+          const matrix = buildMatrix(false);
+          const n = Math.max(pageProds.length, pageImgs.length);
+          const bigMatrix = [];
+          for (let i = 0; i < n; i++) {
+            const row = [];
+            for (let j = 0; j < n; j++) {
+              row.push((i < pageProds.length && j < pageImgs.length) ? matrix[i][j].totalScore : Infinity);
+            }
+            bigMatrix.push(row);
+          }
+          const assignment = this.hungarianAssign(bigMatrix, n);
+          for (const { prodIdx, imgIdx } of assignment) {
+            if (prodIdx >= pageProds.length || imgIdx >= pageImgs.length) continue;
+            const prod = pageProds[prodIdx];
+            const newCost = matrix[prodIdx][imgIdx].totalScore;
+            if (!Number.isFinite(newCost) || newCost > MAX_SCORE) continue;
+            let curCost = Infinity;
+            if (this.isValidImageDataUrl(prod.img)) {
+              for (let j = 0; j < pageImgs.length; j++) {
+                if (pageImgs[j].dataUrl === prod.img) { curCost = matrix[prodIdx][j].totalScore; break; }
+              }
+            }
+            if (newCost < curCost) {
+              prod.img = pageImgs[imgIdx].dataUrl;
+              if (matrix[prodIdx][imgIdx].validation && matrix[prodIdx][imgIdx].validation.warnings.length) {
+                prod.imgWarnings = matrix[prodIdx][imgIdx].validation.warnings;
+              }
+            }
+          }
+        }
+      }
+      } // fin HUNGARIAN_P4 guard
 
       // Pase 3 (galería desfasada): tablas con la galería de fotos desplazada
       // (tabla arriba y fotos ~400-500px debajo, o viceversa — AJAZZ/ATK/AULA).

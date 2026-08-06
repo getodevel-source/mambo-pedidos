@@ -167,7 +167,7 @@ const Reliability = {
           timestamp: new Date().toISOString()
         }));
       }
-    } catch (e) {
+    } catch {
       // Backup failure is non-fatal; log silently
     }
   },
@@ -192,7 +192,7 @@ const Reliability = {
       if (backup && backup.data && backup.data.items && Array.isArray(backup.data.items)) {
         return { data: backup.data, recovered: true, backupAge: backup.timestamp || 'unknown' };
       }
-    } catch (e) {
+    } catch {
       // Backup also corrupt
     }
     return { data: null, recovered: false, backupAge: null };

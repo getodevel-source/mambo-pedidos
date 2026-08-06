@@ -90,7 +90,7 @@ async function main() {
 
   for (const f of pdfs) {
     const pdfPath = path.join(CATALOG_DIR, f);
-    let products = [];
+    let products;
     try {
       const res = await PdfParser.processPdfFile(makeFile(pdfPath), 0, [], null);
       products = res.products || [];

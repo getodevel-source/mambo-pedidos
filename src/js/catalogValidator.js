@@ -84,12 +84,12 @@ const CatalogValidator = {
     }
 
     // ── R2: Modelo no es basura ──
-    const GARBAGE_RE = /^(producto\s*item|item|\.|\-|n\/a|undefined|null|none|list|earphones?)$/i;
+    const GARBAGE_RE = /^(producto\s*item|item|\.|-|n\/a|undefined|null|none|list|earphones?)$/i;
     if (!modelo || modelo.length < 2) {
       critical.push(`Modelo vacío o demasiado corto ("${modelo}")`);
     } else if (GARBAGE_RE.test(modelo)) {
       critical.push(`Modelo es ruido genérico ("${modelo}")`);
-    } else if (/^\$?\d+([\.,]\d+)?$/.test(modelo)) {
+    } else if (/^\$?\d+([.,]\d+)?$/.test(modelo)) {
       critical.push(`Modelo es un precio numérico ("${modelo}")`);
     } else if (/^(co\.?,?|ltd\.?|electronic|technology|shenzhen)$/i.test(modelo)) {
       critical.push(`Modelo es ruido corporativo ("${modelo}")`);
@@ -121,7 +121,7 @@ const CatalogValidator = {
     }
 
     // ── R7: Variante no es un precio ──
-    if (variante && /^[\$]?\d+([\.,]\d+)?$/.test(variante)) {
+    if (variante && /^[$]?\d+([.,]\d+)?$/.test(variante)) {
       violations.push(`Variante es un precio ("${variante}")`);
     }
 
@@ -350,15 +350,15 @@ const CatalogValidator = {
     ));
 
     // ── R2: Modelo no es basura ──
-    const GARBAGE_RE = /^(producto\s*item|item|\.|\-|n\/a|undefined|null|none|list|earphones?)$/i;
+    const GARBAGE_RE = /^(producto\s*item|item|\.|-|n\/a|undefined|null|none|list|earphones?)$/i;
     const modelOk = modelo && modelo.length >= 2
       && !GARBAGE_RE.test(modelo)
-      && !/^\$?\d+([\.,]\d+)?$/.test(modelo)
+      && !/^\$?\d+([.,]\d+)?$/.test(modelo)
       && !/^(co\.?,?|ltd\.?|electronic|technology|shenzhen)$/i.test(modelo);
     let r2Reason = 'Modelo válido';
     if (!modelo || modelo.length < 2) r2Reason = `Modelo vacío o demasiado corto ("${modelo}")`;
     else if (GARBAGE_RE.test(modelo)) r2Reason = `Modelo es ruido genérico ("${modelo}")`;
-    else if (/^\$?\d+([\.,]\d+)?$/.test(modelo)) r2Reason = `Modelo es un precio numérico ("${modelo}")`;
+    else if (/^\$?\d+([.,]\d+)?$/.test(modelo)) r2Reason = `Modelo es un precio numérico ("${modelo}")`;
     else if (/^(co\.?,?|ltd\.?|electronic|technology|shenzhen)$/i.test(modelo)) r2Reason = `Modelo es ruido corporativo ("${modelo}")`;
     evals.push(this._makeEval('R2',
       modelOk ? 'PASS' : 'CRITICAL',
@@ -418,7 +418,7 @@ const CatalogValidator = {
     ));
 
     // ── R7: Variante no es un precio ──
-    const variantIsPrice = variante && /^[\$]?\d+([\.,]\d+)?$/.test(variante);
+    const variantIsPrice = variante && /^[$]?\d+([.,]\d+)?$/.test(variante);
     evals.push(this._makeEval('R7',
       variantIsPrice ? 'WARNING' : 'PASS',
       variantIsPrice ? 'YELLOW' : 'GREEN',
@@ -568,7 +568,7 @@ const CatalogValidator = {
   auditCatalog(products, customBrands = []) {
     if (!Array.isArray(products)) return { total: 0, clean: 0, withIssues: 0, issues: [], stats: {}, byType: {} };
 
-    const allBrands = ['REDRAGON','LOGITECH','RAZER','HYPERX','CORSAIR','AULA','AJAZZ','MACHENIKE','8BITDO','ATTACK SHARK','VGN','VXE','FLYDIGI','DARMOSHARK','LAMZU','WLMOUSE','KEYCHRON','VSG','KZ','Haimu','Polaroid','GameSir', ...customBrands.map(b => b.toUpperCase())];
+    const _allBrands = ['REDRAGON','LOGITECH','RAZER','HYPERX','CORSAIR','AULA','AJAZZ','MACHENIKE','8BITDO','ATTACK SHARK','VGN','VXE','FLYDIGI','DARMOSHARK','LAMZU','WLMOUSE','KEYCHRON','VSG','KZ','Haimu','Polaroid','GameSir', ...customBrands.map(b => b.toUpperCase())];
     const issues = [];
     const byType = {};
 
@@ -656,7 +656,7 @@ const CatalogValidator = {
       }
 
       // Check 14: Variante es solo un precio
-      if (variante && /^[\$]?\d+([\.,]\d+)?$/.test(variante)) {
+      if (variante && /^[$]?\d+([.,]\d+)?$/.test(variante)) {
         productIssues.push({ type: 'VARIANT_IS_PRICE', field: 'variante', value: variante, detail: 'Variante es un número/precio' });
       }
 

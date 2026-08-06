@@ -14,7 +14,7 @@ const verdicts = require(path.join(GT, 'verdicts.json'));
 const vById = Object.fromEntries(verdicts.items.map(v => [v.id, v.veredicto]));
 
 const DIRT = new Set(['CRITICO', 'CAMPO']);   // should be flagged (Y or R)
-const CLEAN = new Set(['OK', 'MENOR']);        // ideally NOT flagged
+const _CLEAN = new Set(['OK', 'MENOR']);        // ideally NOT flagged
 
 let tp = 0, fn = 0, fp = 0, tn = 0;
 const fpList = [], fnList = [];

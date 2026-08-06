@@ -84,7 +84,7 @@ const dimCache = new Map();
 async function imageDims(dataUrl) {
   if (dimCache.has(dataUrl)) return dimCache.get(dataUrl);
   let d = null;
-  try { const im = await loadImage(dataUrl); d = { w: im.width, h: im.height }; } catch (e) {}
+  try { const im = await loadImage(dataUrl); d = { w: im.width, h: im.height }; } catch {}
   dimCache.set(dataUrl, d);
   return d;
 }
@@ -111,7 +111,7 @@ async function auditImageFit(product) {
 async function auditPdf(pdfPath) {
   const name = path.basename(pdfPath);
   const t0 = Date.now();
-  let products = [];
+  let products;
   try {
     const result = await PdfParser.processPdfFile(makeFile(pdfPath), 0, [], null);
     products = (result && result.products) || [];
