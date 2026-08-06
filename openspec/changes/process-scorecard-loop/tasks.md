@@ -146,3 +146,97 @@ placeholder de imagen (36 en node22) son fail-closed por ausencia de foto en
 el PDF fuente — si la meta exige incluirlos, es decisión de negocio (no de
 código). Húngaro pase 4 (P4): lo cierra la sesión paralela; al integrarse,
 re-medir con HUNGARIAN_P4=1.
+
+## Iteración 6 (EN CURSO, 05/08 noche)
+
+Objetivo: subir los procesos más bajos restantes (P17=7, P19=6, P4=6, P6=7,
+P8=8) con evidencia. Decisión usuario: P17 = OPCIÓN 2 (golpes cortos, sin
+bundler).
+
+- [ ] WS-P17 (orquestador): lazy-load del stack pdf.js (pdf.min.js 316K +
+      pdf.worker 1.1MB) y xlsx.full.min.js (864K) — SOLO se descargan al
+      primer uso real (import PDF / import-export planilla). Nuevo
+      src/js/lazyLoaders.js con ensurePdfLib()/ensureXlsxLib() idempotentes;
+      hooks en importFlow.js (antes del branch PDF/planilla),
+      aiCatalogEngine.js (getDocument + batch planillas), fileImporter.js
+      (export CSV/XLSX). Cierre: index.html sin script estático de pdf/xlsx
+      en el head, tests del loader (idempotencia + no duplica script), npm
+      test 837+ PASS, lint 0, export 8BitDo OK (regresión pipeline).
+- [ ] WS-P4 (orquestador): re-medir húngaro OPT-IN con evidencia fresca:
+      8BitDo con HUNGARIAN_P4=1 (time + corpus G/Y/R vs sin flag). Cierre:
+      pase 4 corre en segundos, corpus idéntico → P4: 6 → 8 (documentado).
+- [ ] WS-P8 (subagente): cobertura de app.js (877 LOC) con jsdom —
+      scripts/quality/app-smoke-tests.js (nuevo, standalone): init, switchView,
+      badges, dolar banner (fetch mockeado), drag&drop handlers, export/import
+      JSON, fix catalog, reset. Cierre: suite standalone PASS, integrada al
+      runner, npm test total OK.
+- [ ] WS-P19 (orquestador): re-medir AULA post-fix bilinear (05/08 noche) —
+      baseline era 261.7s. Evidencia: time CATALOG_FILTER=Aula. Si mejoró,
+      P19: 6 → 7 (deuda (a) pdfjs 5.x, (b) render-based, (c) imágenes solo
+      con productos — documentada, requiere tocar pdfParser.js / FASE 2).
+- [ ] P6: Ollama NO instalado en esta máquina (binario ausente, :11434 vacío).
+      Pendiente de infraestructura (decisión usuario: instalar Ollama +
+      modelo ~1GB). Documentar; no es bloqueante del loop.
+- [x] **HALLAZGO baseline corregido (23:1x)**: el "G=2251 Y=63" era del audit
+      17:02 PRE-fix-bilinear. Export fresco post-CIERRE (tree limpio, 23:11):
+      G=2248 Y=66 R=0 (2314 prod, 97% GREEN). Los 3 extra son cross-brand-image
+      Irok/Mars ("Mars Mer68 Pro" vs "Mer68 Pro Wired" — foto compartida real
+      entre marcas de la misma familia; fail-closed CORRECTO, no colisión del
+      resize: son el mismo producto listado bajo 2 marcas). Criterios fail-closed
+      del audit: 0 RED, 0 GREEN sin imagen, 0 cross-cat, 0 duplicados, G≥90% →
+      PASS igual. Fix real (brand aliasing Irok=Mars) = decisión de negocio,
+      documentado, NO se toca el gate.
+- [x] **WS-P17 CERRADO (evidencia 23:4x)**: lazyLoaders.js (ensurePdfLib/
+      ensureXlsxLib idempotentes) + index.html head = solo papaparse 20K
+      (pdf.min 316K + xlsx 864K + worker 1.1MB fuera del arranque) + hooks en
+      importFlow/aiCatalogEngine/fileImporter (guards typeof, no-op en Node).
+      5 asserts lazyLoaders en ui-smoke (54/54) + export 8BitDo corpus
+      idéntico post-cambio + 959/959 PASS + lint 0. → P17: 7 → 8.
+- [x] **WS-P4 CERRADO (evidencia 23:2x)**: 8BitDo HUNGARIAN_P4=1 → 1.4s,
+      corpus de modelos idéntico (1 imagen reasignada por húngaro, óptima).
+      → P4: 6 → 8.
+- [x] **WS-P8 CERRADO (subagente + orquestador, 23:4x)**: app-smoke-tests.js
+      — 17 secciones / 118 asserts sobre app.js (117 PASS; 1 helper interno).
+      Cubre: escape helpers, syncMarkup, premium UI, brand list, demo catalog
+      (38 items), switchView, updateBadges (TTL 10s historial), validar y
+      armar pedido, negociación/presets, removePedItem, confirm modal,
+      toastUndo, dolar rates (fetch OK/falla→cache, 5min no-refetch, stale
+      badge, applyDolarRate), updateProductImage, keydown (Ctrl+Enter),
+      validation panel. Integrado a run-tests.js. → P8: 8 → 9.
+- [x] **WS-P19 MEDIDO (evidencia 23:4x)**: AULA post-fix-bilinear = 259.8s vs
+      261.7s baseline → el fix NO cambió el hot spot (domina el get() de
+      pdf.js 3.11, no el rasterizado). Deuda real confirmada: (a) pdfjs-dist
+      3.11→5.x, (b) render-based baja escala, (c) imágenes solo en páginas con
+      productos. P19 se mantiene en 6 — fix real requiere ventana dedicada
+      sobre pdfParser.js (FASE 2 / API pdf.js cambia: page.objs.get,
+      getOperatorList, worker). NO se intenta en frío esta iteración.
+- [x] Verificación central IT6: 959/959 PASS (704+54+84+117), lint 0 errores
+      (56 warnings heredados pdfParser), audit fresco PASS G=2248 Y=66 R=0.
+      Re-puntuado: P4 6→8, P8 8→9, P17 7→8. Promedio 7.6 → 8.1, 18/19 ≥8.
+
+## Iteración 7 (EN CURSO, 05/08 noche — DECISIÓN USUARIO: eliminar LLM local)
+
+- [x] **LLM LOCAL ELIMINADO COMPLETO** (decisión usuario: "quitamos todo lo que
+      tenga que ver con IA / limpiar código de LLM local"):
+      - git rm src/js/localLlm.js (cliente Ollama) + src/js/aiCatalogEngine.js
+        (motor IA 3 capas, _runPool, batch).
+      - index.html: script tags removidos.
+      - importFlow.js: branch CSV/Excel → FileImporter.processCsvFile/
+        processExcelFile (parser determinístico por headers); llmStatus del
+        preview removido; autoCorrectPreviewWithAI → autoCorrectPreview
+        (ya era determinístico vía TextSanitizer).
+      - pdfParser.js (zona FASE 2, -152 LOC): fallback LLM de página + método
+        enrichProductsWithCellLlm + groundAndVerifyExtractedProducts eliminados;
+        enriquecimiento = sanitización determinística. 0 refs a LLM.
+      - app.js: checkHealth de LocalLlm removido.
+      - tests.js (-11 asserts), logic-tests.js (test _runPool retirado),
+        ui-smoke-tests.js (stub removido), run-tests.js (globals removidos),
+        audit-app/ground-truth/measure-extraction (stubs removidos),
+        test-catalog-batch.js (localLlm fuera del eval).
+      - eslint.config.js: globals AiCatalogEngine/LocalLlm removidos.
+      - Ollama desinstalado (winget, 05/08).
+      - VERIFICADO: 951/951 PASS (697+54+83+117), lint 0 errores,
+        corpus 8BitDo idéntico post-eliminación (89 productos, JSON igual).
+      → P6 ELIMINADO del scorecard. Promedio 8.3 (18 procesos), 17/18 ≥8.
+
+## Meta del loop (histórico)

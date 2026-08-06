@@ -32,11 +32,21 @@ const ImportFlow = {
           showProgress(currentPct, `Procesando ${f.name}`, `Página ${current} de ${total} · ${currentPct}%`);
         };
 
-        // PDFs → Parser Espacial (Cell Grid + LLM por celda)
-        // CSV/Excel → Motor de IA por chunks de texto
-        const res = (ext === 'pdf')
-          ? await PdfParser.processPdfFile(f, 0, customBrandsList, progressCb)
-          : await AiCatalogEngine.processCatalogFile(f, customBrandsList, progressCb);
+        // PDFs → Parser Espacial (Cell Grid)
+        // CSV/Excel → Parser determinístico por headers (FileImporter)
+        // P17 opción 2: garantizar la lib pesada antes de parsear (lazy-load)
+        let res;
+        if (ext === 'pdf') {
+          if (typeof ensurePdfLib === 'function') await ensurePdfLib();
+          const parsed = await PdfParser.processPdfFile(f, 0, customBrandsList, progressCb);
+          res = { products: parsed.products || [] };
+        } else {
+          if (typeof ensureXlsxLib === 'function') await ensureXlsxLib();
+          const items = (ext === 'csv')
+            ? await FileImporter.processCsvFile(f, catalog)
+            : await FileImporter.processExcelFile(f, catalog);
+          res = { products: items || [] };
+        }
 
         const incoming = res.products || [];
 
@@ -119,10 +129,8 @@ const ImportFlow = {
     document.getElementById('badgeErrCount').textContent = redCount;
     document.getElementById('pvCountAll').textContent = ImportFlow.pendingPreviewItems.length;
 
-    const llmStatus = (typeof LocalLlm !== 'undefined') ? LocalLlm.getStatus() : null;
-    const statusText = (llmStatus && llmStatus.available) ? ' · IA Local activa' : '';
     document.getElementById('importPreviewSummary').textContent =
-      `${ImportFlow.pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ${yellowCount} en revisión · ${redCount} no importables${statusText}`;
+      `${ImportFlow.pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ${yellowCount} en revisión · ${redCount} no importables`;
 
     // Filtrar por tab + búsqueda
     const filtered = ImportFlow.pendingPreviewItems
@@ -292,7 +300,7 @@ const ImportFlow = {
     toast(`Categoría "${cat}" aplicada a ${count} ítems`, 'success');
   },
 
-  async autoCorrectPreviewWithAI() {
+  async autoCorrectPreview() {
     if (!ImportFlow.pendingPreviewItems || !ImportFlow.pendingPreviewItems.length) return;
     toast('Sanitizando productos...', 'info');
     try {
@@ -410,7 +418,7 @@ if (typeof window !== 'undefined') {
   window.toggleSelectAllPreview = (checked) => ImportFlow.toggleSelectAllPreview(checked);
   window.applyBatchBrand = () => ImportFlow.applyBatchBrand();
   window.applyBatchCat = () => ImportFlow.applyBatchCat();
-  window.autoCorrectPreviewWithAI = () => ImportFlow.autoCorrectPreviewWithAI();
+  window.autoCorrectPreview = () => ImportFlow.autoCorrectPreview();
   window.removePreviewItem = (idx) => ImportFlow.removePreviewItem(idx);
   window.closeImportPreviewModal = () => ImportFlow.closeImportPreviewModal();
   window.confirmImportPreview = () => ImportFlow.confirmImportPreview();

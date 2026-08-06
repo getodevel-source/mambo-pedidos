@@ -42,12 +42,6 @@ global.TextSanitizer = require('../src/js/textSanitizer.js');
 global.CatalogValidator = require('../src/js/catalogValidator.js');
 global.SkuAllocator = require('../src/js/skuAllocator.js');
 global.toast = () => {}; // no-op UI toast for headless runs
-// Deterministic LLM stub: no enrichment (see header note).
-global.LocalLlm = {
-  parseCellStructured: async () => null,
-  parsePageChunk: async () => null,
-  isAvailable: async () => false
-};
 
 const PdfParser = require('../src/js/pdfParser.js');
 

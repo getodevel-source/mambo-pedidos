@@ -47,8 +47,6 @@ const Tests = {
     this.testExecutiveReportExport();
     this.testMultiCategoryBrandParsing();
     this.testTextSanitizerModelParsing();
-    this.testLocalLlmClient();
-    this.testAiCatalogEngineGroundingGate();
     this.testNumpadCategoryDetection();
     this.testTitleDeduplication();
     this.testAj139MouseCategory();
@@ -82,7 +80,6 @@ const Tests = {
     this.testKpiMinFobDecimalFormatting();
     this.testEscapeKeyModalDismissal();
     this.testZeroTotalQtyDoorToDoorLiquidation();
-    this.testVlmGroundingAntiHallucination();
     this.testCatalogFiltersAudit();
     this.testRealCatalogCoherence();
     this.testOnDemandZeroIdleMemoryGuarantee();
@@ -356,23 +353,6 @@ const Tests = {
     const res = TextSanitizer.parseModelAndVariant('AULA F75 Mechanical Keyboard (White / Reaper Switch)', 'AULA');
     this.assert(res.modelo.includes('F75'), 'TextSanitizer desglosó el modelo "F75"');
     this.assert(res.variante.includes('White') || res.variante.includes('Reaper'), 'TextSanitizer extrajo la variante de color/switch');
-  },
-
-  testLocalLlmClient() {
-    const hasClient = typeof LocalLlm !== 'undefined' && typeof LocalLlm.checkHealth === 'function';
-    this.assert(hasClient, 'Cliente de integración LocalLlm disponible');
-  },
-
-  testAiCatalogEngineGroundingGate() {
-    const rawText = "AJAZZ AK820 Mechanical Keyboard Gasket Structure $45.50";
-    const llmOutput = [
-      { sku: "A1", marca: "AJAZZ", modelo: "AK820", cat: "TECLADO", fob: 45.50 },
-      { sku: "A2", marca: "AJAZZ", modelo: "AK999", cat: "TECLADO", fob: 999.00 }
-    ];
-
-    const grounded = AiCatalogEngine.groundAndVerifyExtractedItems(llmOutput, rawText, 1);
-    this.assert(grounded[0].isGroundedFob === true, 'Puerta de Fact-Checking: Precio $45.50 verificado literalmente en el texto');
-    this.assert(grounded[1].isGroundedFob === false, 'Puerta de Fact-Checking: Precio alucinado $999.00 detectado y marcado como NO verificado');
   },
 
   testNumpadCategoryDetection() {
@@ -888,19 +868,6 @@ const Tests = {
     this.assert(!isNaN(res.items[0].costoPuertaUnitUsd), 'Liquidación puerta a puerta maneja cantidades e importes FOB cero sin producir NaN');
   },
 
-  testVlmGroundingAntiHallucination() {
-    const rawPageText = 'AJAZZ AK820 Mechanical Keyboard Gasket Structure $45.50 RGB Tri-Mode $29.99';
-    const vlmExtractedItems = [
-      { sku: 'AK820', marca: 'AJAZZ', modelo: 'AK820 Keyboard', fob: 45.50, cat: 'TECLADO' },
-      { sku: 'HALLUCINATED', marca: 'VGN', modelo: 'Fake Item', fob: 999.00, cat: 'MOUSE' } // Precio alucinado no presente en la página
-    ];
-
-    const grounded = PdfParser.groundAndVerifyExtractedProducts(vlmExtractedItems, rawPageText, 1);
-    this.assert(grounded[0].isGroundedPrice === true, 'Grounding confirma precio $45.50 presente literalmente en el texto de la página');
-    this.assert(grounded[1].isGroundedPrice === false || grounded[1].fob !== 999.00, 'Grounding detecta o corrige precio alucinado 999.00 no presente en la página');
-    this.assert(grounded[1].warnings.some(w => w.includes('Grounding')), 'Grounding emite advertencia de verificación para precios no presentes en la página');
-  },
-
   testCatalogFiltersAudit() {
     const sampleCatalog = [
       { sku: 'KEY-001', marca: 'AJAZZ', modelo: 'AK820 Keyboard', cat: 'TECLADO', fob: 25.00 },
@@ -972,12 +939,13 @@ const Tests = {
       }
     ];
 
-    if (typeof PdfParser !== 'undefined' && PdfParser.enrichProductsWithCellLlm) {
-      const enriched = await PdfParser.enrichProductsWithCellLlm(sampleCells, []);
-      this.assert(enriched.length === 2, 'Enriquecedor de celdas por IA mantiene la cantidad de productos');
-      this.assert(enriched[0].fob === 48.30 && enriched[1].fob === 50.63, 'Enriquecedor preserva de manera inmutable los precios FOB determinísticos');
+    this.assert(sampleCells.length === 2, 'Celdas de muestra para sanitización listas');
+    if (typeof TextSanitizer !== 'undefined' && TextSanitizer.sanitizeItem) {
+      const sanitized = sampleCells.map(c => TextSanitizer.sanitizeItem(c, []));
+      this.assert(sanitized.length === 2, 'Sanitización determinística mantiene la cantidad de productos');
+      this.assert(sanitized[0].fob === 48.30 && sanitized[1].fob === 50.63, 'Sanitización preserva de manera inmutable los precios FOB determinísticos');
     } else {
-      this.assert(true, 'Modulo PdfParser listo para enriquecimiento por celda');
+      this.assert(true, 'Modulo TextSanitizer listo para sanitización');
     }
   },
 
@@ -1045,11 +1013,6 @@ const Tests = {
 
     // Progress: per-file progress
     this.assert(typeof UINotifications.showFileProgress === 'function', 'showFileProgress existe');
-
-    // LLM: status label
-    const llmStatus = LocalLlm.getStatus();
-    this.assert(typeof llmStatus.label === 'string' && llmStatus.label.length > 0, 'LLM status tiene label');
-    this.assert(typeof LocalLlm.updateStatusBadge === 'function', 'updateStatusBadge existe');
 
     // QuoteGenerator: currency formatter
     this.assert(typeof QuoteGenerator.formatCurrency === 'function', 'formatCurrency existe');

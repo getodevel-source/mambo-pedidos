@@ -179,8 +179,6 @@ require('../src/js/skuAllocator.js');
 const CatalogValidator = require('../src/js/catalogValidator.js');
 global.CatalogValidator = CatalogValidator;
 const PdfParser = require('../src/js/pdfParser.js');
-const AiCatalogEngine = require('../src/js/aiCatalogEngine.js');
-global.AiCatalogEngine = AiCatalogEngine;
 
 // Instrumentation: count extracted images per page without touching the parser
 const imageStats = [];

@@ -47,8 +47,6 @@ global.SkuAllocator = require(jsPath('skuAllocator.js'));
 global.TextSanitizer = require(jsPath('textSanitizer.js'));
 global.pdfjsLib = { OPS: {} };
 global.PdfParser = require(jsPath('pdfParser.js'));
-global.LocalLlm = require(jsPath('localLlm.js'));
-global.AiCatalogEngine = require(jsPath('aiCatalogEngine.js'));
 global.CatalogValidator = require(jsPath('catalogValidator.js'));
 global.FileImporter = require(jsPath('fileImporter.js'));
 global.QuoteGenerator = require(jsPath('quoteGenerator.js'));
@@ -81,6 +79,15 @@ global.Tests = require(jsPath('tests.js'));
     execFileSync(process.execPath, [path.join(__dirname, 'quality', 'logic-tests.js')], { stdio: 'inherit' });
   } catch (logicErr) {
     console.error('❌ Logic tests FAILED: ' + (logicErr.message || logicErr));
+    process.exitCode = 1;
+  }
+
+  // Suite de app.js (controlador principal UI) — loop de calidad IT6 (P8)
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'quality', 'app-smoke-tests.js')], { stdio: 'inherit' });
+  } catch (appErr) {
+    console.error('❌ app.js smoke tests FAILED: ' + (appErr.message || appErr));
     process.exitCode = 1;
   }
 })().catch(error => {

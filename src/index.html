@@ -9,15 +9,11 @@
 <link rel="stylesheet" href="vendor/fonts.css">
 <link rel="stylesheet" href="css/styles.css">
 
-<!-- Vendor Libraries (100% Offline Support) -->
+<!-- Vendor Libraries (100% Offline Support)
+     P17 opción 2 (05/08): pdf.min.js + xlsx.full.min.js se cargan LAZY vía
+     lazyLoaders.js (primer uso real). Solo papaparse (20K) queda estático. -->
 <script src="vendor/papaparse.min.js"></script>
-<script src="vendor/xlsx.full.min.js"></script>
-<script src="vendor/pdf.min.js"></script>
-<script>
-  if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
-  }
-</script>
+<script src="js/lazyLoaders.js"></script>
 </head>
 <body>
 
@@ -878,10 +874,8 @@
   <script src="js/storage.js"></script>
   <script src="js/skuAllocator.js"></script>
   <script src="js/pdfParser.js"></script>
-<script src="js/textSanitizer.js"></script>
-<script src="js/localLlm.js"></script>
-<script src="js/aiCatalogEngine.js"></script>
-<script src="js/catalogValidator.js"></script>
+  <script src="js/textSanitizer.js"></script>
+  <script src="js/catalogValidator.js"></script>
 <script src="js/fileImporter.js"></script>
 <script src="js/quoteGenerator.js"></script>
 <script src="js/ui/notifications.js"></script>

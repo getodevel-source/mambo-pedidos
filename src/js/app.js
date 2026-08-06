@@ -134,7 +134,7 @@ function renderBrandList() {
 
 // processFiles, renderImportPreviewModal, setPreviewFilter, setPreviewSearch,
 // updateConfirmCount, updatePreviewItem, toggleSelectAllPreview,
-// applyBatchBrand, applyBatchCat, autoCorrectPreviewWithAI,
+// applyBatchBrand, applyBatchCat, autoCorrectPreview,
 // removePreviewItem, closeImportPreviewModal, confirmImportPreview → src/js/ui/importFlow.js
 
 // Pedido UI
@@ -822,19 +822,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       AppUpdater.checkUpdate(false);
     }
   }, 3000);
-
-  // Verificar disponibilidad del motor de IA local (opcional, auto-detectado)
-  setTimeout(() => {
-    if (typeof LocalLlm !== 'undefined') {
-      LocalLlm.checkHealth().then(available => {
-        if (available) {
-          console.log(`✅ Motor de IA local detectado en ${LocalLlm.endpoint}`);
-        } else {
-          console.log(`ℹ️ Motor de IA local no activo (usando validación determinística)`);
-        }
-      });
-    }
-  }, 1000);
 });
 
 // showDropOverlay/hideDropOverlay are now in src/js/ui/notifications.js

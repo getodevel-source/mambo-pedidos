@@ -465,7 +465,7 @@ const TextSanitizer = {
 
   /**
    * SINGLE SOURCE OF TRUTH for in-place fix logic.
-   * Used by fixCatalog(), runFixOnPreview(), and autoCorrectPreviewWithAI().
+   * Used by fixCatalog() and runFixOnPreview().
    * Returns count of modified items.
    */
   fixItemsInPlace(items, customBrands = []) {

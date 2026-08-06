@@ -21,7 +21,6 @@ global.TextSanitizer = require('../src/js/textSanitizer.js');
 global.CatalogValidator = require('../src/js/catalogValidator.js');
 global.SkuAllocator = require('../src/js/skuAllocator.js');
 global.toast = () => {};
-global.LocalLlm = { parseCellStructured: async () => null, parsePageChunk: async () => null, isAvailable: async () => false };
 const PdfParser = require('../src/js/pdfParser.js');
 
 const CATALOG_DIR = process.env.MAMBO_CATALOG_DIR || 'C:\\Mambo\\Catalogos';

@@ -15,15 +15,16 @@ module.exports = [
         Papa: 'readonly',
         XLSX: 'readonly',
         pdfjsLib: 'readonly',
+        // Lazy loaders (P17 opción 2)
+        ensurePdfLib: 'readonly',
+        ensureXlsxLib: 'readonly',
         // App module globals (browser-global pattern)
         AppStorage: 'writable',
         AppUpdater: 'writable',
-        AiCatalogEngine: 'writable',
         Calculator: 'writable',
         CatalogAssignmentGates: 'writable',
         CatalogValidator: 'writable',
         FileImporter: 'writable',
-        LocalLlm: 'writable',
         PdfParser: 'writable',
         QuoteGenerator: 'writable',
         SkuAllocator: 'writable',

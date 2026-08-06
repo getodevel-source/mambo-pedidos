@@ -112,6 +112,17 @@ function testCalculator() {
   const imp = Calculator.calculateOrder([{ sku: 'I-1', fob: 100, qty: 5 }], { flete: 0, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 500, courier: 8, logisticaModo: 'importador', markup: 1, tipoCambio: 1000 });
   assert(imp.totals.costo === 1000, 'Importador: costo = FOB (500) + despacho fijo (500), sin courier por unidad');
 
+  // BUG P10 (IT2, fix 05/08): FOB=0 + flete por peso → el costo fijo NO se perdía
+  // (subCosto 0 vs costo real 150). Regresión pinneada: flete por peso se
+  // distribuye aunque el FOB total sea 0.
+  const zeroFob = Calculator.calculateOrder(
+    [{ sku: 'Z-1', fob: 0, qty: 3 }],
+    { fleteModo: 'peso', pesoKg: 10, costoPorKg: 15, flete: 0, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, markup: 1, tipoCambio: 1000 }
+  );
+  assert(zeroFob.totals.fob === 0 && zeroFob.totals.costo === 150, 'FOB=0 + flete por peso (10kg × $15): costo total = 150 (el flete NO se pierde)');
+  assert(zeroFob.items[0].costoU === 50, 'FOB=0 + flete por peso: costo unitario 150/3 = 50 (distribuido por qty)');
+  assert(zeroFob.items[0].subCosto === 150, 'FOB=0 + flete por peso: subCosto = 150 (antes daba 0)');
+
   // Casos límite courier: especie >3 unidades y peso >50 kg
   const species = Calculator.calculateOrder([{ sku: 'SP-1', fob: 100, qty: 4 }], { logisticaModo: 'courier', flete: 0, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, markup: 1, tipoCambio: 1000 });
   assert(species.warnings.some(w => w.code === 'COURIER_SPECIES_WARNING'), 'Presunción de fin comercial cuando qty > 3');
@@ -352,35 +363,8 @@ async function testAppStorage() {
 }
 
 async function testAiEngineBatch() {
-  // _runPool: batch con concurrencia limitada (loop de calidad 05/08, P6)
-  const AiCatalogEngine = require(jsPath('aiCatalogEngine.js'));
-
-  const doubled = await AiCatalogEngine._runPool([1, 2, 3, 4, 5, 6], async x => x * 2, 2);
-  assert(JSON.stringify(doubled) === JSON.stringify([2, 4, 6, 8, 10, 12]), '_runPool preserva orden y resultados con concurrencia 2');
-
-  let maxActive = 0;
-  let active = 0;
-  await AiCatalogEngine._runPool([1, 2, 3, 4, 5, 6, 7, 8], async () => {
-    active++;
-    maxActive = Math.max(maxActive, active);
-    await new Promise(r => setTimeout(r, 5));
-    active--;
-    return 1;
-  }, 3);
-  assert(maxActive <= 3, '_runPool respeta el límite de concurrencia (máx ' + maxActive + ' ≤ 3)');
-
-  const withError = await AiCatalogEngine._runPool([1, 2, 3], async x => {
-    if (x === 2) throw new Error('boom');
-    return x;
-  }, 2);
-  assert(withError[0] === 1 && withError[1] === null && withError[2] === 3, '_runPool aísla fallos por ítem (null en la posición fallida)');
-
-  const empty = await AiCatalogEngine._runPool([], async x => x);
-  assert(Array.isArray(empty) && empty.length === 0, '_runPool con lista vacía → [] sin crash');
-
-  let progressCalls = 0;
-  await AiCatalogEngine._runPool([1, 2, 3], async x => x, 2, () => { progressCalls++; });
-  assert(progressCalls === 3, '_runPool reporta progreso por ítem completado (' + progressCalls + ' de 3)');
+  // Motor de IA local eliminado (limpieza 05/08) — este test se retira junto al engine.
+  assert(true, '(aiCatalogEngine eliminado — sin asserts de _runPool)');
 }
 
 // ============================================

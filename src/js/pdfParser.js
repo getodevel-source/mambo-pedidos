@@ -52,14 +52,6 @@ const PdfParser = {
 
         if (pageProducts.length > 0) {
           allProducts.push(...pageProducts);
-        } else {
-          // Fallback: sin anclas de precio $ → extracción por texto plano + LLM
-          const flatText = content.items.map(item => item.str).join(' ');
-          if (flatText.trim().length > 10 && typeof AiCatalogEngine !== 'undefined') {
-            const fallbackItems = await AiCatalogEngine.extractPageChunkWithAI(flatText, pageNum, customBrands);
-            const verified = AiCatalogEngine.groundAndVerifyExtractedItems(fallbackItems, flatText, pageNum);
-            allProducts.push(...verified);
-          }
         }
         // #9: Flag pages with almost no text and no products as likely scanned
         if (pageTextLen < 10 && pageProducts.length === 0) {
@@ -89,8 +81,9 @@ const PdfParser = {
 
       const brand = this.detectBrandFromContent(fullTextForBrand, customBrands) || this.detectBrandFromFilename(file.name, customBrands);
 
-      // Enriquecer con LLM por celda (si Ollama está activo)
-      const enrichedProducts = await this.enrichProductsWithCellLlm(allProducts, customBrands);
+      // Sanitización determinística (sin LLM local — limpieza 05/08)
+      const enrichedProducts = allProducts.map(item =>
+        (typeof TextSanitizer !== 'undefined' ? TextSanitizer.sanitizeItem(item, customBrands) : item));
 
       // Asignar SKU y formatear catálogo final
       const finalProducts = this.finalizeCatalogProducts(enrichedProducts, brand, catalogLength, customBrands, allImages);
@@ -104,159 +97,7 @@ const PdfParser = {
 
 
 
-  /**
-   * Enriquece productos extraídos espacialmente consultando al LLM Local por celda en paralelo.
-   * Utiliza pool de concurrencia para exprimir el hardware local disponible.
-   */
-  async enrichProductsWithCellLlm(cellProducts, customBrands = [], maxConcurrency = 4) {
-    if (!cellProducts || !cellProducts.length) return [];
-    if (typeof LocalLlm === 'undefined' || !LocalLlm.isAvailable) {
-      return cellProducts.map(item => (typeof TextSanitizer !== 'undefined' ? TextSanitizer.sanitizeItem(item, customBrands) : item));
-    }
-
-    const enriched = cellProducts.map(item => ({ ...item }));
-
-    const processCell = async (item) => {
-      const rawText = item.cellRawText || `${item.marca || ''} ${item.modelo || ''} ${item.variante || ''}`.trim();
-      if (!rawText || rawText.length < 3) return item;
-
-      try {
-        const llmResult = await LocalLlm.parseCellStructured(rawText, customBrands);
-        if (llmResult) {
-          if (llmResult.marca && llmResult.marca !== 'OTRO') item.marca = llmResult.marca.trim();
-
-          // Quality guard: only overwrite modelo if LLM result is meaningful
-          const llmModelo = (llmResult.modelo || '').trim();
-          if (llmModelo && llmModelo.length >= 2) {
-            const isColorOnly = /^\s*(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|dark|light)\s*$/i.test(llmModelo);
-            const isPriceOnly = /^[\$￥¥]?\s*\d+([\.,]\d+)?\s*$/.test(llmModelo);
-            const isGarbage = /^(item|producto|product|n\/a|none|undefined|null|-|\.)/i.test(llmModelo);
-            if (!isColorOnly && !isPriceOnly && !isGarbage) {
-              item.modelo = llmModelo;
-              // Safety net: strip trailing color words from LLM modelo into variante
-              const colorTail = item.modelo.match(/\s+(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|dark|light)\s*$/i);
-              if (colorTail) {
-                const colorWord = colorTail[1];
-                item.modelo = item.modelo.replace(colorTail[0], '').trim();
-                if (!item.variante || item.variante === '-') {
-                  item.variante = colorWord;
-                } else if (!new RegExp('\\b' + colorWord + '\\b', 'i').test(item.variante)) {
-                  item.variante = (colorWord + ' ' + item.variante).trim();
-                }
-              }
-              // Safety net: strip trailing connection words from LLM modelo into variante
-              const connTail = item.modelo.match(/\s+(bluetooth|wireless|wired|tri[\s-]?mode|2\.4g)\s*$/i);
-              if (connTail) {
-                const connWord = connTail[1];
-                item.modelo = item.modelo.replace(connTail[0], '').trim();
-                if (!item.variante || item.variante === '-') {
-                  item.variante = connWord;
-                } else if (!new RegExp('\\b' + connWord.replace(/\s/g, '\\s') + '\\b', 'i').test(item.variante)) {
-                  item.variante = (item.variante + ' ' + connWord).trim();
-                }
-              }
-            }
-          }
-
-          if (llmResult.cat && llmResult.cat !== 'OTRO') item.cat = llmResult.cat.trim();
-
-          // Quality guard: only overwrite variante if LLM result is meaningful
-          const llmVariante = (llmResult.variante || '').trim();
-          if (llmVariante && llmVariante.length >= 2) {
-            const isPriceOnly = /^[\$￥¥]?\s*\d+([\.,]\d+)?\s*$/.test(llmVariante);
-            if (!isPriceOnly) {
-              item.variante = llmVariante;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Fallback en celda por error en LocalLlm:', e);
-      }
-
-      return typeof TextSanitizer !== 'undefined' ? TextSanitizer.sanitizeItem(item, customBrands) : item;
-    };
-
-    for (let i = 0; i < enriched.length; i += maxConcurrency) {
-      const chunk = enriched.slice(i, i + maxConcurrency);
-      const results = await Promise.all(chunk.map(item => processCell(item)));
-      for (let j = 0; j < results.length; j++) {
-        enriched[i + j] = results[j];
-      }
-    }
-
-    return enriched;
-  },
-
-  /**
-   * Grounding Anti-Alucinación:
-   * Verifica determinísticamente que cada dato numérico y SKU retornado por el LLM exista en pageRawText.
-   */
-  groundAndVerifyExtractedProducts(vlmItems, pageRawText, pageNum, customBrands = []) {
-    if (!vlmItems || !vlmItems.length) return [];
-
-    // Extraer todos los candidatos numéricos de precio presentes en el texto físico de la página
-    const priceMatches = [...pageRawText.matchAll(/(?<![¥￥\d])\$\s*(\d{1,4}(?:\.\d{1,2})?)|\b(\d{1,3}\.\d{2})\b/g)];
-    const verifiedPrices = priceMatches.map(m => parseFloat(m[1] || m[2])).filter(p => p > 0.5 && p < 500);
-
-    const groundedList = [];
-
-    for (const rawItem of vlmItems) {
-      let fob = parseFloat(rawItem.fob) || 0;
-      let isGroundedPrice = false;
-
-      // Verificación 1: ¿El precio FOB está literalmente en el texto de la página?
-      if (fob > 0) {
-        const exactFound = verifiedPrices.some(p => Math.abs(p - fob) < 0.05);
-        if (exactFound) {
-          isGroundedPrice = true;
-        } else if (verifiedPrices.length > 0) {
-          // Si la IA inventó o alucinó un precio, encontrar el precio numérico más cercano en la página
-          const closest = verifiedPrices.reduce((prev, curr) => Math.abs(curr - fob) < Math.abs(prev - fob) ? curr : prev, verifiedPrices[0]);
-          if (Math.abs(closest - fob) / fob < 0.20) { // dentro del 20% de diferencia
-            fob = closest;
-            isGroundedPrice = true;
-          }
-        }
-      }
-
-      let item = {
-        sku: (rawItem.sku || '').trim(),
-        marca: (rawItem.marca || 'OTRO').trim(),
-        modelo: (rawItem.modelo || 'Producto').trim(),
-        variante: (rawItem.variante || '').trim(),
-        cat: (rawItem.cat || 'OTRO').trim(),
-        fob,
-        pageNum,
-        isGroundedPrice,
-        grounded: isGroundedPrice,
-        groundedFob: isGroundedPrice,
-        groundingReason: isGroundedPrice
-          ? 'FOB encontrado literalmente en el texto de la página'
-          : 'FOB no encontrado literalmente en el texto de la página'
-      };
-
-      if (typeof TextSanitizer !== 'undefined' && TextSanitizer.sanitizeItem) {
-        item = TextSanitizer.sanitizeItem(item, customBrands);
-      }
-
-      const evalRes = this.evaluateItemConfidence(item);
-      item.confidence = evalRes.confidence;
-      item.status = evalRes.status;
-      item.warnings = evalRes.warnings || [];
-
-      if (!isGroundedPrice && fob > 0) {
-        item.warnings.push('⚠️ Precio FOB verificado por Grounding: No se encontró coincidencia literal en el texto de la página');
-        item.confidence = Math.max(0, item.confidence - 15);
-        if (item.status === 'GREEN') item.status = 'YELLOW';
-      }
-
-      groundedList.push(item);
-    }
-
-    return groundedList;
-  },
-
-  async extractImagesFromPage(page, viewport, pageNum) {
+    async extractImagesFromPage(page, viewport, pageNum) {
     const pageImages = [];
     try {
       const ops = await page.getOperatorList();

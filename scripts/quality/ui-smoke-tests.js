@@ -152,7 +152,13 @@ global.CatalogValidator = require(jsPath('catalogValidator.js'));
 // Backends pesados / en edicion paralela (pdfParser.js NO se toca y NO se carga):
 // se stubean para aislar el smoke test en la capa de UI.
 global.PdfParser = { processPdfFile: async () => ({ products: [] }) };
-global.AiCatalogEngine = { processCatalogFile: async () => ({ products: [] }) };
+// P17 opción 2: lazy-loaders resuelven directo si el global ya existe.
+// En jsdom el script NO se ejecuta (sin runScripts), así que stubeamos las libs
+// para que ensurePdfLib/ensureXlsxLib tomen el camino "ya cargado" (idempotente).
+// OJO: lazyLoaders.js corre en Node (require) → sus free variables (pdfjsLib/XLSX)
+// resuelven a globalThis, NO a dom.window → definir en AMBOS al mismo objeto.
+global.pdfjsLib = dom.window.pdfjsLib = { GlobalWorkerOptions: {} };
+global.XLSX = dom.window.XLSX = {};
 let _historial = [];
 global.AppStorage = {
   KEYS: { CATALOG: 'mambo_catalog_v2', BRANDS: 'mambo_brands_v1' },
@@ -172,6 +178,12 @@ const UIModals = require(jsPath('ui/modals.js'));
 const CatalogView = require(jsPath('ui/catalogView.js'));
 const ImportFlow = require(jsPath('ui/importFlow.js'));
 
+// P17 opción 2: lazy-loaders de librerías pesadas (pdf.js / xlsx)
+require(jsPath('lazyLoaders.js')); // define window.ensurePdfLib / ensureXlsxLib
+// Puente window -> globalThis (mismo patrón que BRIDGE_GLOBALS más abajo)
+if (typeof dom.window.ensurePdfLib === 'function') global.ensurePdfLib = dom.window.ensurePdfLib;
+if (typeof dom.window.ensureXlsxLib === 'function') global.ensureXlsxLib = dom.window.ensureXlsxLib;
+
 // En el browser `window` ES el objeto global; aca globalThis !== dom.window, asi que
 // los bridges que los modulos hacen en `window.X = ...` no crean variables libres
 // globales por si solos. Propagamos los bridges de window -> globalThis para que la
@@ -190,7 +202,7 @@ const BRIDGE_GLOBALS = [
   'addCustomBrand', 'deleteCustomBrand',
   'ImportFlow', 'processFiles', 'renderImportPreviewModal', 'setPreviewFilter', 'setPreviewSearch',
   'updateConfirmCount', 'updatePreviewItem', 'toggleSelectAllPreview', 'applyBatchBrand', 'applyBatchCat',
-  'autoCorrectPreviewWithAI', 'removePreviewItem', 'closeImportPreviewModal', 'confirmImportPreview'
+  'autoCorrectPreview', 'removePreviewItem', 'closeImportPreviewModal', 'confirmImportPreview'
 ];
 for (const k of BRIDGE_GLOBALS) {
   if (typeof dom.window[k] !== 'undefined') global[k] = dom.window[k];
@@ -409,6 +421,43 @@ async function testHistoryView() {
 }
 
 // ============================================
+//  6) Lazy Loaders (P17 opción 2) — pdf.js / xlsx bajo demanda
+// ============================================
+function testLazyLoaders() {
+  // Caso 1: pdfjsLib presente (stub inicial) → resuelve directo, setea workerSrc, NO inyecta
+  return global.ensurePdfLib().then((lib) => {
+    check('lazyLoaders.ensurePdfLib: con pdfjsLib presente resuelve sin inyectar script',
+      lib === dom.window.pdfjsLib &&
+      document.head.querySelectorAll('script[src="vendor/pdf.min.js"]').length === 0);
+    check('lazyLoaders.ensurePdfLib: setea workerSrc al worker local',
+      dom.window.pdfjsLib.GlobalWorkerOptions.workerSrc === 'vendor/pdf.worker.min.js');
+
+    // Caso 2: XLSX presente (stub inicial) → resuelve directo sin inyectar
+    return global.ensureXlsxLib().then((xlib) => {
+      check('lazyLoaders.ensureXlsxLib: con XLSX presente resuelve sin inyectar script',
+        xlib === dom.window.XLSX &&
+        document.head.querySelectorAll('script[src="vendor/xlsx.full.min.js"]').length === 0);
+
+      // Caso 3: XLSX ausente → inyecta UN script y la 2da llamada NO duplica
+      delete global.XLSX;
+      delete dom.window.XLSX;
+      const p1 = global.ensureXlsxLib();
+      const p2 = global.ensureXlsxLib();
+      const tags = document.head.querySelectorAll('script[src="vendor/xlsx.full.min.js"]');
+      check('lazyLoaders.ensureXlsxLib: inyecta exactamente UN tag (idempotente)',
+        tags.length === 1 && p1 === p2);
+      check('lazyLoaders.ensureXlsxLib: el tag apunta al vendor local',
+        tags[0].getAttribute('src') === 'vendor/xlsx.full.min.js');
+
+      // Restauramos el stub para no contaminar otros tests
+      global.XLSX = dom.window.XLSX = {};
+      document.head.querySelectorAll('script[src="vendor/xlsx.full.min.js"]').forEach(s => s.remove());
+      return global.ensureXlsxLib();
+    });
+  });
+}
+
+// ============================================
 //  Runner + resumen
 // ============================================
 (async () => {
@@ -421,6 +470,7 @@ async function testHistoryView() {
   try { testModals(); } catch (e) { failSection('UIModals', e); }
   try { await testImportFlow(); } catch (e) { failSection('ImportFlow', e); }
   try { await testHistoryView(); } catch (e) { failSection('HistoryView', e); }
+  try { await testLazyLoaders(); } catch (e) { failSection('LazyLoaders', e); }
 
   const total = results.pass + results.fail;
   console.log('');

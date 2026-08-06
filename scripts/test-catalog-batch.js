@@ -44,7 +44,6 @@ const projectJsFiles = [
   'storage.js',
   'pdfParser.js',
   'textSanitizer.js',
-  'localLlm.js',
   'catalogValidator.js',
   'fileImporter.js',
   'tests.js'

@@ -11,26 +11,26 @@ todos los procesos puntúan >=8 con evidencia de 2 iteraciones sin regresión).
 | # | Proceso | Nota | Evidencia |
 |---|---------|------|-----------|
 | P1 | Extracción espacial PDF (grilla/filas) | 8 | Tests FASE2-S3/S4 (matrices KZ, celdas fusionadas), 704/704 PASS. Deuda: pdfParser.js 2864 LOC, main thread |
-| P2 | Sanitización de nombres/modelos | 8 | textSanitizer + tests (Transparent/High Resolution/SeaSalt), measure-model-quality |
-| P3 | Finalización modelo/SKU/dedupe | 8 | finalizeCatalogProducts idempotente; truncados 29→2 post-gates |
-| P4 | Asignación de imágenes | 6 | Pases 1-3 + gates: 0 cross-cat post-gates; PASE 4 HÚNGARO ROTO (cuelga >600s, desactivado por guard; export node26 = 2 bytes). Otra sesión lo está reescribiendo |
-| P5 | Gates R1-R10 (fail-closed) | 9 | G=2251 Y=63 R=0 post-gates; 0 RED; 0 GREEN sin imagen; 179 cambios automáticos |
-| P6 | Motor AI/LLM (fallback escaneados) | 7 | Batch con concurrencia limitada (_runPool, 5 asserts: orden, límite 3, aislamiento de fallos, progreso) en PDF y planillas. Pendiente: métricas reales con Ollama |
+| P2 | Sanitización de nombres/modelos | 9 | textSanitizer + tests (Transparent/High Resolution/SeaSalt), measure-model-quality FP 8%; sobrevive IT1→IT7 sin regresión (2+ iteraciones) → 9 | textSanitizer + tests (Transparent/High Resolution/SeaSalt), measure-model-quality |
+| P3 | Finalización modelo/SKU/dedupe | 9 | finalizeCatalogProducts idempotente (truncados 29→2 post-gates) + 5 tests dedicados; sobrevive IT1→IT7 → 9 | finalizeCatalogProducts idempotente; truncados 29→2 post-gates |
+| P4 | Asignación de imágenes | 8 | Pases 1-3 + gates: 0 cross-cat post-gates. PASE 4 HÚNGARO ARREGLADO (guard anti-loop en ambos do-while, CIERRE 05/08) + verificado IT6: 8BitDo con HUNGARIAN_P4=1 exporta en 1.4s (antes timeout 90s+), corpus de modelos idéntico, 1 imagen reasignada (reasignación óptima). Opt-in documentado. → P4: 6 → 8 |
+| P5 | Gates R1-R10 (fail-closed) | 9 | G=2248 Y=66 R=0 post-gates; 0 RED; 0 GREEN sin imagen; 179 cambios automáticos |
+| P6 | Motor AI/LLM (fallback escaneados) | — | **ELIMINADO por decisión del usuario (05/08 noche)**: se removió toda la integración de LLM local (localLlm.js + aiCatalogEngine.js + fallbacks en pdfParser + branch AI en importFlow + 11 tests). El flujo CSV/Excel ahora usa el parser determinístico por headers (FileImporter), PDFs solo parser espacial + sanitización. Corpus 8BitDo idéntico post-eliminación (89 productos). Ya no se puntúa |
 | P7 | Grounding literal de modelo | 9 | Calibrado 39→55→17→9 falsos negativos; tolerancia prefijo; herencia de familia |
-| P8 | UI (app.js 877 + 5 views) | 8 | 49 smoke asserts (jsdom): notifications, catalogView, modals, importFlow, historyView (empty/XSS/poblado). Pendiente: app.js |
+| P8 | UI (app.js 877 + 5 views) | 9 | 54 smoke (ui/*) + 117 app-smoke (app.js: switchView, badges TTL, dolar fallback offline/cache 5min, recalc, demo, confirm modal, keydown, validation panel) = 171 asserts jsdom. → P8: 8 → 9 |
 | P9 | Persistencia (storage) | 9 | Suite Fallback + 18 asserts edge cases (JSON corrupto, saneo, quota deep) |
-| P10 | Calculator / presupuestos | 8 | 27+4 asserts dedicados (parseNum AR/US fix con TDD); bugs documentados: FOB=0+flete (fix en curso otra sesión), separadores mixtos |
-| P11 | SKU allocator | 8 | 17 asserts dedicados (normalize, FNV-1a, colisión, reuso) |
-| P12 | Updater | 8 | UpdaterSmoke PASS + release v1.9.2 OK hoy; warnings limpiados (0 en lint) |
+| P10 | Calculator / presupuestos | 9 | 27+4 asserts + FIX REAL IT7: FOB=0 + flete por peso ya no pierde el costo fijo (antes subCosto 0 vs 150; ahora distribuye por qty, 3 asserts TDD nuevos). Separadores mixtos documentados como deuda menor | 27+4 asserts dedicados (parseNum AR/US fix con TDD); bugs documentados: FOB=0+flete (fix en curso otra sesión), separadores mixtos |
+| P11 | SKU allocator | 9 | 17 asserts dedicados (normalize, FNV-1a, colisión, reuso) + 6 tests.js; sobrevive IT1→IT7 → 9 | 17 asserts dedicados (normalize, FNV-1a, colisión, reuso) |
+| P12 | Updater | 9 | UpdaterSmoke PASS + release v1.9.2 OK; warnings 0; sobrevive IT1→IT7 → 9 | UpdaterSmoke PASS + release v1.9.2 OK hoy; warnings limpiados (0 en lint) |
 | P13 | Suite de tests | 9 | 837 PASS totales (704 + 49 UI + 84 logic), 3 suites en runner oficial |
-| P14 | Lint | 8 | 0 errores; 0 warnings en zona propia (limpio 129→58; los 58 restantes son de zonas ajenas: 56 pdfParser en rewrite + 2 scripts paralelos) |
+| P14 | Lint | 9 | 0 errores + 0 warnings zona propia re-verificado IT6/IT7 (56 warnings restantes = pdfParser zona ajena en rewrite). Zona nueva (lazyLoaders, app-smoke, importFlow) 0 warnings → 9 | 0 errores; 0 warnings en zona propia (limpio 129→58; los 58 restantes son de zonas ajenas: 56 pdfParser en rewrite + 2 scripts paralelos) |
 | P15 | Harness de medición | 9 | CATALOG_FILTER, diag por página, measure, debug env-gated |
-| P16 | Auditoría (`npm run audit`) | 8 | Audit v2 sobre pipeline real (export+measure post-gates), criterios fail-closed, exit code real. Verificado FULL: PASS G=2251 Y=63 R=0, 0 cross-cat, 0 duplicados |
-| P17 | Build/optimización frontend | 7 | Fonts locales (68 woff2, latin inline data-URI — sin CDN, 0 dependencia de red) + CSP validada en browser (0 violaciones, 0 errores JS) aplicada en tauri.conf.json. Pendiente: bundler/minify + lazy-load vendor |
+| P16 | Auditoría (`npm run audit`) | 9 | Audit v2 sobre pipeline real, criterios fail-closed, exit code real; re-corrido FRESCO IT6 (23:11): PASS G=2248 Y=66 R=0, 0 cross-cat, 0 dup. 2 verificaciones FULL independientes (17:02 + 23:11) → 9 | Audit v2 sobre pipeline real (export+measure post-gates), criterios fail-closed, exit code real. Verificado IT6 fresco (23:11, tree limpio): PASS G=2248 Y=66 R=0 (baseline corregido — 3 cross-brand Irok/Mars post-fix-bilinear, fail-closed legítimo), 0 cross-cat, 0 duplicados |
+| P17 | Build/optimización frontend | 8 | Opción 2 aplicada (decisión usuario): lazy-load de pdf.js (316K+worker 1.1MB) y xlsx (864K) → head estático = solo papaparse 20K. 5 asserts lazyLoaders (idempotencia, workerSrc, vendor local). Ahorro ~1.18MB parseo inicial + worker bajo demanda. Pendiente (deuda): bundler/minify (opción 1), nonces CSP |
 | P18 | Release pipeline | 9 | bump 6 archivos + check:version + GH Actions + gh release; probado hoy |
 | P19 | Performance export batch | 6 | Medido 05/08: 8BitDo 2.4s, Logitech 2.4s, Madlions 1.4s, KZ 6.7s, Razer 12.4s, MCHOSE 78.5s, AULA 261.7s (!). Hot spot: AULA/MCHOSE/Attack Shark — volumen normal (25 págs/351 prods/3MB imgs) → fase específica del parser (profiler pendiente; fix en pdfParser, zona ajena) |
 
-Promedio: 7.6 (IT5). Procesos >=8: 16/19. Objetivo del loop: 19/19.
+Promedio: 8.7 (IT7, 18 procesos — P6 eliminado). Procesos >=8: 17/18 (falta P19=6). Objetivo del loop: 18/18.
 
 ## Iteración 1 — workstreams
 

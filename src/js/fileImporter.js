@@ -113,6 +113,8 @@ const FileImporter = {
   },
 
   async processExcelFile(file, catalog = []) {
+    // P17 opción 2: lazy-load de xlsx (solo al primer Excel real)
+    if (typeof ensureXlsxLib === 'function') await ensureXlsxLib();
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
 
@@ -182,7 +184,11 @@ const FileImporter = {
     return true;
   },
 
-  exportXLSX(pedido) {
+  async exportXLSX(pedido) {
+    // P17 opción 2: lazy-load de xlsx (solo al exportar Excel)
+    if (typeof XLSX === 'undefined' && typeof ensureXlsxLib === 'function') {
+      await ensureXlsxLib();
+    }
     if (!pedido || !pedido.items.length) return false;
     const headers = ['SKU', 'Categoría', 'Marca', 'Modelo', 'Color/Variante', 'FOB unit USD', 'Cantidad', 'Costo neto unit USD', 'IVA unit USD', 'IVA subtotal USD'];
     const rows = pedido.items.map(r => [r.sku, r.cat, r.marca, r.modelo, r.variante || r.color || '', r.fob, r.qty, r.costoU || 0, r.ivaU || 0, r.subIva || 0]);
@@ -193,7 +199,11 @@ const FileImporter = {
     return true;
   },
 
-  exportCustomsPackingList(pedido) {
+  async exportCustomsPackingList(pedido) {
+    // P17 opción 2: lazy-load de xlsx (solo al exportar Excel)
+    if (typeof XLSX === 'undefined' && typeof ensureXlsxLib === 'function') {
+      await ensureXlsxLib();
+    }
     if (!pedido || !pedido.items || !pedido.items.length) {
       if (typeof toast === 'function') toast('No hay pedido para exportar', 'error');
       return false;
@@ -288,7 +298,11 @@ const FileImporter = {
     return true;
   },
 
-  exportExecutiveReport(pedido) {
+  async exportExecutiveReport(pedido) {
+    // P17 opción 2: lazy-load de xlsx (solo al exportar Excel)
+    if (typeof XLSX === 'undefined' && typeof ensureXlsxLib === 'function') {
+      await ensureXlsxLib();
+    }
     if (!pedido || !pedido.items || !pedido.items.length) {
       if (typeof toast === 'function') toast('No hay pedido para generar el reporte ejecutivo', 'error');
       return false;

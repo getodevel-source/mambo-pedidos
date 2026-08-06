@@ -98,7 +98,13 @@ const Calculator = {
       const fob = item.fob || 0;
       const qty = item.qty || 0;
 
-      const costoU = Math.round(fob * factorCosto * 100) / 100;
+      // BUG P10 (fix 05/08): con FOB total 0 pero costos fijos > 0 (flete por
+      // peso, despachante, courier), factorCosto = 0 → costo unitario 0 y el
+      // costo fijo se perdía. Ahora: sin FOB, se distribuye el costo neto
+      // total entre las unidades (prorrateo por qty).
+      const costoU = totalFob > 0
+        ? Math.round(fob * factorCosto * 100) / 100
+        : (totalQty > 0 ? Math.round((totalCostoNeto / totalQty) * 100) / 100 : 0);
       const pvp = Math.round(costoU * config.markup * 100) / 100;
       const subFob = fob * qty;
       const subPvp = pvp * qty;
