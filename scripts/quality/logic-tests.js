@@ -362,11 +362,6 @@ async function testAppStorage() {
   assert(ev.evidence.restored === false && Array.isArray(ev.items) && ev.items.length === 0, 'loadCatalogWithEvidence con datos corruptos → restored=false, items vacío');
 }
 
-async function testAiEngineBatch() {
-  // Motor de IA local eliminado (limpieza 05/08) — este test se retira junto al engine.
-  assert(true, '(aiCatalogEngine eliminado — sin asserts de _runPool)');
-}
-
 // ============================================
 //  Main
 // ============================================
@@ -375,7 +370,6 @@ async function testAiEngineBatch() {
   testQuoteGenerator();
   testSkuAllocator();
   await testAppStorage();
-  await testAiEngineBatch();
 
   console.log(`\n📊 Resultado: ${passed}/${passed + failed} pruebas pasaron exitosamente.`);
   if (failed > 0) {

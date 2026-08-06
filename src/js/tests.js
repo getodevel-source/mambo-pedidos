@@ -940,13 +940,9 @@ const Tests = {
     ];
 
     this.assert(sampleCells.length === 2, 'Celdas de muestra para sanitización listas');
-    if (typeof TextSanitizer !== 'undefined' && TextSanitizer.sanitizeItem) {
-      const sanitized = sampleCells.map(c => TextSanitizer.sanitizeItem(c, []));
-      this.assert(sanitized.length === 2, 'Sanitización determinística mantiene la cantidad de productos');
-      this.assert(sanitized[0].fob === 48.30 && sanitized[1].fob === 50.63, 'Sanitización preserva de manera inmutable los precios FOB determinísticos');
-    } else {
-      this.assert(true, 'Modulo TextSanitizer listo para sanitización');
-    }
+    const sanitized = sampleCells.map(c => TextSanitizer.sanitizeItem(c, []));
+    this.assert(sanitized.length === 2, 'Sanitización determinística mantiene la cantidad de productos');
+    this.assert(sanitized[0].fob === 48.30 && sanitized[1].fob === 50.63, 'Sanitización preserva de manera inmutable los precios FOB determinísticos');
   },
 
   testAppUpdaterModule() {
@@ -1211,7 +1207,9 @@ const Tests = {
       this.assert(ambiguousOnly.confidence <= 40, `#6: Token ambiguo "a5" confidence <= 40 (got ${ambiguousOnly.confidence})`);
       this.assert(ambiguousOnly.source === 'text-keyword-ambiguous', `#6: Source es ambiguous (got "${ambiguousOnly.source}")`);
     } else {
-      this.assert(true, '#6: Token "a5" no matcheó MOUSE (patrón de mayor prioridad ganó)');
+      // Con "Model A5" (sin keyword de categoría), el token ambiguo NO debe dar
+      // MOUSE con confianza alta: cualquier otra categoría/confianza baja es correcto.
+      this.assert(ambiguousOnly.confidence < 85, `#6: Token "a5" sin keyword no gana con confianza alta (got ${ambiguousOnly.confidence})`);
     }
 
     // Non-ambiguous token keeps full confidence
