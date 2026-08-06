@@ -98,80 +98,359 @@ const PdfParser = {
 
 
     async extractImagesFromPage(page, viewport, pageNum) {
-    const pageImages = [];
-    try {
-      const ops = await page.getOperatorList();
-      const fnArray = ops.fnArray;
-      const argsArray = ops.argsArray;
+      const pageImages = [];
+      try {
+        const ops = await page.getOperatorList();
+        const fnArray = ops.fnArray;
+        const argsArray = ops.argsArray;
 
-      for (let i = 0; i < fnArray.length; i++) {
-        const op = fnArray[i];
-        if (op !== pdfjsLib.OPS.paintImageXObject && op !== pdfjsLib.OPS.paintInlineImageXObject) continue;
-        const opArgs = argsArray[i];
-        if (!opArgs || opArgs.length === 0) continue;
+        // P19 RENDER-BASED (06/08): el decode individual (objs.get) decodifica
+        // cada foto a su resolución NATIVA (4000px+ = 0.55s×445 → AULA 262s).
+        // Ahora: render de la página UNA vez a escala adaptativa — pdf.js
+        // decodifica las imágenes a la escala de dibujo durante el render.
+        // Las coordenadas x/y/centerY se calculan IGUAL que antes (del CTM),
+        // así el matcher imagen→producto no cambia (cero riesgo de cruzado).
+        const MAX_DIM = 150;
+        // Escala adaptativa por la imagen MÁS CHICA válida (para que hasta los
+        // switches de ~25pt queden ≥150px — calidad ≥ baseline). El render a
+        // escala alta cuesta ~igual que a escala baja (pdf.js decodifica a la
+        // escala de dibujo, no a la nativa): 200ms/página a 6.0x.
+        const RENDER_CAP = 6.0;
 
-        let imgObj = null;
-        if (op === pdfjsLib.OPS.paintInlineImageXObject) {
-          // Imagen inline: el objeto viene directo en los argumentos
-          imgObj = opArgs[0];
-        } else {
-          // paintImageXObject: pdf.js carga la imagen de forma ASINCRÓNICA.
-          // El .get() sincrónico lanza excepción si aún no está resuelta → hay que esperar con callback.
-          const imageName = opArgs[0];
-          try {
-            imgObj = await new Promise((resolve) => {
-              let settled = false;
-              const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, 2500);
-              try {
-                if (!page.objs || typeof page.objs.get !== 'function') {
-                  clearTimeout(timer);
-                  resolve(null);
-                  return;
-                }
-                page.objs.get(imageName, (obj) => {
-                  if (!settled) { settled = true; clearTimeout(timer); resolve(obj); }
-                });
-              } catch (e) {
-                if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
+        // Pre-pase: recolectar imágenes paintImageXObject + su CTM + nativo.
+        // Clasificación HÍBRIDA (fix 06/08):
+        //  - CTM SANO (drawW≥20, drawH≥20, aspect≤10): recorte del render de
+        //    página (rápido — el render decodifica a escala de dibujo, no nativa).
+        //  - CTM DEGENERADO (draw chico/deformado pero nativo≥20): decode nativo
+        //    con objs.get (camino original). El baseline los incluía (el gate
+        //    era sobre el NATIVO) y el pase 3 (galería desfasada) depende de
+        //    ese pool exacto — descartarlos cambiaba la asignación (imagen
+        //    cruzada). Son POCOS (34 XObjects únicos en AULA) y chicos → costo
+        //    despreciable vs. el decode nativo de TODAS las fotos (245s).
+        const imageOps = [];
+        let minDrawDim = Infinity;
+        for (let i = 0; i < fnArray.length; i++) {
+          if (fnArray[i] !== pdfjsLib.OPS.paintImageXObject) continue;
+          const opArgs = argsArray[i];
+          if (!opArgs || opArgs.length === 0) continue;
+          const nativeW = Number(opArgs[1]) || 0;
+          const nativeH = Number(opArgs[2]) || 0;
+          if (nativeW < 20 || nativeH < 20) continue; // gate nativo (como el baseline)
+          let ctm = null;
+          for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+            if (fnArray[j] === pdfjsLib.OPS.transform) {
+              ctm = argsArray[j];
+              break;
+            }
+          }
+          let drawW = 0, drawH = 0, sane = false;
+          if (ctm) {
+            drawW = Math.abs(Number(ctm[0]) || 0);
+            drawH = Math.abs(Number(ctm[3]) || 0);
+            sane = drawW >= 20 && drawH >= 20 &&
+                   Math.max(drawW, drawH) / Math.max(1, Math.min(drawW, drawH)) <= 10;
+            if (sane) minDrawDim = Math.min(minDrawDim, drawW, drawH);
+          }
+          imageOps.push({ idx: i, name: opArgs[0], ctm, nativeW, nativeH, drawW, drawH, sane });
+        }
+        if (imageOps.length === 0) return pageImages;
+
+        // Escala del render: que la imagen sana más chica quede ≥ MAX_DIM.
+        let renderScale = 1;
+        if (Number.isFinite(minDrawDim) && minDrawDim > 0) {
+          renderScale = Math.min(RENDER_CAP, MAX_DIM / minDrawDim);
+        }
+        renderScale = Math.max(0.5, renderScale);
+        const renderViewport = page.getViewport({ scale: renderScale });
+        const renderCanvas = document.createElement('canvas');
+        renderCanvas.width = Math.max(1, Math.floor(renderViewport.width));
+        renderCanvas.height = Math.max(1, Math.floor(renderViewport.height));
+        const renderCtx = renderCanvas.getContext('2d');
+        if (!renderCtx) return pageImages;
+
+        // Cache de decodes nativos (mismo XObject pintado muchas veces)
+        const nativeCache = new Map();
+        // Cache de dataUrls del render por XObject: el baseline deduplica por
+        // dataUrl (mismo XObject → mismo PNG → 1 imagen en el pool del matcher).
+        // El recorte del render del MISMO XObject puede diferir en subpíxeles →
+        // dataUrls distintos → sin dedup → pool más grande → pase 3 desalineado
+        // (imagen cruzada, verificado: Reaper recibía la letra A del header).
+        // Reusar el primer dataUrl por nombre reproduce el dedup del baseline.
+        const renderUrlCache = new Map();
+
+        // PASO 1: render de página UNA vez (solo si hay imágenes sanas).
+        // Con proxy drawImage: captura la posición REAL de cada imagen en el
+        // canvas. El CTM del operatorList tiene un offset de cropBox variable
+        // (verificado: recortar por CTM daba la letra A del header para el
+        // switch Reaper — imagen cruzada). El render dibuja en el MISMO sistema
+        // que getTextContent (productos) → coordenadas reales alinean el matcher.
+        let renderDone = false;
+        const drawInfo = []; // {px, py, pw, ph} en escala 1.0, orden del operatorList
+        const hasSane = imageOps.some(io => io.sane);
+        if (hasSane) {
+          const origDrawImage = renderCtx.drawImage && renderCtx.drawImage.bind(renderCtx);
+          if (typeof renderCtx.drawImage === 'function') {
+            renderCtx.drawImage = function (...args) {
+              let t = null;
+              try { t = renderCtx.getTransform(); } catch (e) {}
+              if (t && args.length >= 9) {
+                const dx = args[5], dy = args[6], dw = args[7], dh = args[8];
+                const px = (t.a * dx + t.c * dy + t.e) / renderScale;
+                const py = (t.b * dx + t.d * dy + t.f) / renderScale;
+                const pw = Math.abs(t.a * dw) / renderScale;
+                const ph = Math.abs(t.d * dh) / renderScale;
+                drawInfo.push({ px, py, pw, ph });
               }
-            });
-          } catch (e) {
-            continue;
+              return origDrawImage(...args);
+            };
+          }
+          await page.render({ canvasContext: renderCtx, viewport: renderViewport }).promise;
+          renderDone = true;
+          if (origDrawImage && typeof renderCtx.drawImage === 'function') {
+            renderCtx.drawImage = origDrawImage;
           }
         }
 
-        if (!imgObj || !imgObj.width || !imgObj.height) continue;
-        if (imgObj.width < 20 || imgObj.height < 20) continue;
-        // Aspect ratio guard: extreme ratios (>10:1) are likely decorative lines/bars, not product photos
-        const aspectRatio = Math.max(imgObj.width, imgObj.height) / Math.max(1, Math.min(imgObj.width, imgObj.height));
-        if (aspectRatio > 10) continue;
+        // Índice de drawInfo por paint en orden: el render procesa los operadores
+        // en el MISMO orden que el operatorList → drawInfo[k] corresponde al
+        // k-ésimo paintImageXObject (con nativo≥20) de la página.
+        let drawIdx = 0;
 
-        let ctm = null;
-        for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
-          if (fnArray[j] === pdfjsLib.OPS.transform) {
-            ctm = argsArray[j];
-            break;
+        for (const io of imageOps) {
+          const { ctm, nativeW, nativeH, drawW, drawH, sane } = io;
+          const x = ctm ? Number(ctm[4]) || 0 : 0;
+          const y = ctm ? viewport.height - (Number(ctm[5]) || 0) : 0;
+
+          // Posición REAL desde el proxy (si está disponible)
+          let realPos = null;
+          if (drawIdx < drawInfo.length) {
+            const d = drawInfo[drawIdx];
+            // sanity: la X real debe estar cerca de la X del CTM (mismo paint)
+            if (Math.abs(d.px - x) < 80) realPos = d;
           }
-        }
+          drawIdx++;
 
-        const imgW = Number(imgObj.width);
-        const imgH = Number(imgObj.height);
-        const x = ctm ? Number(ctm[4]) || 0 : 0;
-        const y = ctm ? viewport.height - (Number(ctm[5]) || 0) : 0;
+          // ¿Distorsión? El PDF dibuja algunos XObjects con rect de aspecto
+          // DISTINTO al nativo (ej. switch nativo 144x109 dibujado en rect
+          // portrait). El recorte del render reproduce la distorsión (blur);
+          // el baseline usaba el nativo limpio → calidad superior. Umbral 15%.
+          let distorted = false;
+          if (ctm && nativeW > 0 && nativeH > 0) {
+            const drawAspect = drawW / Math.max(1, drawH);
+            const nativeAspect = nativeW / Math.max(1, nativeH);
+            const diff = Math.abs(drawAspect - nativeAspect) / Math.max(0.01, nativeAspect);
+            distorted = diff > 0.15;
+          }
 
-          if (typeof document !== 'undefined') {
-            // HOT SPOT FIX (05/08): escalar ANTES de rasterizar. El canvas se
-            // creaba al tamaño NATIVO de la foto (4000px+ en AULA/MCHOSE →
-            // ~1-2s de rasterización por imagen → 262s por catálogo). Ahora el
-            // bitmap se dibuja ESCALADO directo al canvas final (MAX_DIM 150).
-            const MAX_DIM = 150;
-            const scalePre = Math.min(1, MAX_DIM / Math.max(imgObj.width, imgObj.height));
-            const outW = Math.max(1, Math.round(imgObj.width * scalePre));
-            const outH = Math.max(1, Math.round(imgObj.height * scalePre));
+          if (sane && !distorted && renderDone && realPos) {
+            // --- RUTA RENDER (rápida): recorte en la posición REAL ---
+            const sx = Math.max(0, Math.floor(realPos.px * renderScale));
+            const sy = Math.max(0, Math.floor(realPos.py * renderScale));
+            const sw = Math.max(1, Math.min(renderCanvas.width - sx, Math.floor(realPos.pw * renderScale)));
+            const sh = Math.max(1, Math.min(renderCanvas.height - sy, Math.floor(realPos.ph * renderScale)));
+            if (sx >= renderCanvas.width || sy >= renderCanvas.height || sw < 1 || sh < 1) continue;
 
             let finalDataUrl = '';
             let colorCtx = null;
+            let outW = sw;
+            let outH = sh;
+            try {
+              const imgData = renderCtx.getImageData(sx, sy, sw, sh);
+              const cropCanvas = document.createElement('canvas');
+              const scaleUp = Math.min(1, MAX_DIM / Math.max(sw, sh));
+              outW = Math.max(1, Math.round(sw * scaleUp));
+              outH = Math.max(1, Math.round(sh * scaleUp));
+              cropCanvas.width = outW;
+              cropCanvas.height = outH;
+              const ctx = cropCanvas.getContext('2d');
+              if (ctx) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                const tmp = document.createElement('canvas');
+                tmp.width = sw;
+                tmp.height = sh;
+                const tmpCtx = tmp.getContext('2d');
+                tmpCtx.putImageData(imgData, 0, 0);
+                ctx.drawImage(tmp, 0, 0, outW, outH);
+                // PNG lossless (igual que el baseline con imgObj.data) — el
+                // JPEG 0.85 pixelaba los bordes (nitidez menor, verificado).
+                finalDataUrl = cropCanvas.toDataURL('image/png');
+                colorCtx = ctx;
+              }
+            } catch (e) {
+              finalDataUrl = '';
+            }
 
+            // Dedup por XObject (reproduce el del baseline): mismo XObject →
+            // mismo dataUrl → el matcher los colapsa a 1 en el pool.
+            if (renderUrlCache.has(io.name)) {
+              finalDataUrl = renderUrlCache.get(io.name).url;
+            } else if (this.isValidImageDataUrl(finalDataUrl)) {
+              renderUrlCache.set(io.name, { url: finalDataUrl });
+            }
+
+            if (this.isValidImageDataUrl(finalDataUrl)) {
+              const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              pageImages.push({
+                pageNum, y, x,
+                width: outW, height: outH,
+                pdfWidth: drawW, pdfHeight: drawH,
+                centerY: y + (outH / 2),
+                dataUrl: finalDataUrl,
+                dominantColor
+              });
+            }
+          } else {
+            // --- RUTA NATIVA (CTM degenerado o distorsionado): decode nativo ---
+            // Tras el render de la página, pdf.js ya decodificó TODOS los
+            // XObjects → page.objs.get(name) SIN callback devuelve el objeto
+            // al instante (0ms, verificado). El callback con timeout de 2.5s
+            // multiplicaba el tiempo (117s en AULA — los timeouts se acumulaban).
+            let imgObj = null;
+            if (nativeCache.has(io.name)) {
+              imgObj = nativeCache.get(io.name);
+            } else {
+              try {
+                if (page.objs && typeof page.objs.get === 'function') {
+                  imgObj = page.objs.get(io.name);
+                }
+                if (!imgObj) {
+                  // Fallback: esperar el callback (raro post-render)
+                  imgObj = await new Promise((resolve) => {
+                    let settled = false;
+                    const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, 500);
+                    try {
+                      page.objs.get(io.name, (obj) => {
+                        if (!settled) { settled = true; clearTimeout(timer); resolve(obj); }
+                      });
+                    } catch (e) {
+                      if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
+                    }
+                  });
+                }
+              } catch (e) {
+                continue;
+              }
+              nativeCache.set(io.name, imgObj);
+            }
+
+            if (!imgObj || !imgObj.width || !imgObj.height) continue;
+            if (imgObj.width < 20 || imgObj.height < 20) continue;
+            const aspectRatio = Math.max(imgObj.width, imgObj.height) / Math.max(1, Math.min(imgObj.width, imgObj.height));
+            if (aspectRatio > 10) continue;
+
+            const imgW = Number(imgObj.width);
+            const imgH = Number(imgObj.height);
+            const scalePre = Math.min(1, MAX_DIM / Math.max(imgObj.width, imgObj.height));
+            const outW = Math.max(1, Math.round(imgObj.width * scalePre));
+            const outH = Math.max(1, Math.round(imgObj.height * scalePre));
+            let finalDataUrl = '';
+            let colorCtx = null;
+
+            if (typeof document !== 'undefined') {
+              if (imgObj.bitmap) {
+                const canvas = document.createElement('canvas');
+                canvas.width = outW;
+                canvas.height = outH;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.imageSmoothingEnabled = true;
+                  ctx.imageSmoothingQuality = 'high';
+                  try {
+                    ctx.drawImage(imgObj.bitmap, 0, 0, outW, outH);
+                    finalDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    colorCtx = ctx;
+                  } catch (e) { finalDataUrl = ''; }
+                }
+              } else if (imgObj.data) {
+                const totalPixels = imgObj.width * imgObj.height;
+                const channels = imgObj.data.length / totalPixels;
+                if (channels === 4 || channels === 3 || channels === 1) {
+                  const srcW = imgObj.width;
+                  const srcH = imgObj.height;
+                  const scaled = new Uint8ClampedArray(outW * outH * 4);
+                  const d = imgObj.data;
+                  const ch = channels;
+                  for (let yy = 0; yy < outH; yy++) {
+                    const syf = (yy / outH) * (srcH - 1);
+                    const sy = Math.min(srcH - 2, Math.floor(syf));
+                    const fy = syf - sy;
+                    for (let xx = 0; xx < outW; xx++) {
+                      const sxf = (xx / outW) * (srcW - 1);
+                      const sx = Math.min(srcW - 2, Math.floor(sxf));
+                      const fx = sxf - sx;
+                      const i00 = (sy * srcW + sx) * ch;
+                      const i10 = i00 + ch;
+                      const i01 = i00 + srcW * ch;
+                      const i11 = i01 + ch;
+                      const dd = (yy * outW + xx) * 4;
+                      for (let c = 0; c < 3; c++) {
+                        const v = (d[i00 + c] * (1 - fx) + d[i10 + c] * fx) * (1 - fy) +
+                                  (d[i01 + c] * (1 - fx) + d[i11 + c] * fx) * fy;
+                        scaled[dd + c] = v;
+                      }
+                      scaled[dd + 3] = ch === 4 ? d[i00 + 3] : 255;
+                    }
+                  }
+                  const canvas = document.createElement('canvas');
+                  canvas.width = outW;
+                  canvas.height = outH;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    const imgData = ctx.createImageData(outW, outH);
+                    imgData.data.set(scaled);
+                    ctx.putImageData(imgData, 0, 0);
+                    try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
+                    colorCtx = ctx;
+                  }
+                }
+              }
+            }
+
+            if (this.isValidImageDataUrl(finalDataUrl)) {
+              const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              pageImages.push({
+                pageNum, y, x,
+                width: outW, height: outH,
+                pdfWidth: imgW, pdfHeight: imgH,
+                centerY: y + (outH / 2),
+                dataUrl: finalDataUrl,
+                dominantColor
+              });
+            }
+          }
+        }
+
+        // Imágenes INLINE (iconos chicos, baratas): camino original intacto
+        for (let i = 0; i < fnArray.length; i++) {
+          if (fnArray[i] !== pdfjsLib.OPS.paintInlineImageXObject) continue;
+          const opArgs = argsArray[i];
+          if (!opArgs || opArgs.length === 0) continue;
+          const imgObj = opArgs[0];
+          if (!imgObj || !imgObj.width || !imgObj.height) continue;
+          if (imgObj.width < 20 || imgObj.height < 20) continue;
+          const aspectRatio = Math.max(imgObj.width, imgObj.height) / Math.max(1, Math.min(imgObj.width, imgObj.height));
+          if (aspectRatio > 10) continue;
+
+          let ctm = null;
+          for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+            if (fnArray[j] === pdfjsLib.OPS.transform) {
+              ctm = argsArray[j];
+              break;
+            }
+          }
+          const imgW = Number(imgObj.width);
+          const imgH = Number(imgObj.height);
+          const x = ctm ? Number(ctm[4]) || 0 : 0;
+          const y = ctm ? viewport.height - (Number(ctm[5]) || 0) : 0;
+
+          const scalePre = Math.min(1, MAX_DIM / Math.max(imgObj.width, imgObj.height));
+          const outW = Math.max(1, Math.round(imgObj.width * scalePre));
+          const outH = Math.max(1, Math.round(imgObj.height * scalePre));
+          let finalDataUrl = '';
+          let colorCtx = null;
+
+          if (typeof document !== 'undefined') {
             if (imgObj.bitmap) {
               const canvas = document.createElement('canvas');
               canvas.width = outW;
@@ -187,35 +466,27 @@ const PdfParser = {
                 } catch (e) { finalDataUrl = ''; }
               }
             } else if (imgObj.data) {
-              // Datos crudos sin bitmap (modo Node/runner: bitmap es null).
-              // HOT SPOT FIX v2 (05/08): escalado DIRECTAMENTE desde los datos
-              // crudos (nearest-neighbor, O(150×150)) — nunca se convierte ni
-              // se encodea el tamaño nativo (4000px+ = 16M px en JS puro por
-              // imagen → AULA 262s). Antes: conversión RGBA nativa + encode
-              // nativo + segundo encode. Ahora: 22.5k px de trabajo por imagen.
               const totalPixels = imgObj.width * imgObj.height;
-              const channels = imgObj.data.length / totalPixels; // 4, 3 o 1
+              const channels = imgObj.data.length / totalPixels;
               if (channels === 4 || channels === 3 || channels === 1) {
                 const srcW = imgObj.width;
                 const srcH = imgObj.height;
                 const scaled = new Uint8ClampedArray(outW * outH * 4);
                 const d = imgObj.data;
                 const ch = channels;
-                // Bilinear (2×2 vecinos) — suaviza como el resize del canvas
-                // original pero O(150×150), sin tocar el tamaño nativo.
-                for (let y = 0; y < outH; y++) {
-                  const syf = (y / outH) * (srcH - 1);
+                for (let yy = 0; yy < outH; yy++) {
+                  const syf = (yy / outH) * (srcH - 1);
                   const sy = Math.min(srcH - 2, Math.floor(syf));
                   const fy = syf - sy;
-                  for (let x = 0; x < outW; x++) {
-                    const sxf = (x / outW) * (srcW - 1);
+                  for (let xx = 0; xx < outW; xx++) {
+                    const sxf = (xx / outW) * (srcW - 1);
                     const sx = Math.min(srcW - 2, Math.floor(sxf));
                     const fx = sxf - sx;
                     const i00 = (sy * srcW + sx) * ch;
                     const i10 = i00 + ch;
                     const i01 = i00 + srcW * ch;
                     const i11 = i01 + ch;
-                    const dd = (y * outW + x) * 4;
+                    const dd = (yy * outW + xx) * 4;
                     for (let c = 0; c < 3; c++) {
                       const v = (d[i00 + c] * (1 - fx) + d[i10 + c] * fx) * (1 - fy) +
                                 (d[i01 + c] * (1 - fx) + d[i11 + c] * fx) * fy;
@@ -237,29 +508,25 @@ const PdfParser = {
                 }
               }
             }
-
-            if (this.isValidImageDataUrl(finalDataUrl)) {
-              const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
-              pageImages.push({
-                pageNum, y, x,
-                width: outW, height: outH,
-                pdfWidth: imgW, pdfHeight: imgH,
-                // centerY must use the RENDERED height (outH): pdf.js reports
-                // the native bitmap size (imgH), which for high-res photos
-                // rendered small is hundreds of points larger — the row
-                // engine's Y-band filter then misses every image.
-                centerY: y + (outH / 2),
-                dataUrl: finalDataUrl,
-                dominantColor
-              });
-            }
           }
+
+          if (this.isValidImageDataUrl(finalDataUrl)) {
+            const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+            pageImages.push({
+              pageNum, y, x,
+              width: outW, height: outH,
+              pdfWidth: imgW, pdfHeight: imgH,
+              centerY: y + (outH / 2),
+              dataUrl: finalDataUrl,
+              dominantColor
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Extracción de imágenes no soportada:', err);
       }
-    } catch (err) {
-      console.warn('Extracción de imágenes no soportada:', err);
-    }
-    return pageImages;
-  },
+      return pageImages;
+    },
 
   cleanImageBackground(ctx, width, height) {
     try {
@@ -2151,7 +2418,7 @@ if (!rawModelo) continue;
         try {
           const re = new RegExp(b.pattern, 'i');
           if (re.test(f)) return b.name;
-        } catch (e) {}
+        } catch {}
       }
     }
 

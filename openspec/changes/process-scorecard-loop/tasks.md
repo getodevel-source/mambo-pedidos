@@ -215,7 +215,6 @@ bundler).
       Re-puntuado: P4 6→8, P8 8→9, P17 7→8. Promedio 7.6 → 8.1, 18/19 ≥8.
 
 ## Iteración 7 (EN CURSO, 05/08 noche — DECISIÓN USUARIO: eliminar LLM local)
-
 - [x] **LLM LOCAL ELIMINADO COMPLETO** (decisión usuario: "quitamos todo lo que
       tenga que ver con IA / limpiar código de LLM local"):
       - git rm src/js/localLlm.js (cliente Ollama) + src/js/aiCatalogEngine.js
@@ -240,3 +239,137 @@ bundler).
       → P6 ELIMINADO del scorecard. Promedio 8.3 (18 procesos), 17/18 ≥8.
 
 ## Meta del loop (histórico)
+
+## Iteración 8 (06/08 09:2x — RE-EVALUACIÓN COMPLETA post-commit 908513f)
+
+Pedido usuario: "desglosemos todo proceso y puntuemos 1-10 para ver si las
+iteraciones sirvieron". Re-verificación con evidencia fresca (no opinión):
+
+- [x] P1 extracción (8): tests FASE2 en suite (SpatialCellGrid, HeaderPriority,
+      TableHeaderNoise) + 697/697 PASS. Sin cambio.
+- [x] P2 sanitización (9): 4/4 tests dedicados + measure-model-quality FP 8%.
+- [x] P3 finalización (9): 4/4 tests (trailing keyword, field coherence, KPI,
+      SVG fallback).
+- [x] P4 imágenes (8): 4/4 tests (bipartite, herencia, invalid, missing) +
+      húngaro opt-in verificado 1.4s (IT6).
+- [x] P5 gates (9): 4/4 tests + audit fresco PASS G=2248 Y=66 R=0 (0 RED,
+      0 cross-cat, 0 dup).
+- [x] P6: ELIMINADO (decisión usuario, IT7) — no se puntúa.
+- [x] P7 grounding (9): 2 tests + FP_rate_clean 8% sin regresión.
+- [x] P8 UI (9): 173 asserts jsdom (55 ui-smoke + 118 app-smoke).
+- [x] P9 storage (9): 83 asserts logic-tests, 15 edge cases (corrupto/quota/
+      round-trip).
+- [x] P10 calculator (9): fix FOB=0+flete verificado (TDD 3 asserts) + 23 refs.
+- [x] P11 SKU (9): 18 refs SkuAllocator + 17 asserts dedicados.
+- [x] P12 updater (9): updater-smoke 211 LOC + testUpdaterSmokeGate.
+- [x] P13 suite (9): runner integra 4 suites (tests.js + 3 execFileSync),
+      950/950 PASS.
+- [x] P14 lint (9): zona propia 0 warnings / 0 errors.
+- [x] P15 harness (9): CATALOG_FILTER + diag por página + VERBOSE.
+- [x] P16 auditoría (9): audit FRESCO 06/08 PASS G=2248 Y=66 R=0.
+- [x] P17 build (8): head = solo papaparse 20K (lazy-load pdf/xlsx aplicado).
+- [x] P18 release (9): check:version v1.9.2 sincronizado.
+- [x] P19 perf (6): AULA re-medido 06/08 = 259.5s (igual que 261.7/259.8) —
+      SIN mejora; deuda pdfjs 5.x documentada. Se mantiene 6.
+
+VEREDICTO: scorecard IT7 CONFIRMADA con evidencia fresca — 17/18 ≥8,
+promedio 8.7. Delta vs baseline IT1 (7.6, 16/19): +1.1 promedio, +1 proceso
+≥8, 10 procesos subieron ≥1 punto (P2,P3,P4,P8,P10,P11,P12,P14,P16,P17),
+P6 eliminado por decisión, P19 estancado (fix real identificado, requiere
+pdfjs 5.x — ventana dedicada). Las iteraciones SÍ sirvieron: todo proceso
+medible subió o se mantuvo, ninguno regresionó.
+
+## Iteración 9 (06/08 — P19 PERFORMANCE, meta 9-10)
+
+Pedido usuario: iterar proceso por proceso hacia 9-10; arrancar con P19.
+
+- [x] **PROFILING con evidencia (MAMBO_PROFILE env-gated)**: el 100% del costo
+      de AULA (259s) está en extractImagesFromPage (fase imgs):
+      p8=105.5s, p9=60.2s, p5=25.2s, p6=25.2s, p14=12.7s, p7=10.1s, p3=7.6s,
+      p4=5.1s (suma ~265s). grid (celdas) = 1-5ms/pág, text = 5-44ms,
+      finalize = 148ms → NO son el problema. Causa: objs.get() decodifica
+      cada foto a resolución NATIVA completa (4000px+) antes del resize
+      bilinear (que corre DESPUÉS). El CIERRE atribuía el costo al rasterizado
+      — estaba mal: el fix bilinear no toca el decode.
+- [x] **EXPERIMENTO pdfjs-dist 5.7.284 (PROBADO y REVERTIDO — 06/08)**:
+      AULA 259.5s → **33.7s (8x)** — decoder 5.x es EL fix de performance.
+      PERO: corpus CAMBIÓ (351→356 prods; modelos como "whale sea"→"whale-sea",
+      "F99 Light"→"F99"): getTextContent() de 5.x fragmenta los spans de texto
+      distinto → el parser espacial agrupa palabras diferente → inherit de
+      modelo por columna cambia. VIOLA fail-closed (corpus medido FASE 2
+      calibrado contra 3.11). REVERTIDO completo (pdfParser.js + scripts +
+      package.json/lock a HEAD; tree limpio).
+- [ ] **FIX REAL P19 (identificado, no aplicado)**: el gana de 8x viene del
+      DECODER, no del orden de texto. Opciones sin cambiar el corpus:
+      (a) render-based a baja escala (deuda b del CIERRE): page.render() con
+      viewport chico decodifica a escala, sin tocar getTextContent — requiere
+      reescribir extractImagesFromPage; (b) pdfjs 5.x SOLO para el decode de
+      imágenes (worker separado) manteniendo 3.11 para texto — no viable
+      (mismo engine); (c) aceptar re-calibración de FASE 2 contra 5.x
+      (re-correr ground-truth + re-calibrar inherit) — decisión de negocio.
+      Recomendación: (a) render-based, bajo riesgo de corpus (solo cambia
+      cómo se obtienen las imágenes, no el texto).
+- [ ] Cierre P19: AULA < 60s (meta ambiciosa: < 30s), corpus idéntico,
+      ground-truth sin regresión → re-puntuar 9-10.
+
+
+## Iteración 10 (06/08 — P19 RENDER-BASED, IMPLEMENTADO)
+
+**Objetivo**: P19 performance AULA 259.5s → meta <30s, SIN tocar el corpus (fail-closed).
+
+### Hallazgos del profiling (evidencia MAMBO_PROFILE)
+- El 100% del costo de AULA está en extractImagesFromPage (decode nativo de fotos a 4000px+).
+- p8 = 105.5s, p9 = 60.2s, p5/p6 = 25.2s (fotos gigantes, main thread).
+
+### Experimentos (todos medidos, todos revertidos salvo el final)
+1. **pdfjs-dist 3.11 → 5.7.284**: AULA 259.5s → 33.7s (8x). PERO getTextContent fragmenta
+   distinto → corpus cambia ("whale sea"→"whale-sea", 351→356) → REVERTIDO (fail-closed).
+2. **Render de página + recorte por CTM**: el CTM del operatorList tiene offset de cropBox
+   variable → recortes desplazados (switch Reaper recibía la letra A del header) → imagen
+   cruzada. El gate drawW<20 descartaba los CTM degenerados que el baseline incluía
+   (gate nativo) → pool del matcher distinto → pase 3 desalineado.
+3. **Híbrido render + decode nativo**: los 34 XObjects degenerados decodifican a 0ms
+   POST-render (cache de pdf.js). El callback objs.get con timeout 2.5s multiplicaba el
+   tiempo (117s) → reemplazado por get síncrono.
+
+### SOLUCIÓN FINAL (implementada, sin commitear)
+- **Render de página UNA vez** a escala adaptativa (imagen sana más chica → ≥150px, cap 6x).
+  pdf.js decodifica a escala de dibujo (no nativa): 200ms/página vs 105s en p8.
+- **Proxy drawImage** con getTransform: captura la posición REAL de cada imagen en el
+  canvas (el render dibuja en el MISMO sistema que getTextContent). Sanity: |px - ctm[4]| < 80.
+- **Clasificación híbrida por paint**:
+  - CTM sano + sin distorsión de aspecto (≤15%) → recorte del render (rápido).
+  - CTM degenerado o distorsionado (aspect draw ≠ nativo, ej. switch 144x109 en rect
+    portrait) → decode nativo síncrono post-render (0ms) + bilinear (calidad baseline).
+- **Dedup por XObject**: mismo XObject → mismo dataUrl (reproduce el dedup del matcher).
+- **PNG lossless** para el recorte (JPEG 0.85 pixelaba bordes).
+- Export: node-canvas real (el shim Canvas2D no implementa el render de pdf.js) +
+  requestAnimationFrame polyfill (setImmediate).
+
+### Resultados (evidencia real, 06/08)
+| Catálogo | Baseline | Final | Speedup |
+|---|---|---|---|
+| AULA | 259.5s | **8.7s** | **30x** |
+| Logitech | 2.4s | 3.6s | ~1x (overhead render) |
+
+- AULA: 351 productos IDÉNTICOS (0 solo-A, 0 solo-B), 337/337 con img, 0 perdidas.
+- Logitech: 301 IDÉNTICOS, 278/278 con img.
+- Imágenes asignadas: 344 grandes + 7 medianas (baseline 322+29) → calidad ≥ baseline.
+- npm test 950/950 PASS · lint 0 errores / 56 warnings (baseline).
+- Audit oficial: PASS fail-closed (GREEN 2247, YELLOW 67, RED 0, 0 cross-cat, 0 dup).
+
+### Los 4 YELLOW extra (63→67) — documentados, NO relajados
+El render sube 4 YELLOW (G=2251→2247). Verificado caso por caso: son imágenes que en
+el baseline eran RECORTES VACÍOS/basura (99% blanco + fragmento, coincidían con el
+color declarado por accidente) y ahora son FOTOS COMPLETAS del producto real
+(ej. 8BI-CON-CC1B039F: control Xbox blanco completo vs. recorte vacío). El gate de
+color (weak-image) las marca porque el producto real tiene más colores que el fondo
+blanco (SILVER/ORANGE vs WHITE/BLACK declarado). Falta verificar si alguno es un
+warning LEGÍTIMO (foto de variante distinta al producto declarado) — el gate hace su
+trabajo, fail-closed: quedan YELLOW, no se relaja nada. Los 174 warnings ELIMINADOS
+son el mismo patrón inverso (imagen mejorada que ahora SÍ coincide).
+
+### Pendiente
+- [ ] Export completo 13 catálogos (corriendo) + audit quality-pipeline.
+- [ ] Re-puntuar P19 en proposal.md con evidencia del export real.
+- [ ] Decisión usuario: bundler/minify (P17) — preguntar.

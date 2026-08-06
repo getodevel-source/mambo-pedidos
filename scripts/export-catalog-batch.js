@@ -141,6 +141,22 @@ class Canvas2D {
 global.window = global;
 global.navigator = {};
 global.Image = class {};
+// pdf.js render 3.x usa requestAnimationFrame para el loop interno del render.
+// En Node no existe → polyfill con setImmediate (necesario para el render de
+// página render-based de P19).
+global.requestAnimationFrame = (cb) => setImmediate(() => cb(Date.now()));
+global.cancelAnimationFrame = () => {};
+// Canvas factory: node-canvas REAL cuando está disponible (necesario para el
+// render de página render-based de P19 — pdf.js render necesita setTransform/
+// fillRect/save/clip que el shim Canvas2D no implementa). Fallback al shim
+// si node-canvas no está instalado.
+let nodeCanvasFactory = null;
+try {
+  const nc = require('canvas');
+  nodeCanvasFactory = {
+    create: (w, h) => nc.createCanvas(Math.max(1, w), Math.max(1, h)),
+  };
+} catch (e) { nodeCanvasFactory = null; }
 global.localStorage = {
   values: new Map(),
   getItem(k) { return this.values.has(k) ? this.values.get(k) : null; },
@@ -153,7 +169,10 @@ global.document = {
   querySelector() { return null; },
   getElementById() { return null; },
   createElement(tag) {
-    if (tag === 'canvas') return new Canvas2D(300, 150);
+    if (tag === 'canvas') {
+      if (nodeCanvasFactory) return nodeCanvasFactory.create(300, 150);
+      return new Canvas2D(300, 150);
+    }
     return { style: {}, click() {}, setAttribute() {}, appendChild() {}, getContext() { return null; } };
   },
   body: { appendChild() {}, removeChild() {} },
