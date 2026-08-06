@@ -6,6 +6,7 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
+    "build:frontend": "node scripts/build-frontend.js",
     "build": "tauri build",
     "build:windows": "tauri build --target x86_64-pc-windows-msvc",
     "build:linux": "tauri build --target x86_64-unknown-linux-gnu",
@@ -31,6 +32,7 @@
     "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.0.0",
     "canvas": "^3.2.3",
+    "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "jsdom": "^29.1.1",

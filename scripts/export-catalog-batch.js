@@ -156,7 +156,7 @@ try {
   nodeCanvasFactory = {
     create: (w, h) => nc.createCanvas(Math.max(1, w), Math.max(1, h)),
   };
-} catch (e) { nodeCanvasFactory = null; }
+} catch { nodeCanvasFactory = null; }
 global.localStorage = {
   values: new Map(),
   getItem(k) { return this.values.has(k) ? this.values.get(k) : null; },
@@ -192,7 +192,9 @@ global.TransformersAI = null;
 global.toast = () => {};
 global.SkuAllocator = null; // will be set after require
 
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+// Side-effect: el build legacy de pdf.js expone global.pdfjsLib (UMD) —
+// el parser browser-global lo resuelve como variable libre en Node.
+require('pdfjs-dist/legacy/build/pdf.js');
 require('../src/js/textSanitizer.js');
 require('../src/js/skuAllocator.js');
 const CatalogValidator = require('../src/js/catalogValidator.js');

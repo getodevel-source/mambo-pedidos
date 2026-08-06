@@ -24,7 +24,7 @@ const PdfParser = {
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         if (typeof onProgress === 'function') {
-          try { onProgress(pageNum, pdf.numPages); } catch (e) {}
+          try { onProgress(pageNum, pdf.numPages); } catch {}
         }
         try {
         const page = await pdf.getPage(pageNum);
@@ -90,7 +90,7 @@ const PdfParser = {
       return { brand, products: finalProducts };
     } finally {
       if (pdf && typeof pdf.destroy === 'function') {
-        try { await pdf.destroy(); } catch (e) {}
+        try { await pdf.destroy(); } catch {}
       }
     }
   },
@@ -192,7 +192,7 @@ const PdfParser = {
           if (typeof renderCtx.drawImage === 'function') {
             renderCtx.drawImage = function (...args) {
               let t = null;
-              try { t = renderCtx.getTransform(); } catch (e) {}
+              try { t = renderCtx.getTransform(); } catch {}
               if (t && args.length >= 9) {
                 const dx = args[5], dy = args[6], dw = args[7], dh = args[8];
                 const px = (t.a * dx + t.c * dy + t.e) / renderScale;
@@ -277,7 +277,7 @@ const PdfParser = {
                 finalDataUrl = cropCanvas.toDataURL('image/png');
                 colorCtx = ctx;
               }
-            } catch (e) {
+            } catch {
               finalDataUrl = '';
             }
 
@@ -323,12 +323,12 @@ const PdfParser = {
                       page.objs.get(io.name, (obj) => {
                         if (!settled) { settled = true; clearTimeout(timer); resolve(obj); }
                       });
-                    } catch (e) {
+                    } catch {
                       if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
                     }
                   });
                 }
-              } catch (e) {
+              } catch {
                 continue;
               }
               nativeCache.set(io.name, imgObj);
@@ -360,7 +360,7 @@ const PdfParser = {
                     ctx.drawImage(imgObj.bitmap, 0, 0, outW, outH);
                     finalDataUrl = canvas.toDataURL('image/jpeg', 0.85);
                     colorCtx = ctx;
-                  } catch (e) { finalDataUrl = ''; }
+                  } catch { finalDataUrl = ''; }
                 }
               } else if (imgObj.data) {
                 const totalPixels = imgObj.width * imgObj.height;
@@ -400,7 +400,7 @@ const PdfParser = {
                     const imgData = ctx.createImageData(outW, outH);
                     imgData.data.set(scaled);
                     ctx.putImageData(imgData, 0, 0);
-                    try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
+                    try { finalDataUrl = canvas.toDataURL('image/png'); } catch { finalDataUrl = ''; }
                     colorCtx = ctx;
                   }
                 }
@@ -463,7 +463,7 @@ const PdfParser = {
                   ctx.drawImage(imgObj.bitmap, 0, 0, outW, outH);
                   finalDataUrl = canvas.toDataURL('image/jpeg', 0.85);
                   colorCtx = ctx;
-                } catch (e) { finalDataUrl = ''; }
+                } catch { finalDataUrl = ''; }
               }
             } else if (imgObj.data) {
               const totalPixels = imgObj.width * imgObj.height;
@@ -503,7 +503,7 @@ const PdfParser = {
                   const imgData = ctx.createImageData(outW, outH);
                   imgData.data.set(scaled);
                   ctx.putImageData(imgData, 0, 0);
-                  try { finalDataUrl = canvas.toDataURL('image/png'); } catch (e) { finalDataUrl = ''; }
+                  try { finalDataUrl = canvas.toDataURL('image/png'); } catch { finalDataUrl = ''; }
                   colorCtx = ctx;
                 }
               }
@@ -648,7 +648,7 @@ const PdfParser = {
       }
 
       return { ...best, confidence: Math.round((best.count / totalVisible) * 100) };
-    } catch (e) {
+    } catch {
       return { name: 'UNKNOWN', r: 128, g: 128, b: 128, confidence: 0 };
     }
   },
@@ -972,7 +972,7 @@ const PdfParser = {
       const inlinePart = anchor.rawLine
         .replace(/[¥￥]\s*[\d,]+\.?\d*/g, '')
         .replace(/(?<![¥￥])\$\s*[\d,]+\.?\d*/g, '')
-        .replace(/[\-\s]+$/g, '')
+        .replace(/[-\s]+$/g, '')
         .trim();
 
       let rawModelo = '';
@@ -1028,7 +1028,7 @@ if (!rawModelo) continue;
       const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts);
       // Skip phantom rows: raw content is only a price/header token with no variant
       // (the RMB price column parsed as a row, or a "PRICE PRICE" header) — not a product.
-      if (!(rawVariante || '').trim() && (/^\$?\d+([\.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
+      if (!(rawVariante || '').trim() && (/^\$?\d+([.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
         continue;
       }
 
@@ -1206,8 +1206,6 @@ pageProducts.push({
 
     // Model inheritance: track last valid model name for color-only rows
     let lastInheritedModel = '';
-    let lastInheritedBrand = '';
-    let lastInheritedCat = '';
     let lastInheritedPrice = 0;
 
     // Determinar la X de la columna de precios USD (promedio de anclas)
@@ -1319,7 +1317,7 @@ pageProducts.push({
             // SLICE 1: si hay cabecera por encima, clasificar por banda de columna.
             // (Layout Model|Color|Axis|Image|CNY|USD: el switch NO contamina el modelo.)
             const header = this.findHeaderAbove(tableHeaders, anchor.y);
-            let headerRole = null;
+            let headerRole;
 
         // Código parcial (ej: "RZ01" "-" "03850100" "-" "R3C1" como items separados).
         // Con cabecera, la banda modelo ES el código — el filtro solo aplica sin cabecera.
@@ -1411,7 +1409,7 @@ pageProducts.push({
 
       // Construir modelo y variante
       let rawModelo = nameParts.join(' ').replace(/\s+/g, ' ').trim();
-      let rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
+      const rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
 
       // SLICE 2: celdas fusionadas. Una fila sin texto de modelo es
       // continuación de un producto cuya celda de modelo está fusionada
@@ -1446,7 +1444,7 @@ if (!rawModelo) continue;
           const sanitized = this.sanitizeProductNames(rawModelo, rawVariante, detectedBrand, existingProducts, hasSpecsColumn);
       // Skip phantom rows: raw content is only a price/header token with no variant
       // (the RMB price column parsed as a row, or a "PRICE PRICE" header) — not a product.
-      if (!(rawVariante || '').trim() && (/^\$?\d+([\.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
+      if (!(rawVariante || '').trim() && (/^\$?\d+([.,]\d+)?$/.test((rawModelo || '').trim()) || /^(price|modelo|model|color|picture|image|spec|remark|moq|fob|cny|rmb|usd|eur|\s)+$/i.test((rawModelo || '').trim()))) {
         continue;
       }
 
@@ -1511,7 +1509,7 @@ if (!rawModelo) continue;
           };
           // Fallback relajado: mismo criterio que la sección 1 — si el shape gate
           // rechazó todas las fotos, aceptar la mejor con penalty.
-          let bestImg = pickBest(false) || pickBest(true);if (bestImg) {
+          const bestImg = pickBest(false) || pickBest(true);if (bestImg) {
             matchedImg = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
           }
         }
@@ -1578,8 +1576,6 @@ if (!rawModelo) continue;
       // Un modelo de swap (color/switch) NO debe contaminar la herencia.
       if (!modelFromSwap && sanitized.modelo && sanitized.modelo.length > 2 && !/^(item|producto)$/i.test(sanitized.modelo)) {
         lastInheritedModel = sanitized.modelo;
-        lastInheritedBrand = detectedBrand;
-        lastInheritedCat = cat;
         lastInheritedPrice = anchor.price;
       }
     }
@@ -1722,7 +1718,7 @@ if (!rawModelo) continue;
     modelo = modelo
       .replace(/\b(model|color|price|rmb|usd|picture|image|spec|remark|moq|fob)\b/gi, '')
       .replace(/\s+/g, ' ')
-      .replace(/^[\-\s,:]+|[\-\s,:]+$/g, '')
+      .replace(/^[-\s,:]+|[-\s,:]+$/g, '')
       .trim();
 
     // 1b. Remover códigos de barras EAN/UPC (13 dígitos) y números de serie largos
@@ -1754,7 +1750,7 @@ if (!rawModelo) continue;
       .replace(/\b\d+\.\d+mm\b/gi, '')  // specs técnicas
       .replace(/\b\d+\.\d+mn\b/gi, '')  // typo de mm
       .replace(/\s+/g, ' ')
-      .replace(/^[\-\s,:\.]+|[\-\s,:\.]+$/g, '')
+      .replace(/^[-\s,:.]+|[-\s,:.]+$/g, '')
       .trim();
 
     // Deduplicar palabras en modelo (ej: "AK820 Red AK820 Wired" → "AK820 Red Wired")
@@ -1784,8 +1780,8 @@ if (!rawModelo) continue;
     }
 
     // 2. Si el modelo resultante es puramente numérico/decimal (ej: "235.75" o "$120"), no dejar el precio como modelo
-    if (/^\$?\d+([\.,]\d+)?$/.test(modelo) || /^\d+$/.test(modelo)) {
-      if (variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
+    if (/^\$?\d+([.,]\d+)?$/.test(modelo) || /^\d+$/.test(modelo)) {
+      if (variante && !/^\$?\d+([.,]\d+)?$/.test(variante)) {
         modelo = variante;
         variante = '';
       } else {
@@ -1801,8 +1797,8 @@ if (!rawModelo) continue;
       .replace(/\b\d+\.\d+mm\b/gi, '')  // "0.50mm"
       .replace(/\b\d+g\b/gi, '')         // "5g" (force grams)
       .replace(/\b(pom|pc|pa|upe|pa12|fr4|ixpe|pet)\b/gi, '') // material codes
-      .replace(/[\-\s]+$/g, '')
-      .replace(/^[\-\s]+/g, '')
+      .replace(/[-\s]+$/g, '')
+      .replace(/^[-\s]+/g, '')
       .replace(/\bmode\b/i, '3-Mode')
       .replace(/\s+/g, ' ')
       .trim();
@@ -1816,7 +1812,7 @@ if (!rawModelo) continue;
     }
     variante = uniqueVarWords.join(' ');
 
-    const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
+    const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-.]*$/i;
     if (modelo.length <= 18 && COLOR_WORDS.test(modelo.trim())) {
       const familyBase = existingProducts
         .filter(p => p.marca === brand)
@@ -1841,13 +1837,13 @@ if (!rawModelo) continue;
     // Segunda pasada: remover brand del modelo (puede haber quedado oculto bajo ruido limpiado)
     if (brand && brand !== 'OTRO') {
       const reBrand2 = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
-      modelo = modelo.replace(reBrand2, '').replace(/\s+/g, ' ').replace(/^[\-\s,:\.]+|[\-\s,:\.]+$/g, '').trim();
+      modelo = modelo.replace(reBrand2, '').replace(/\s+/g, ' ').replace(/^[-\s,:.]+|[-\s,:.]+$/g, '').trim();
     }
 
     // If modelo cleaned to empty but variante holds a real (non-numeric) model, promote it.
     // Fixes catalogs where the model code lands in variante and modelo is header noise
     // (e.g. raw "Price List DQ6" -> modelo="" variante="DQ6" -> modelo="DQ6").
-    if (!modelo && variante && !/^\$?\d+([\.,]\d+)?$/.test(variante)) {
+    if (!modelo && variante && !/^\$?\d+([.,]\d+)?$/.test(variante)) {
       modelo = variante;
       variante = '';
     }
@@ -1908,7 +1904,6 @@ if (!rawModelo) continue;
     for (let i = 0; i < allProducts.length; i++) {
       const p = allProducts[i];
       const detectedBrand = p.marca !== 'OTRO' ? p.marca : (brandFallback || 'OTRO');
-      const cat = p.cat;
 
       // Limpieza universal de tipo/estado al final del modelo (WS1): los paths
       // que NO pasan por sanitizeProductNames (fallback de texto plano del AI
@@ -2064,15 +2059,15 @@ if (!rawModelo) continue;
       // Limpiar guiones o restos en variante (ej: "Orange -" -> "Orange", "mode" -> "3-Mode")
       if (finalVariant) {
         finalVariant = finalVariant
-          .replace(/[\-\s]+$/g, '')
-          .replace(/^[\-\s]+/g, '')
+          .replace(/[-\s]+$/g, '')
+          .replace(/^[-\s]+/g, '')
           .replace(/\bmode\b/i, '3-Mode')
           .trim();
       }
 
       // Si el modelo resultante es muy corto (solo color/variante), heredar nombre base de la familia
-      const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-\.]*$/i;
-      if (finalModel.trim().length <= 18 && (COLOR_WORDS.test(finalModel.trim()) || /^[a-z\s\-]+[\-\s]*$/i.test(finalModel.trim()))) {
+      const COLOR_WORDS = /^(pink|green|purple|orange|coffee|white|black|grey|gray|blue|dark blue|red|cyan|teal|brown|mint|navy|lavender|coral|yellow|cream|silver|gold|wukong|transparent|clear|matte|glossy)[\s\-.]*$/i;
+      if (finalModel.trim().length <= 18 && (COLOR_WORDS.test(finalModel.trim()) || /^[a-z\s-]+[-\s]*$/i.test(finalModel.trim()))) {
         const familyBase = products
           .filter(p => p.marca === detectedBrand && p.cat === cat)
           .slice(-3)
@@ -2154,7 +2149,7 @@ if (!rawModelo) continue;
     const seenWords = new Set();
     for (const w of words) {
       const lower = w.toLowerCase();
-      if (!seenWords.has(lower) || w.length <= 2 || /^[\d\.\,\$\/\-]+$/.test(w)) {
+      if (!seenWords.has(lower) || w.length <= 2 || /^[\d.,$/-]+$/.test(w)) {
         if (w.length > 2) seenWords.add(lower);
         uniqueWords.push(w);
       }
@@ -2167,7 +2162,7 @@ if (!rawModelo) continue;
 
     const parts = text.split(/\s+-\s+|\s*\(\s*/);
     const modelo = parts[0] ? parts[0].trim().substring(0, 60) : text.substring(0, 60);
-    const variante = parts.slice(1).join(' ').replace(/[\}\]\)]/g, '').trim().substring(0, 60);
+    const variante = parts.slice(1).join(' ').replace(/[}\])]/g, '').trim().substring(0, 60);
 
     return { modelo, variante };
   },
@@ -2184,7 +2179,7 @@ if (!rawModelo) continue;
   modelEvidenceGap(item) {
     const cellText = (item.cellRawText || item.rawText || '').trim();
     if (!cellText || !item.modelo) return { gap: false, cellCodes: [], cellText };
-    const firstWordMatch = item.modelo.match(/[A-Za-z0-9][A-Za-z0-9.\-]*/);
+    const firstWordMatch = item.modelo.match(/[A-Za-z0-9][A-Za-z0-9.-]*/);
     const firstWord = firstWordMatch ? firstWordMatch[0] : '';
     const cellFlat = cellText.replace(/\s+/g, '').toLowerCase();
     const firstFlat = firstWord.replace(/[\s-]/g, '').toLowerCase();
@@ -2283,7 +2278,7 @@ if (!rawModelo) continue;
       if (!t || t.length < 2) return true;
       if (/^[\u4e00-\u9fff\s]+$/.test(t)) return true;
       if (/zhengzhou|damulin/i.test(t)) return true;
-      if (/^[\d\s\.,\-]+$/.test(t)) return true;
+      if (/^[\d\s.,-]+$/.test(t)) return true;
       if (/^(model|product|picture|image|switch|color|colour|axis|wired|wireless|cny|rmb|usd|price|remark|note|cnyhot)$/i.test(t)) return true;
       if (/^[¥￥]\s*[\d,]/.test(t)) return true;
       if (/^\d{13}$/.test(t)) return true;
@@ -2303,7 +2298,7 @@ if (!rawModelo) continue;
     let variante = '';
 
     const cleanInline = (inlineParts.length > 1 && !isNoise(inlineParts))
-      ? inlineParts.replace(/[\-\s]+$/g, '').trim()
+      ? inlineParts.replace(/[-\s]+$/g, '').trim()
       : '';
 
     if (prevLines.length > 0) {
@@ -2339,7 +2334,7 @@ if (!rawModelo) continue;
         try {
           const re = new RegExp(b.pattern, 'i');
           if (re.test(t)) return b.name;
-        } catch (e) {}
+        } catch {}
       }
     }
 
@@ -2378,7 +2373,7 @@ if (!rawModelo) continue;
         try {
           const re = new RegExp(b.pattern, 'i');
           if (re.test(t)) return b.name;
-        } catch (e) {}
+        } catch {}
       }
     }
 
@@ -2791,11 +2786,11 @@ if (!rawModelo) continue;
       // producto su mejor foto. Solo se aplica un cambio si el nuevo par es
       // ESTRICTAMENTE mejor que el actual (los productos bien asignados no se
       // tocan; los que tienen su foto fuera de las gates la conservan).
-      // NOTA ORQUESTADOR (2026-08-05): DESACTIVADO por defecto — mide un
-      // colgado (1 catálogo >600s vs 13 catálogos en ~500s sin él). Activar
-      // con HUNGARIAN_P4=1 SOLO tras arreglar el rendimiento (loop infinito
-      // o costo explosivo en hungarianAssign).
-      if (process.env.HUNGARIAN_P4 === '1') {
+      // NOTA ORQUESTADOR (2026-08-06 IT11): ACTIVADO por defecto — el guard
+      // anti-loop (CIERRE 05/08) eliminó el colgado (8BitDo: >600s → 1.4s
+      // verificado IT6). Desactivar con HUNGARIAN_P4=0 si algún catálogo
+      // regresiona (medición de corpus es la evidencia, no la opinión).
+      if (process.env.HUNGARIAN_P4 !== '0') {
       {
         const urlCount = {};
         for (const pp of pageProds) {

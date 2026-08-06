@@ -90,6 +90,14 @@ global.Tests = require(jsPath('tests.js'));
     console.error('❌ app.js smoke tests FAILED: ' + (appErr.message || appErr));
     process.exitCode = 1;
   }
+  // Suite de build frontend (P17) — dist/ espeja src/ minificado y más chico
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'build-frontend.js')], { stdio: 'inherit' });
+  } catch (buildErr) {
+    console.error('❌ Build frontend FAILED: ' + (buildErr.message || buildErr));
+    process.exitCode = 1;
+  }
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

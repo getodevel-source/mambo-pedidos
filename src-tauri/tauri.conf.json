@@ -4,10 +4,10 @@
   "version": "1.9.2",
   "identifier": "com.mambo.pedidos",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "npm run build:frontend",
+    "beforeBuildCommand": "npm run build:frontend",
     "devUrl": null,
-    "frontendDist": "../src"
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,

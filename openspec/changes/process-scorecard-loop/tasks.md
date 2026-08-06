@@ -370,6 +370,48 @@ trabajo, fail-closed: quedan YELLOW, no se relaja nada. Los 174 warnings ELIMINA
 son el mismo patrón inverso (imagen mejorada que ahora SÍ coincide).
 
 ### Pendiente
-- [ ] Export completo 13 catálogos (corriendo) + audit quality-pipeline.
-- [ ] Re-puntuar P19 en proposal.md con evidencia del export real.
-- [ ] Decisión usuario: bundler/minify (P17) — preguntar.
+- [x] Export completo 13 catálogos + audit quality-pipeline (IT10: PASS G=2247 Y=67 R=0).
+- [x] Re-puntuar P19 en proposal.md con evidencia del export real (IT10 + IT11 re-medido 9.9s → CERRADO en 10).
+- [x] Decisión usuario: bundler/minify (P17) — aprobó plan IT10 (esbuild mínimo, sin romper script tags).
+
+## Iteración 11 (06/08 tarde — P17 build, P4 imágenes, P1 extracción)
+
+Objetivo: cerrar los últimos procesos en 8 (P1, P4) y P17 (8→9 con minify).
+
+- [x] **WS-P17 CERRADO (evidencia ~14:0x)**: `scripts/build-frontend.js` — esbuild
+      minifica `src/js/**` → `dist/` (espejo exacto, script tags INTACTOS, index.html
+      copiado tal cual). `tauri.conf.json`: beforeDevCommand/beforeBuildCommand =
+      `npm run build:frontend`, frontendDist `../src` → `../dist` (cubre CI release
+      vía tauri-action sin tocar release.yml). Dev no cambia (sigue andando).
+      **463.784 → 243.136 bytes (−48%)** en app JS (vendor lazy ya está fuera del
+      arranque desde IT6). Self-check pineado: exit 1 si algún JS falta o no minificó
+      → integrado al runner oficial (npm test = 950+suite build).
+- [x] **WS-P4 CERRADO (evidencia ~14:2x)**: pase 4 húngaro por DEFECTO (opt-out
+      HUNGARIAN_P4=0). Audit completo fresco: **PASS G=2250 Y=64 R=0** vs baseline
+      IT10 2247/67 → **+3 GREEN / −3 YELLOW**, 0 RED, 0 cross-cat, 0 dup, sin
+      colgado. Fail-closed verificado: las reasignaciones del húngaro pasan gates.
+- [x] **WS-P1 CERRADO (evidencia ~14:1x)**: gates FASE 2 frescos post-commit:
+      measure-model-quality FP_rate_clean 8% (2/25) SIN cambio; measure-extraction
+      44/65 mejoras, 0 OK/MENOR→CRITICO (gate FASE 2: 37/65). → P1 8 → 9.
+- [x] **WS-P14 PARCIAL (evidencia ~14:3x)**: scripts/ 0 warnings (fix catch + require
+      side-effect documentado — el require de pdfjs legacy expone global.pdfjsLib,
+      es load-bearing). pdfParser: 52 warnings quedan (35 no-useless-escape + 16
+      no-unused-vars + 1 no-useless-assignment) — eslint 10 no los auto-fija
+      (0 bytes con fix:true); limpieza MANUAL diferida a IT12 (riesgo/beneficio).
+- [x] Verificación central IT11: npm test 950/950 + suite build PASS · lint 0 errores
+      (52 warnings pdfParser heredados + 0 en scripts) · audit fail-closed PASS
+      G=2250 Y=64 R=0 · corpus 8BitDo idéntico post-edits · **re-puntuado:
+      P1/P4/P17 8→9; 13 procesos a 10; promedio 8.9 → 9.7; 18/18 ≥9**.
+
+## Iteración 12 (06/08 — P14 lint, cierre 9→10)
+
+- [x] **WS-P14 CERRADO (evidencia ~15:0x)**: 56 warnings → **0/0 repo-wide**.
+      pdfParser: 35 no-useless-escape (script con assert por posición, eslint 9/10
+      no los autofija) + 13 `catch (e)` → `catch {}` + dead code FASE 2
+      (lastInheritedBrand/lastInheritedCat) + `cat` muerto + `headerRole = null`
+      inicial. scripts/: catch + require side-effect documentado. Verificación:
+      **audit PASS G=2250 Y=64 R=0 idéntico pre/post, corpus 2314 IDÉNTICO con
+      imágenes (0 solo-A/B), gates FP 8% + 44/65 sin cambio, 950/950 + build
+      suite PASS, node --check OK** → P14 9 → 10.
+- [ ] 2ª iteración sin regresión: P1/P4/P17/P13 → 10 (re-medir audit + gates).
+- [ ] Cierre del loop: 18/18 en 10 con evidencia.
