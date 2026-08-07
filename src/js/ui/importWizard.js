@@ -17,6 +17,7 @@ const ImportWizard = {
   step: 0,
   state: {
     fleteModo: 'peso', pesoKg: 15, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+    transporte: 'maritimo', regimen: 'importador',
     depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
     recuperaCredito: true,
     iibbJurisdiccion: 'cab', iibbPctCustom: 0.025,
@@ -121,11 +122,24 @@ const ImportWizard = {
     const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
     const count = items.length;
     const ok = count > 0;
+    const rows = items.map(it => `<tr>
+      <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.marca || '')}</td>
+      <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.modelo || it.sku)}</td>
+      <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.variante || '')}</td>
+      <td style="padding:5px 8px;font-size:12px;text-align:right;">${it.qty}</td>
+      <td style="padding:5px 8px;font-size:12px;text-align:right;">$${Math.round((it.fob||0)*100)/100}</td>
+    </tr>`).join('');
     return `<div class="card" style="padding:18px;">
-      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 2 — ¿Ya armaste tu pedido?</div>
-      <div style="font-size:16px;font-weight:700;">${ok ? '✅ Sí' : '⚠️ No'} — ${ok ? count + ' productos en el pedido' : 'todavía no'}</div>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">${ok ? 'Bien. El siguiente paso calcula el flete y seguro sobre este pedido.' : 'Seleccioná productos en el catálogo y tocá "Armar pedido". Podés cerrar el asistente para armarlo y volver.'}</p>
-      ${ok ? '' : '<button class="btn btn-secondary btn-sm" onclick="ImportWizard.close(); switchView(\'catalogo\')">Ir a armar pedido</button>'}
+      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 2 — Tu pedido (${count} productos)</div>
+      ${ok
+        ? `<div class="table-scroll"><table><thead><tr><th>Marca</th><th>Modelo</th><th>Variante</th><th>Qty</th><th>FOB</th></tr></thead><tbody>${rows}</tbody></table></div>
+           <div style="display:flex;gap:10px;margin-top:12px;">
+             <button class="btn btn-secondary btn-sm" onclick="ImportWizard.close(); switchView('catalogo')">Ajustar pedido</button>
+             <button class="btn btn-primary btn-sm" onclick="ImportWizard.next()">Siguiente →</button>
+           </div>`
+        : `<div style="font-size:15px;font-weight:700;">⚠️ Todavía no armaste tu pedido</div>
+           <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Seleccioná productos en el catálogo y tocá "Armar pedido". Este asistente te acompaña desde el catálogo hasta el depósito.</p>
+           <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="ImportWizard.close(); switchView('catalogo')">Ir a armar pedido</button>`}
     </div>`;
   },
 
@@ -133,8 +147,21 @@ const ImportWizard = {
   _render_flete() {
     const s = ImportWizard.state;
     return `<div class="card" style="padding:18px;">
-      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 3 — Transporte y seguro (define tu valor CIF)</div>
+      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 3 — Régimen, transporte y seguro (define tu valor CIF)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="wz-lbl">Régimen de importación</label>
+          <select class="select" onchange="ImportWizard.state.regimen=this.value;if(this.value==='courier'){ImportWizard.state.transporte='courier';ImportWizard.state.fleteModo='peso';}ImportWizard.render()">
+            <option value="importador" ${s.regimen==='importador'?'selected':''}>Importador (despacho general)</option>
+            <option value="courier" ${s.regimen==='courier'?'selected':''}>Courier (≤ USD 3.000 / 50kg)</option>
+          </select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.regimen==='courier' ? 'Simplificado: USD 400 exento + 50% arancel + IVA, sin anticipos.' : 'Matriz NCM completa: DI + TE + IVA + anticipos (auditado 2026).'}</div></div>
+        <div><label class="wz-lbl">Transporte</label>
+          <select class="select" onchange="ImportWizard.state.transporte=this.value;ImportWizard.render()">
+            <option value="maritimo" ${s.transporte==='maritimo'?'selected':''}>Marítimo (LCL/FCL)</option>
+            <option value="aereo" ${s.transporte==='aereo'?'selected':''}>Aéreo</option>
+            ${s.regimen==='courier' ? '<option value="courier" selected>Courier (DHL/FedEx)</option>' : ''}
+          </select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.transporte==='maritimo'?'USD 80-150/CBM · aéreo USD 4-8/kg · courier USD 30-80/kg':s.transporte==='aereo'?'USD 4-8/kg (rápido, caro)':'Servicio puerta a puerta'}</div></div>
         <div><label class="wz-lbl">Modo de flete</label>
           <select id="iwFleteModo" class="select" onchange="ImportWizard.state.fleteModo=this.value;ImportWizard.render()">
             <option value="peso" ${s.fleteModo==='peso'?'selected':''}>Por peso (USD/kg)</option>
@@ -148,7 +175,7 @@ const ImportWizard = {
           : `<div><label class="wz-lbl">Flete (% del FOB)</label><input type="number" step="0.01" class="input" value="${s.fletePct*100}" onchange="ImportWizard.state.fletePct=Number(this.value)/100" oninput="ImportWizard.state.fletePct=Number(this.value)/100"></div>
              <div></div>`}
       </div>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:12px;">El flete marítimo LCL ronda USD 80-150/CBM; aéreo USD 4-8/kg; courier USD 30-80/kg. El seguro suele ser 1-2% del FOB.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:12px;">El seguro suele ser 1-2% del FOB. Si no declarás, Aduana aplica un porcentaje presunto.</p>
     </div>`;
   },
 
@@ -217,6 +244,7 @@ const ImportWizard = {
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
     const res = Calculator.calculateDoorToDoorExactCost(items, {
       tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      regimen: s.regimen,
       iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
       simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
@@ -269,6 +297,7 @@ const ImportWizard = {
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
     const res = Calculator.calculateDoorToDoorExactCost(items, {
       tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      regimen: s.regimen,
       iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
       simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
@@ -305,6 +334,36 @@ const ImportWizard = {
     ImportWizard._save();
     ImportWizard.close();
     if (typeof toast === 'function') toast('Importación calculada. Guardá el proyecto en Historial.', 'success');
+  },
+
+  // ---- Guía Fiscal FAQ (IT21) ----
+  FAQ_ITEMS: [
+    { q: '¿Qué impuestos pago al importar periféricos?', a: 'Los periféricos (teclados, mouse, auriculares, controllers) pagan: Derechos de Importación (12-20% según NCM), Tasa de Estadística (3% CIF), IVA (21%), IVA adicional (20% — pago a cuenta), Percepción Ganancias (6% inscripto) e IIBB (2.5% según jurisdicción). El Impuesto PAIS fue ELIMINADO.' },
+    { q: '¿Cuál es la base imponible?', a: 'Todos los tributos se calculan sobre la base = CIF + Derechos + Tasa de Estadística. CIF = FOB + Flete + Seguro.' },
+    { q: '¿Qué es el crédito fiscal y por qué importa?', a: 'El IVA (21%), el IVA adicional (20%), Ganancias (6%) e IIBB (2.5%) son pagos a cuenta RECUPERABLES si revendés como responsable inscripto. Tu costo REAL neto descuenta eso; solo DI + TE son costo definitivo. Por eso el precio de venta se calcula sobre el costo neto real, no sobre la caja.' },
+    { q: '¿Régimen courier o importador?', a: 'Courier: ≤ USD 3.000 y 50kg. Primeros USD 400 exentos, arancel simplificado 50% sobre el excedente, IVA 21%, sin anticipos (Ganancias/IIBB/IVA adicional). Importador (despacho general): matriz NCM completa. Para revender en volumen conviene importador; courier solo para muestras o compras puntuales.' },
+    { q: '¿La suspensión de IVA adicional y Ganancias (RG 5807) me aplica?', a: 'NO. La RG 5807 (vigente hasta 30/06/2026) suspende esas percepciones SOLO para canasta básica, medicamentos e insumos MiPyME con Certificado MiPyME. Los periféricos no están alcanzados: se pagan.' },
+    { q: '¿Hay antidumping en periféricos de China?', a: 'Actualmente NO hay derechos antidumping vigentes sobre teclados, mouse, auriculares ni controllers de China (CNCE medidas vigentes). Pero hay "valores criterio": AFIP puede ajustar valores subdeclarados si el FOB va muy bajo.' },
+    { q: '¿Qué gastos portuarios/operativos sumo?', a: 'Despachante de aduana (USD 300-800), depósito fiscal/TCA (USD 150-300), digitalización SIM, flete interno a depósito, THC portuario (USD 150-300) y certificaciones (ENACOM USD 350 para inalámbricos, S-Mark para monitores).' },
+    { q: '¿Los NCM de mi catálogo son correctos?', a: 'La app autoclasifica por categoría: teclado 8471.60.52, mouse 8471.60.53, auriculares 8518.30.00, controllers 9504.50.00 (AEC 20%), mousepad 3926.90.90. Podés ajustar el derecho por categoría en el Paso 4 del asistente.' }
+  ],
+
+  showFaq() {
+    const body = document.getElementById('faqBody');
+    const modal = document.getElementById('faqModal');
+    if (body) {
+      body.innerHTML = ImportWizard.FAQ_ITEMS.map(f => `
+        <details style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;background:rgba(255,255,255,0.02);">
+          <summary style="font-size:13px;font-weight:700;color:var(--text);cursor:pointer;">${ImportWizard._esc(f.q)}</summary>
+          <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;line-height:1.5;">${ImportWizard._esc(f.a)}</p>
+        </details>`).join('');
+    }
+    if (modal) modal.style.display = 'flex';
+  },
+
+  closeFaq() {
+    const modal = document.getElementById('faqModal');
+    if (modal) modal.style.display = 'none';
   }
 };
 

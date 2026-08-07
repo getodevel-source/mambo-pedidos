@@ -158,6 +158,17 @@ function testCalculator() {
   );
   assert(Math.abs(d2dPct.summary.cifTotalUsd - (100 + 20 + 2)) < 1e-9, 'IT20: CIF = FOB + flete 20% + seguro 2% cuando fleteModo=pct');
 
+  // IT21: régimen courier — USD 400 exento, 50% sobre excedente, IVA, sin anticipos
+  const courierCalc = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'C-1', fob: 1000, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],
+    { tipoCambio: 1000, pesoKg: 0, fletePct: 0.10, seguroPct: 0.01, regimen: 'courier', depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  // CIF = 1000 + 100 + 10 = 1110; excedente = 1110-400 = 710; arancel 50%=355; IVA 1110*0.21=233.1
+  assert(Math.abs(courierCalc.summary.cifTotalUsd - 1110) < 1e-9, 'IT21: courier CIF = 1110');
+  assert(Math.abs(courierCalc.summary.totalIvaAduanaUsd - 233.1) < 1e-9, 'IT21: courier IVA 21% sobre CIF');
+  assert(courierCalc.summary.totalAnticiposRecuperablesUsd === 0, 'IT21: courier NO tiene anticipos (Ganancias/IIBB/IVA adic)');
+  assert(courierCalc.regimen === 'courier', 'IT21: resultado etiquetado como régimen courier');
+
   // Puerta a puerta: certificaciones inalámbricas suman costo (ENACOM 350 + LITIO 75)
   const d2dW = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'D2D-W', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'M185', variante: 'Wireless' }],

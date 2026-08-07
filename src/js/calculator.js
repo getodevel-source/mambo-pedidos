@@ -232,6 +232,43 @@ const Calculator = {
     const seguroTotal = totalFob * seguroPct;
     const cifTotal = totalFob + fleteTotal + seguroTotal;
 
+    // IT21: régimen de importación. courier = ≤USD 3.000/50kg, arancel simplificado
+    // 50% sobre excedente de USD 400, IVA total, SIN anticipos (Ganancias/IIBB/IVA adic).
+    // importador = despacho general (matriz NCM completa).
+    const regimen = doorConfig.regimen || (doorConfig.logisticaModo === 'courier' ? 'courier' : 'importador');
+    if (regimen === 'courier') {
+      const excedente = Math.max(0, cifTotal - 400);
+      const arancelSimplificado = excedente * 0.50;
+      const ivaCourier = cifTotal * 0.21;
+      const totalGastos = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd;
+      const tributos = arancelSimplificado + ivaCourier;
+      const caja = cifTotal + tributos + totalGastos;
+      const itemsOut = items.map(it => {
+        const q = Math.max(0, Number(it.qty) || 0);
+        const frac = totalFob > 0 ? ((it.fob || 0) * q) / totalFob : (totalQty > 0 ? q / totalQty : 0);
+        const itCif = cifTotal * frac;
+        const itEx = Math.max(0, itCif - 400 * frac);
+        return Object.assign({}, it, {
+          itemCif: itCif, derechosUsd: itEx * 0.50, tasaUsd: 0, ivaUsd: itCif * 0.21,
+          ivaAddUsd: 0, percGanUsd: 0, iibbUsd: 0, ncm: (Calculator.NCM_MATRIX.OTRO || {}).ncm || 'COURIER',
+          totalTributosItemUsd: itEx * 0.50 + itCif * 0.21, recuperableUsd: itCif * 0.21,
+          costoRealItemUsd: itCif + itEx * 0.50
+        });
+      });
+      return {
+        regimen: 'courier', items: itemsOut, certificationsRequired: [],
+        summary: {
+          fobTotalUsd: totalFob, fleteTotalUsd: fleteTotal, seguroTotalUsd: seguroTotal,
+          cifTotalUsd: cifTotal, totalTributosAduanaUsd: tributos, totalIvaAduanaUsd: ivaCourier,
+          ivaUsd: ivaCourier, ivaArs: ivaCourier * tc, depositoFiscalUsd, despachanteUsd,
+          simDigitalizacionUsd, fleteInternoUsd, totalCertsCostUsd: 0, totalGastosFijosDestinoUsd: totalGastos,
+          totalPuertaUsd: caja - ivaCourier, totalPuertaConIvaUsd: caja, totalPuertaConIvaArs: caja * tc,
+          totalPuertaArs: (caja - ivaCourier) * tc, totalRecuperableUsd: ivaCourier,
+          totalAnticiposRecuperablesUsd: 0, costoNetoRealUsd: caja - ivaCourier,
+          costoNetoRealArs: (caja - ivaCourier) * tc, creditoFiscalArs: ivaCourier * tc, tipoCambio: tc
+        }
+      };
+    }
     const certsSet = new Set();
     const itemCalculations = items.map(item => {
       const q = Math.max(0, Number(item.qty) || 0);
