@@ -75,12 +75,24 @@ const ImportFlow = {
       const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
 
       // RED → deseleccionados por defecto (no se importan)
-      for (const p of validation.rejected) {
-        p._selected = false;
-      }
-      for (const p of validation.accepted.concat(validation.review)) {
-        p._selected = p.importable !== false;
-      }
+            for (const p of validation.rejected) {
+              p._selected = false;
+            }
+            // IT16/F3 (infallibility): los flagueados por DATOS (YELLOW no-foto) NO se
+            // auto-seleccionan — el usuario DEBE confirmarlos a consciencia antes de
+            // importar (nada con dato dudoso entra en silencio). Los de SOLO foto
+            // (datos OK) quedan seleccionados.
+            ImportFlow.isPhotoOnlyItem = (it) =>
+              it.status === 'YELLOW' &&
+              !hasCatalogImage(it.img) &&
+              (!it.warnings || it.warnings.length === 0 || it.warnings.every(w => /imagen|foto/i.test(w)));
+            ImportFlow.isDataFlagged = (it) => it.status === 'YELLOW' && !ImportFlow.isPhotoOnlyItem(it);
+            for (const p of validation.accepted) {
+              p._selected = p.importable !== false;
+            }
+            for (const p of validation.review) {
+              p._selected = p.importable !== false && !ImportFlow.isDataFlagged(p);
+            }
 
       // RED → rechazados (no se importan, se muestran separados)
       if (validation.rejected.length > 0) {
@@ -181,26 +193,33 @@ const ImportFlow = {
       const shownReason = photoOnly ? 'Sin foto de previsualización (datos OK)' : reason;
 
       const reasonBanner = shownReason
-        ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${esc(shownReason)}</div>`
-        : '';
+              ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${esc(shownReason)}</div>`
+              : '';
 
-      return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
-        `<label class="pv-card-check"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="ImportFlow.pendingPreviewItems[${idx}]._selected=this.checked;updateConfirmCount()"></label>` +
-        `<button class="pv-card-del" onclick="removePreviewItem(${idx})" title="Quitar">✕</button>` +
-        `<div class="pv-card-media">${imgHtml}${placeholder}</div>` +
-        `<div class="pv-card-body">` +
-          `<div class="pv-card-brand">${esc(item.marca || 'OTRO')}</div>` +
-        `<input class="pv-card-model" value="${esc(item.modelo)}" data-edit-idx="${idx}" data-edit-field="modelo" onchange="updatePreviewItem(${idx}, 'modelo', this.value)" title="Modelo (clic para editar)">` +
-        `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" data-edit-idx="${idx}" data-edit-field="variante" onchange="updatePreviewItem(${idx}, 'variante', this.value)">` +
-          `<div class="pv-card-meta">` +
-            `<select class="pv-card-cat" data-edit-idx="${idx}" data-edit-field="cat" onchange="updatePreviewItem(${idx}, 'cat', this.value)">` +
-              CATS.map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
-            `</select>` +
-            `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" data-edit-idx="${idx}" data-edit-field="fob" onchange="updatePreviewItem(${idx}, 'fob', this.value)"></div>` +
-          `</div>` +
-          reasonBanner +
-        `</div>` +
-      `</article>`;
+            // F3 (infallibility): los flagueados por DATOS llevan badge explícito de
+            // revisión — el usuario entiende que NO se importan salvo que los marque.
+            const reviewBadge = (ImportFlow.isDataFlagged && ImportFlow.isDataFlagged(item))
+              ? `<div class="pv-reason pv-reason-review">requiere revisión (no se importa salvo confirmación)</div>`
+              : '';
+
+            return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
+              `<label class="pv-card-check"><input type="checkbox" ${item._selected ? 'checked' : ''} onchange="ImportFlow.pendingPreviewItems[${idx}]._selected=this.checked;updateConfirmCount()"></label>` +
+              `<button class="pv-card-del" onclick="removePreviewItem(${idx})" title="Quitar">✕</button>` +
+              `<div class="pv-card-media">${imgHtml}${placeholder}</div>` +
+              `<div class="pv-card-body">` +
+                `<div class="pv-card-brand">${esc(item.marca || 'OTRO')}</div>` +
+              `<input class="pv-card-model" value="${esc(item.modelo)}" data-edit-idx="${idx}" data-edit-field="modelo" onchange="updatePreviewItem(${idx}, 'modelo', this.value)" title="Modelo (clic para editar)">` +
+              `<input class="pv-card-variant" value="${esc(item.variante || '')}" placeholder="Variante / color" data-edit-idx="${idx}" data-edit-field="variante" onchange="updatePreviewItem(${idx}, 'variante', this.value)">` +
+                `<div class="pv-card-meta">` +
+                  `<select class="pv-card-cat" data-edit-idx="${idx}" data-edit-field="cat" onchange="updatePreviewItem(${idx}, 'cat', this.value)">` +
+                    CATS.map(c => `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`).join('') +
+                  `</select>` +
+                  `<div class="pv-card-price"><span class="pv-price-cur">$</span><input type="number" step="0.01" value="${item.fob}" data-edit-idx="${idx}" data-edit-field="fob" onchange="updatePreviewItem(${idx}, 'fob', this.value)"></div>` +
+                `</div>` +
+                reasonBanner +
+                reviewBadge +
+              `</div>` +
+            `</article>`;
     }
 
     // Renderizado lazy por chunks
