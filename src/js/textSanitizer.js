@@ -591,9 +591,23 @@ const TextSanitizer = {
     //     (testCatalogValidatorRules) trata "F75 Gasket Keyboard" como GREEN
     //     válido. El tipo-inflado va a la COLA HUMANA (P4), no al gate.
     // (b) "Rose", "Standard", "Zero", "Ultimate" — palabra genérica sin código.
-    const GENERIC_WORD_RE = /^(?:rose|zero|standard|ultimate|long|high\s+resolution|transparent|charging\s*dock|contour|turbo\+?|business|new|item|product)$/i;
+    const GENERIC_WORD_RE = /^(?:rose|zero|standard|ultimate|long|high\s+resolution|transparent|charging\s*dock|contour|contours|turbo\+?|business|new|item|product)$/i;
     if (!mHasCode && GENERIC_WORD_RE.test(m.trim())) {
       reasons.push('El modelo es una palabra genérica (no un código de producto) — requiere revisión');
+    }
+    // IT25 (parser-to-10): marketing puffery — "Ultra Crystalblade Gleam",
+    // "Master Wireless Mouse", "68HE Ultra Jade King". 2+ palabras de marketing
+    // o 1 sin código real → YELLOW. Anti-overfit: "AJ139 Pro" (1, con código) y
+    // "F75 Gasket Keyboard" (0) quedan GREEN; "M720 Wireless Mouse" (código+tipo,
+    // 0 marketing) queda en la cola humana IT17 (no se marca).
+    const MARKETING_WORDS_RE = /\b(?:ultra|master|star|crystal|crystalblade|gleam|glow|jade|king|queen|royal|snow|snowlight|ice|icy|cream|creamsicle|frost|horizon|nebula|nova|aurora|prism|mystic|tactical|esport|elite|premium|platinum|diamond|titan|hero|beast|legend|flagship|supreme|apex|dual|gift)\b/gi;
+    const mk = (m.match(MARKETING_WORDS_RE) || []).length;
+    // 2+ palabras de marketing (puffery pesada, aunque tenga código) o
+    // 1 palabra de marketing SIN ningún dígito (nombre de marketing puro).
+    // Anti-overfit: "AJ139 Pro" (1, con código), "NJ07 Ultra NACODEX" (1, con
+    // código) y "Flagship PRO 68 Keys" (1, con dígitos) quedan GREEN.
+    if (mk >= 2 || (!mHasCode && !/\d/.test(m) && mk >= 1)) {
+      reasons.push('El modelo tiene palabras de marketing sin un identificador real de producto — requiere revisión');
     }
 
     return { level: reasons.length ? 'YELLOW' : 'GREEN', reasons };

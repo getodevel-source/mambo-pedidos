@@ -265,6 +265,17 @@ const Tests = {
     g('V8', 'INF: V8 limpio → GREEN');
     // modelo descriptivo legítimo NO se flaguea (convención del app)
     g('F75 Gasket Keyboard', 'INF: F75 Gasket Keyboard (descriptivo legítimo) → GREEN');
+    // IT25 (parser-to-10): marketing puffery → YELLOW (recall 65→85%)
+    y('Ultra Crystalblade Gleam', 'INF: puffery 3 palabras → YELLOW');
+    y('Master Wireless Mouse', 'INF: Master + tipo sin código → YELLOW');
+    y('Icy Creamsicle Horizon', 'INF: puffery → YELLOW');
+    y('68HE Ultra Jade King', 'INF: puffery con código → YELLOW');
+    // anti-overfit: 1 marketing + código real → GREEN
+    g('AJ139 Pro', 'INF: AJ139 Pro (1 marketing + código) → GREEN');
+    g('NJ07 Ultra NACODEX', 'INF: NJ07 Ultra (1 marketing + código) → GREEN');
+    g('Flagship PRO 68 Keys', 'INF: Flagship PRO 68 (1 marketing + dígitos) → GREEN');
+    // code+type (IT17) sigue en la cola humana, NO se marca
+    g('M720 Wireless Mouse', 'INF: M720 (código+tipo, cola humana) → GREEN');
   },
 
   testWeightBasedFreight() {
