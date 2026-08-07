@@ -236,7 +236,7 @@ const ImportWizard = {
           <select id="iwNcmCat" class="select">${Object.keys(matrix).map(k=>`<option value="${k}">${k}</option>`).join('')}</select></div>
         <div id="iwNcmResults" style="display:none;width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow:auto;padding:6px;"></div>
       </div>
-      <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>NCM</th><th>Derecho</th><th>Tasa</th><th>IVA</th><th>IVA adic</th><th>Gan</th><th>IIBB</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>NCM</th><th>Derecho ${ImportWizard._tip('DI')}</th><th>Tasa ${ImportWizard._tip('TE')}</th><th>IVA ${ImportWizard._tip('IVA')}</th><th>IVA adic ${ImportWizard._tip('IVAD')}</th><th>Gan ${ImportWizard._tip('GAN')}</th><th>IIBB ${ImportWizard._tip('IIBB')}</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
   },
 
@@ -258,6 +258,31 @@ const ImportWizard = {
     const box = document.getElementById('iwNcmResults'); if (box) box.style.display = 'none';
     ImportWizard.render();
     if (typeof toast === 'function') toast(`NCM ${ncm} asignado a ${cat}`, 'success');
+  },
+
+  // ---- Glosario de términos técnicos (tooltip "i") ----
+  GLOSSARY: {
+    DI: '<b>Derecho de Importación</b>El arancel que pagás por el producto según su NCM. En periféricos BIT es 0%.',
+    TE: '<b>Tasa de Estadística</b>Tributo del 3% sobre el CIF (con tope por tramo). Exento (0%) para bienes BIT/BK nuevos.',
+    IVA: '<b>Impuesto al Valor Agregado</b>21%. Es RECUPERABLE si revendés como responsable inscripto (crédito fiscal).',
+    IVAD: '<b>IVA adicional</b>20% sobre la base. Pago a cuenta RECUPERABLE contra tu IVA de ventas.',
+    GAN: '<b>Percepción Ganancias</b>6% (responsable inscripto). Pago a cuenta RECUPERABLE contra tu Ganancias.',
+    IIBB: '<b>Ingresos Brutos</b>Impuesto provincial. Santa Fe 3%, CABA 2.5%, PBA 3.5%. Percepción recuperable.',
+    CIF: '<b>CIF (costo, seguro y flete)</b>La base imponible aduanera: valor del producto + seguro + flete. Sobre esto se calculan todos los tributos.',
+    FOB: '<b>FOB (valor en origen)</b>El precio del producto en el puerto de China, sin flete ni seguro.',
+    BIT: '<b>Bienes de Informática y Telecomunicaciones</b>Categoría que paga DI 0% y TE 0% (Dto. 557/23). Incluye teclados, mouse, monitores, celulares.',
+    NCM: '<b>Nomenclatura Común del Mercosur</b>Código de 8 dígitos que identifica cada producto para la aduana. Determina su arancel.',
+    ENACOM: '<b>ENACOM</b>Homologación obligatoria para dispositivos inalámbricos (bluetooth, RF). Certifica que el equipo cumple normas.',
+    LIBS: '<b>LITIO DG</b>Trámite de transporte de baterías de litio (mercadería peligrosa Clase 9) para productos con batería.',
+    COURIER: '<b>Régimen courier</b>Envíos ≤ USD 3.000 y 50kg. USD 400 exentos + arancel simplificado 50% sobre el excedente + IVA, sin anticipos.',
+    SIM: '<b>SEDI/SIM</b>Sistema de registro de la operación de importación ante la aduana (dato del embarque).',
+    CRED: '<b>Crédito fiscal</b>Los anticipos (IVA, IVA adicional, Ganancias, IIBB) te los compensan si facturás ventas. Tu costo real descuenta esto.'
+  },
+
+  _tip(term) {
+    const def = ImportWizard.GLOSSARY[term];
+    if (!def) return '';
+    return `<span class="tip" aria-label="${ImportWizard._esc(def.replace(/<[^>]*>/g, ' ').trim())}">i<span class="tip-bubble">${def}</span></span>`;
   },
 
   // ---- gastos destino ----
@@ -315,11 +340,11 @@ const ImportWizard = {
         </select>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-        <div><div class="iw-kpi-lbl">FOB</div><div class="iw-kpi">$${Math.round(fobTotal).toLocaleString()}</div></div>
-        <div><div class="iw-kpi-lbl">CIF (con flete+seguro)</div><div class="iw-kpi">$${Math.round(sum.cifTotalUsd).toLocaleString()}</div></div>
+        <div><div class="iw-kpi-lbl">FOB ${ImportWizard._tip('FOB')}</div><div class="iw-kpi">$${Math.round(fobTotal).toLocaleString()}</div></div>
+        <div><div class="iw-kpi-lbl">CIF ${ImportWizard._tip('CIF')}</div><div class="iw-kpi">$${Math.round(sum.cifTotalUsd).toLocaleString()}</div></div>
         <div><div class="iw-kpi-lbl">Caja (lo que sale)</div><div class="iw-kpi">$${Math.round(sum.totalPuertaConIvaUsd).toLocaleString()}</div></div>
-        <div><div class="iw-kpi-lbl" style="color:var(--green-hover);">Costo neto real</div><div class="iw-kpi" style="color:var(--green-hover);">$${Math.round(neto).toLocaleString()}</div></div>
-        <div><div class="iw-kpi-lbl" style="color:var(--blue);">Crédito fiscal a favor</div><div class="iw-kpi" style="color:var(--blue);">$${Math.round(sum.totalRecuperableUsd).toLocaleString()}</div></div>
+        <div><div class="iw-kpi-lbl" style="color:var(--green-hover);">Costo neto real ${ImportWizard._tip('CRED')}</div><div class="iw-kpi" style="color:var(--green-hover);">$${Math.round(neto).toLocaleString()}</div></div>
+        <div><div class="iw-kpi-lbl" style="color:var(--blue);">Crédito fiscal ${ImportWizard._tip('CRED')}</div><div class="iw-kpi" style="color:var(--blue);">$${Math.round(sum.totalRecuperableUsd).toLocaleString()}</div></div>
         <div><div class="iw-kpi-lbl">Multiplicador (caja/FOB)</div><div class="iw-kpi">${(sum.totalPuertaConIvaUsd / fobTotal).toFixed(2)}x</div></div>
       </div>
       <div class="table-scroll" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>NCM</th><th>Qty</th><th>Tributos</th><th>Costo unit+IVA</th></tr></thead><tbody>${rows}</tbody></table></div>
