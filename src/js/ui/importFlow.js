@@ -124,13 +124,24 @@ const ImportFlow = {
     const yellowCount = validation ? validation.stats.yellow : ImportFlow.pendingPreviewItems.filter(i => i.status === 'YELLOW').length;
     const redCount = validation ? validation.stats.red : ImportFlow.pendingPreviewItems.filter(i => i.status === 'RED').length;
 
+    // IT16 (UX): separar los YELLOW por razón — "sin foto" (solo previsualización,
+    // datos verificados) vs "en revisión" (modelo/grounding/duplicado). El usuario
+    // necesita saber que un YELLOW de foto NO es un error de datos.
+    const isPhotoOnly = (it) =>
+      it.status === 'YELLOW' &&
+      !hasCatalogImage(it.img) &&
+      (!it.warnings || it.warnings.length === 0 || it.warnings.every(w => /imagen|foto/i.test(w)));
+    const photoOnlyCount = ImportFlow.pendingPreviewItems.filter(isPhotoOnly).length;
+    const dataReviewCount = Math.max(0, yellowCount - photoOnlyCount);
+
     document.getElementById('badgeValidCount').textContent = greenCount;
     document.getElementById('badgeWarnCount').textContent = yellowCount;
     document.getElementById('badgeErrCount').textContent = redCount;
     document.getElementById('pvCountAll').textContent = ImportFlow.pendingPreviewItems.length;
 
     document.getElementById('importPreviewSummary').textContent =
-      `${ImportFlow.pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ${yellowCount} en revisión · ${redCount} no importables`;
+      `${ImportFlow.pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ` +
+      `${photoOnlyCount} sin foto (datos OK) · ${dataReviewCount} en revisión · ${redCount} no importables`;
 
     // Filtrar por tab + búsqueda
     const filtered = ImportFlow.pendingPreviewItems
@@ -146,8 +157,10 @@ const ImportFlow = {
 
     // Actualizar botón de confirmar
     const selCount = ImportFlow.pendingPreviewItems.filter(i => i._selected).length;
+    const selPhotoOnly = ImportFlow.pendingPreviewItems.filter(i => i._selected && isPhotoOnly(i)).length;
     const confirmBtn = document.getElementById('pvConfirmBtn');
-    if (confirmBtn) confirmBtn.textContent = `Importar ${selCount} seleccionados`;
+    if (confirmBtn) confirmBtn.textContent =
+      selPhotoOnly > 0 ? `Importar ${selCount} (${selPhotoOnly} sin foto)` : `Importar ${selCount} seleccionados`;
 
     const CATS = ['TECLADO','MOUSE','HEADSET','AURICULAR','CONTROLLER','MOUSEPAD','SWITCH','CAMARA','SPEAKER','SILLA_GAMING','ACCESORIO','NUMPAD','MONITOR','CUIDADO_PERSONAL','OTRO'];
 
@@ -159,8 +172,16 @@ const ImportFlow = {
         : '';
       const placeholder = `<div class="pv-card-img pv-card-img-empty" style="${hasCatalogImage(item.img) ? 'display:none' : ''}">-</div>`;
 
-      const reasonBanner = reason
-        ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${esc(reason)}</div>`
+      // IT16 (UX): un YELLOW de SOLO foto se explica como "datos OK, falta la
+      // previsualización" — no es un error de datos y se importa igual.
+      const photoOnly =
+        status === 'YELLOW' &&
+        !hasCatalogImage(item.img) &&
+        (!item.warnings || item.warnings.length === 0 || item.warnings.every(w => /imagen|foto/i.test(w)));
+      const shownReason = photoOnly ? 'Sin foto de previsualización (datos OK)' : reason;
+
+      const reasonBanner = shownReason
+        ? `<div class="pv-reason ${status === 'YELLOW' ? 'pv-reason-warn' : ''}">${esc(shownReason)}</div>`
         : '';
 
       return `<article class="pv-card pv-${status.toLowerCase()}" style="animation-delay:${Math.min(idx % 60, 20) * 18}ms">` +
