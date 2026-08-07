@@ -146,16 +146,18 @@ property-tests y CI verde. Eso ES "infalible" en el contrato del punto 0.
 
 ## 4. Fases de implementación
 
-- **F1 — P1 (invariantes, sin I1/I2 redundantes) + P2b (refinar gate de modelo)**:
-  bloquear I3–I8 con assert de violación + refinar `assessModelQuality` para los
-  modelos inflados/degenerados. Es el lever de recall real. Rápido, directo.
-- **F2 — P2 (redundancia de FOB como defensa)**: extractor de línea que solo
-  verifica el FOB de cada producto (±0.01). Integrado como capítulo de auditoría;
-  desacuerdo → AMBIGUO. NO se hace el "acuerdo de modelo".
-- **F3 — P4 (cola de revisión)**: UI mínima en importFlow para resolver AMBIGUOS
-  de fob (confirmar/corregir/descartar), que retroalimenta ground-truth.
-- **F4 — P5 (gates de CI)**: recall/FP como condición dura de `npm run test`.
-- **F5 — P6**: correr el loop hasta la meta; documentar el residuo final.
+- ✅ **F1 — P1 (invariantes) + P2b (refinar gate de modelo)**: IT17 — palabra
+  genérica → YELLOW (recall 40→65%, FP 8% sin cambio). Specs→RED, axis/switch/
+  truncado→YELLOW ya estaban. Invariantes I3–I8 cubiertos por los gates + tests.
+- ✅ **F3 — P4 (cola de revisión ENFORZADA en el import)**: IT17-F3 — los items
+  YELLOW flagueados por DATOS (no-foto) se deseleccionan por defecto en el
+  preview y llevan badge "requiere revisión"; el usuario DEBE confirmarlos.
+  Foto-only (datos OK) queda seleccionado. **Nada con dato dudoso se importa en
+  silencio.**
+- ⏳ **F2 — P2 (redundancia de FOB como defensa)**: extractor de línea que
+  verifica el FOB de cada producto (±0.01). Defensa de dinero. Pendiente.
+- ⏳ **F4 — P5 (gates de CI)**: recall/FP como condición dura de `npm run test`.
+- ⏳ **F5 — P6**: cerrar el loop; el sample crece con cada revisión humana.
 
 ## 5. Riesgos y límites honestos
 
