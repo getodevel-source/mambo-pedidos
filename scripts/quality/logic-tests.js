@@ -253,6 +253,15 @@ function testQuoteGenerator() {
   assert(writtenHtml.includes('Pedido &lt;b&gt;X&lt;/b&gt;'), 'Nombre del pedido escapado en el título');
   assert(writtenHtml.includes('Cliente Mayorista') && writtenHtml.includes('Mambo Pedidos'), 'Defaults de cliente/empresa aplicados sin companyInfo');
 
+  // IT24: número de cotización secuencial + config persistente
+  const n1 = QuoteGenerator.nextNumber();
+  const n2 = QuoteGenerator.nextNumber();
+  assert(/^NQ-\d{4}$/.test(n1) && n2 > n1, `IT24: número secuencial incrementa (${n1} → ${n2})`);
+  QuoteGenerator.saveConfig({ companyName: 'Mi Empresa', cuit: '30-12345678-9' });
+  const cfg = QuoteGenerator.getConfig();
+  assert(cfg.companyName === 'Mi Empresa' && cfg.cuit === '30-12345678-9', 'IT24: config de cotización persistida y recuperada');
+  assert(typeof QuoteGenerator.exportCsv === 'function', 'IT24: exportCsv implementado');
+
   // Sin items: retorna sin abrir ventana
   let openedEmpty = false;
   const origOpen2 = window.open;
