@@ -6,6 +6,23 @@
 const Reliability = {
   _errorLog: [],
   MAX_ERROR_LOG: 50,
+  ERROR_LOG_KEY: 'mambo_error_log',
+
+  _loadPersistedErrors() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(this.ERROR_LOG_KEY);
+      if (raw) this._errorLog = JSON.parse(raw).slice(-this.MAX_ERROR_LOG);
+    } catch (e) {}
+  },
+
+  _persistErrors() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.ERROR_LOG_KEY, JSON.stringify(this._errorLog.slice(-this.MAX_ERROR_LOG)));
+      }
+    } catch (e) {}
+  },
 
   // ── Layer 1: Global Error Boundary ──
 
@@ -14,7 +31,8 @@ const Reliability = {
    * Catches unhandled errors and promise rejections, shows user-visible toast.
    */
   installErrorBoundary() {
-    if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined') return;
+      this._loadPersistedErrors();
 
     window.addEventListener('error', (event) => {
       this._recordError('uncaught', event.message, event.filename, event.lineno);
@@ -66,21 +84,42 @@ const Reliability = {
   },
 
   _recordError(type, message, source, line) {
-    this._errorLog.push({
-      type,
-      message: String(message || '').substring(0, 200),
-      source: source || '',
-      line: line || 0,
-      timestamp: new Date().toISOString()
-    });
-    if (this._errorLog.length > this.MAX_ERROR_LOG) {
-      this._errorLog.shift();
-    }
-  },
+      this._errorLog.push({
+        type,
+        message: String(message || '').substring(0, 200),
+        source: source || '',
+        line: line || 0,
+        timestamp: new Date().toISOString()
+      });
+      if (this._errorLog.length > this.MAX_ERROR_LOG) {
+        this._errorLog.shift();
+      }
+      this._persistErrors();
+    },
 
-  getErrorLog() {
-    return [...this._errorLog];
-  },
+    getErrorLog() {
+      if (this._errorLog.length === 0) this._loadPersistedErrors();
+      return [...this._errorLog];
+    },
+
+    // IT29: exporta el error log como JSON descargable (para soporte/debug).
+    exportErrorLog() {
+      const log = this.getErrorLog();
+      const payload = {
+        app: 'Mambo Pedidos',
+        exportedAt: new Date().toISOString(),
+        count: log.length,
+        errors: log
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'mambo-error-log.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (typeof toast === 'function') toast(`📋 ${log.length} errores exportados`, 'info');
+      return log;
+    },
 
   // ── Layer 2: Data Integrity Guard ──
 

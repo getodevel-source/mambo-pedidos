@@ -310,6 +310,15 @@ function testSkuAllocator() {
   assert(parsed.items[1].sku.length > 0, 'IT27: SKU auto-generado cuando falta');
   assert(parsed.skippedNoModel === 1 && parsed.skippedNoFob === 1, 'IT27: filas incompletas contadas');
 
+  // IT29: error log persistido + exportable
+  const Reliability = require('../../src/js/reliability.js');
+  Reliability._loadPersistedErrors();
+  const beforeCount = Reliability.getErrorLog().length;
+  Reliability._recordError('test', 'error de prueba persistido');
+  const after = Reliability.getErrorLog();
+  assert(after.length === beforeCount + 1 && after[after.length - 1].message.includes('prueba'), 'IT29: _recordError persiste el error');
+  assert(typeof Reliability.exportErrorLog === 'function', 'IT29: exportErrorLog disponible');
+
   // allocateBatch: entradas inválidas
   assert(Array.isArray(SkuAllocator.allocateBatch('nope', [])) && SkuAllocator.allocateBatch('nope', []).length === 0, 'allocateBatch con input no-array retorna []');
   const withNulls = [{ sku: '', marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, null, undefined, 'string'];
