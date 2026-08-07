@@ -18,6 +18,7 @@
 
   let pdfPromise = null;
   let xlsxPromise = null;
+  let ncmDbPromise = null;
 
   function injectScript(src) {
     return new Promise(function (resolve, reject) {
@@ -59,6 +60,21 @@
       });
     }
     return xlsxPromise;
+  };
+
+global.ensureNcmDbLib = function ensureNcmDbLib() {
+    if (typeof window.NCM_DB !== 'undefined') {
+      return Promise.resolve(window.NCM_DB);
+    }
+    if (!ncmDbPromise) {
+      ncmDbPromise = injectScript('data/ncmDatabase.js').then(function () {
+        if (typeof window.NCM_DB === 'undefined') {
+          throw new Error('data/ncmDatabase.js no definió window.NCM_DB');
+        }
+        return window.NCM_DB;
+      });
+    }
+    return ncmDbPromise;
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

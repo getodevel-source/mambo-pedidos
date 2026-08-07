@@ -49,6 +49,11 @@ const ImportWizard = {
   // IT23: carga la base NCM (ARCA) y construye los DI autoritativos por categoría.
   async _loadNcmDb() {
     if (typeof NcmDatabase === 'undefined') return;
+    // IT31: la base de datos (872KB) se carga LAZY vía ensureNcmDbLib() solo acá,
+    // no en el arranque. Si ya está cacheada en localStorage, load() la usa.
+    if (typeof ensureNcmDbLib === 'function' && !NcmDatabase.load()) {
+      try { await ensureNcmDbLib(); } catch (e) {}
+    }
     if (!NcmDatabase.load()) await NcmDatabase.loadFromFile();
     if (!NcmDatabase._db || !Calculator || !Calculator.NCM_MATRIX) return;
     // Override del DI de cada categoría con el valor autoritativo de ARCA.
