@@ -26,11 +26,23 @@ const SkuAllocator = {
     return (hash >>> 0).toString(16).toUpperCase().padStart(8, '0');
   },
 
+  // IT26: slug legible del modelo — primer token alfanumérico con dígitos
+  // (prefiere el código del modelo), ≤8 chars UPPER. "F75 Reaper"→"F75",
+  // "AJ139 Pro"→"AJ139", "G502"→"G502". Si no hay → "SKU".
+  slugOf(modelo) {
+    const norm = String(modelo || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    const withDigit = norm.split(/\s+/).find(t => t && /\d/.test(t));
+    const token = (withDigit || norm.split(/\s+/)[0] || 'SKU');
+    return token.substring(0, 8);
+  },
+
   generatedSku(item, salt = '') {
     const brand = this.normalizeSku(item.marca || 'NEW').substring(0, 3) || 'NEW';
     const cat = this.normalizeSku(item.cat || 'OTRO').substring(0, 3) || 'OTR';
+    const slug = this.slugOf(item.modelo);
     const identity = `${this.identityKey(item)}|${salt}`;
-    return `${brand}-${cat}-${this.hash(identity)}`.substring(0, 50);
+    const short = this.hash(identity).substring(0, 4);
+    return `${brand}-${cat}-${slug}-${short}`.substring(0, 50);
   },
 
   allocateBatch(items = [], existing = []) {
@@ -147,8 +159,8 @@ const SkuAllocator = {
       }
     }
 
-    // Legacy: SKUs that don't match the current generated pattern
-    const GENERATED_RE = /^[A-Z]{2,3}-[A-Z]{2,3}-[0-9A-F]{8}$/;
+    // Legacy: SKUs that don't match the current generated pattern (viejo hash8 o nuevo slug-hash4)
+    const GENERATED_RE = /^[A-Z0-9]{2,3}-[A-Z0-9]{2,3}-(?:[A-Z0-9]{1,8}-)?[0-9A-F]{4,8}$/;
     for (const item of catalog) {
       const sku = this.normalizeSku(item.sku);
       if (sku && !GENERATED_RE.test(sku)) {

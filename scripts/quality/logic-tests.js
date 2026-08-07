@@ -291,9 +291,9 @@ function testSkuAllocator() {
   assert(SkuAllocator.hash('') === '811C9DC5', 'hash FNV-1a de string vacío = 811C9DC5');
   assert(SkuAllocator.hash('a') !== SkuAllocator.hash('b'), 'hash distinto para inputs distintos');
 
-  // generatedSku: formato BRAND-CAT-HASH8, determinista, sensible al salt
+  // generatedSku: formato BRAND-CAT-SLUG-HASH4 (legible), determinista, sensible al salt
   const gen = SkuAllocator.generatedSku({ marca: 'Logitech', modelo: 'G203', variante: 'Black', cat: 'MOUSE' }, '');
-  assert(/^[A-Z]{1,3}-[A-Z]{1,3}-[0-9A-F]{8}$/.test(gen), `generatedSku respeta el formato BRAND-CAT-HASH8 (got "${gen}")`);
+  assert(/^[A-Z]{1,3}-[A-Z]{1,3}-[A-Z0-9]{1,8}-[0-9A-F]{4}$/.test(gen) && gen.includes('G203'), `generatedSku formato legible con slug del modelo (got "${gen}")`);
   assert(SkuAllocator.generatedSku({ marca: 'Logitech', modelo: 'G203', variante: 'Black', cat: 'MOUSE' }, '') === gen, 'generatedSku es determinista para el mismo identity+salt');
   assert(SkuAllocator.generatedSku({ marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, '#1234') !== SkuAllocator.generatedSku({ marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, ''), 'Salt distinto → SKU generado distinto');
 

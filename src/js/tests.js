@@ -884,6 +884,13 @@ const Tests = {
     const repeated = [{ ...batch[0] }];
     SkuAllocator.allocateBatch(repeated, existing);
     this.assert(repeated[0].sku === batch[0].sku, 'La nueva identidad por colisión es determinista');
+
+    // IT26: SKU legible con slug del modelo (formato BRAND-CAT-SLUG-HASH4)
+    const readable = SkuAllocator.generatedSku({ marca: 'AULA', cat: 'TECLADO', modelo: 'F75 Reaper', variante: 'Black' });
+    this.assert(/^AUL-TEC-F75-[0-9A-F]{4}$/.test(readable), `SKU legible con slug del modelo (${readable})`);
+    this.assert(SkuAllocator.slugOf('AJ139 Pro') === 'AJ139', 'slugOf prefiere el token con dígitos');
+    this.assert(SkuAllocator.slugOf('G502') === 'G502', 'slugOf toma el código del modelo');
+    this.assert(SkuAllocator.generatedSku({ marca: 'AULA', cat: 'TECLADO', modelo: 'F75 Reaper', variante: 'Black' }) === readable, 'SKU legible determinista');
   },
 
   testIvaIsSeparateFromProductCost() {
