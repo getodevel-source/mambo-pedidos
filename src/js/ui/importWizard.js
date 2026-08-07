@@ -40,8 +40,24 @@ const ImportWizard = {
     // IT20: restaurar proyecto guardado (pedido + paso) si existe
     const proy = localStorage.getItem(ImportWizard.PROJECT_KEY);
     if (proy) { try { const p = JSON.parse(proy); if (p.step != null) ImportWizard.step = p.step; } catch (e) {} }
+    ImportWizard._loadNcmDb();
     const modal = document.getElementById('importWizardModal');
     if (modal) modal.style.display = 'flex';
+    ImportWizard.render();
+  },
+
+  // IT23: carga la base NCM (ARCA) y construye los DI autoritativos por categoría.
+  async _loadNcmDb() {
+    if (typeof NcmDatabase === 'undefined') return;
+    if (!NcmDatabase.load()) await NcmDatabase.loadFromFile();
+    if (!NcmDatabase._db || !Calculator || !Calculator.NCM_MATRIX) return;
+    // Override del DI de cada categoría con el valor autoritativo de ARCA.
+    Object.entries(Calculator.NCM_MATRIX).forEach(([key, info]) => {
+      const db = NcmDatabase.byCode(info.ncm);
+      if (db && db.di != null) {
+        ImportWizard.state.ncmOverrides[key] = { derechos: db.di };
+      }
+    });
     ImportWizard.render();
   },
 

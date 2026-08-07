@@ -169,6 +169,22 @@ function testCalculator() {
   assert(courierCalc.summary.totalAnticiposRecuperablesUsd === 0, 'IT21: courier NO tiene anticipos (Ganancias/IIBB/IVA adic)');
   assert(courierCalc.regimen === 'courier', 'IT21: resultado etiquetado como régimen courier');
 
+  // IT23: base NCM ARCA cargada + clasificación compuesta (matriz → DI autoritativo)
+  const NcmDatabase = require('../../src/js/ncmDatabase.js');
+  const ncmDb = require('../../src/data/ncmDatabase.json');
+  assert(ncmDb.registros.length > 9000, `IT23: base NCM completa (${ncmDb.registros.length} ≥ 9000)`);
+  NcmDatabase._db = ncmDb; NcmDatabase._buildIndex();
+  assert(NcmDatabase.byCode('8471.60.53') && NcmDatabase.byCode('8471.60.53').di === 0, 'IT23: mouse (BIT) DI 0% en ARCA');
+  assert(NcmDatabase.byCode('8450.11.00') && Math.abs(NcmDatabase.byCode('8450.11.00').di - 0.2) < 1e-9, 'IT23: lavadora DI 20% en ARCA');
+  assert(NcmDatabase.byCode('8517.13.00') && NcmDatabase.byCode('8517.13.00').di === 0, 'IT23: celular DI 0% (Decreto 333/25)');
+
+  // Clasificador compuesto: categoria → ncmKey → NCM code + DI de la base
+  const keyTecl = Calculator.ncmKeyFor({ cat: 'TECLADO', modelo: 'F75', variante: '' });
+  const keyMouse = Calculator.ncmKeyFor({ cat: 'MOUSE', modelo: 'G Pro', variante: 'Wireless' });
+  assert(keyTecl === 'TECLADO_CABLE' && Calculator.NCM_MATRIX[keyTecl].ncm === '8471.60.52', 'IT23: teclado → 8471.60.52');
+  assert(keyMouse === 'MOUSE_WIRELESS' && Calculator.NCM_MATRIX[keyMouse].ncm === '8471.60.53', 'IT23: mouse wireless → 8471.60.53');
+  assert(NcmDatabase.byCode(Calculator.NCM_MATRIX[keyTecl].ncm).di === 0, 'IT23: DI teclado 0% (autoritativo ARCA, no 12%)');
+
   // Puerta a puerta: certificaciones inalámbricas suman costo (ENACOM 350 + LITIO 75)
   const d2dW = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'D2D-W', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'M185', variante: 'Wireless' }],

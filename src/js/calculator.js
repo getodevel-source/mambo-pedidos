@@ -227,6 +227,17 @@ const Calculator = {
     };
   },
 
+  // IT23: mapea un item (cat + modelo + variante) a su clave NCM de la matriz.
+  ncmKeyFor(item) {
+    const catUpper = (item.cat || '').toUpperCase();
+    const textAll = `${item.modelo} ${item.variante || ''} ${item.cat}`.toUpperCase();
+    if (catUpper.includes('TECLADO')) return textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'TECLADO_WIRELESS' : 'TECLADO_CABLE';
+    if (catUpper.includes('MOUSE') && !catUpper.includes('MOUSEPAD')) return textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'MOUSE_WIRELESS' : 'MOUSE_CABLE';
+    if (catUpper.includes('HEADSET') || catUpper.includes('AURICULAR')) return textAll.includes('WIRELESS') || textAll.includes('BT') ? 'HEADSET_WIRELESS' : 'HEADSET_CABLE';
+    if (this.NCM_MATRIX[catUpper]) return catUpper; // categorías directas (LAVADORA, TV...)
+    return 'OTRO';
+  },
+
   // MOTOR DE LIQUIDACIÓN EXACTA PUERTA A PUERTA (NCM & REGULACIONES)
   calculateDoorToDoorExactCost(items = [], doorConfig = {}) {
     const tc = this.parseNum(doorConfig.tipoCambio, 1400);
