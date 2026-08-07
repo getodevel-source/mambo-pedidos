@@ -15,7 +15,7 @@ for (const line of lines) {
   const code = p[1].trim();
   const m = code.match(/^(\d{4})\.(\d{2})\.(\d{2})\.(\d{3})/);
   if (!m) continue;
-  if (m[1] === '0000') continue; // sufijos de valor (no son posiciones de producto)
+  if (/^00\d{2}/.test(m[1])) continue; // capítulos 01-97; prefijos 00XX = marcadores de sección/sufijos (no productos)
   const ncm = `${m[1]}.${m[2]}.${m[3]}`;
   const di = parseFloat(p[4].trim()) / 100; // campo4 = Derecho de Importación
   const desc = p.slice(9).join('@').replace(/\s+/g, ' ').trim();

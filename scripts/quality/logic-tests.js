@@ -185,6 +185,14 @@ function testCalculator() {
   assert(keyMouse === 'MOUSE_WIRELESS' && Calculator.NCM_MATRIX[keyMouse].ncm === '8471.60.53', 'IT23: mouse wireless → 8471.60.53');
   assert(NcmDatabase.byCode(Calculator.NCM_MATRIX[keyTecl].ncm).di === 0, 'IT23: DI teclado 0% (autoritativo ARCA, no 12%)');
 
+  // IT23: override de NCM por categoría (código + DI) se refleja en el motor
+  const d2dOv = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'M-1', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],
+    { tipoCambio: 1000, pesoKg: 0, fletePct: 0.1, seguroPct: 0.01, ncmOverrides: { MOUSE_CABLE: { ncm: '8471.60.53', derechos: 0.05 } }, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  assert(d2dOv.items[0].ncm === '8471.60.53', 'IT23: motor usa el NCM override por categoría');
+  assert(Math.abs(d2dOv.items[0].derechosUsd - (100 + 10 + 1) * 0.05) < 1e-9, 'IT23: motor usa el DI override (5%)');
+
   // Puerta a puerta: certificaciones inalámbricas suman costo (ENACOM 350 + LITIO 75)
   const d2dW = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'D2D-W', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'M185', variante: 'Wireless' }],

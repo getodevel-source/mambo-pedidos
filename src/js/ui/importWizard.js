@@ -228,8 +228,35 @@ const ImportWizard = {
           ? `<div><label class="wz-lbl">IIBB %</label><input type="number" step="0.1" class="input" style="width:90px;" value="${Math.round((s.iibbPctCustom||0.025)*1000)/10}" onchange="ImportWizard.state.iibbPctCustom=Number(this.value)/100;ImportWizard.render()"></div>`
           : ''}
       </div>
+      <div class="iw-search" style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap;">
+        <div><label class="wz-lbl">Buscar NCM (base completa ARCA)</label>
+          <input id="iwNcmSearch" type="text" class="input" style="width:240px;" placeholder="ej: impresora, lavadora, 8471..." oninput="ImportWizard._ncmSearch(this.value)"></div>
+        <div><label class="wz-lbl">Aplicar a categoría</label>
+          <select id="iwNcmCat" class="select">${Object.keys(matrix).map(k=>`<option value="${k}">${k}</option>`).join('')}</select></div>
+        <div id="iwNcmResults" style="display:none;width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow:auto;padding:6px;"></div>
+      </div>
       <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>NCM</th><th>Derecho</th><th>Tasa</th><th>IVA</th><th>IVA adic</th><th>Gan</th><th>IIBB</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  },
+
+  // IT23: busca NCM en la base completa y muestra resultados para reasignar.
+  _ncmSearch(q) {
+    const box = document.getElementById('iwNcmResults');
+    if (!box || typeof NcmDatabase === 'undefined' || !NcmDatabase._db) return;
+    q = (q || '').trim();
+    if (q.length < 2) { box.style.display = 'none'; return; }
+    const res = NcmDatabase.search(q, 10);
+    const catSel = document.getElementById('iwNcmCat');
+    box.innerHTML = res.map(r => `<div style="padding:5px 8px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.06)" onmousedown="event.preventDefault();ImportWizard._setNcmOverride('${r.ncm}','${String(r.di||0)}')">${r.ncm} · ${ImportWizard._esc(String(r.desc||'').slice(0,60))} · <b>DI ${Math.round((r.di!=null?r.di:0)*100)}%</b></div>`).join('');
+    box.style.display = 'block';
+  },
+
+  _setNcmOverride(ncm, diPct) {
+    const cat = document.getElementById('iwNcmCat').value;
+    ImportWizard.state.ncmOverrides[cat] = { ncm, derechos: parseFloat(diPct) };
+    const box = document.getElementById('iwNcmResults'); if (box) box.style.display = 'none';
+    ImportWizard.render();
+    if (typeof toast === 'function') toast(`NCM ${ncm} asignado a ${cat}`, 'success');
   },
 
   // ---- gastos destino ----
