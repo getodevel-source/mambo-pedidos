@@ -175,6 +175,8 @@ global.AppStorage = {
 // Modulos UI (solo lectura)
 const UINotifications = require(jsPath('ui/notifications.js'));
 const UIModals = require(jsPath('ui/modals.js'));
+require(jsPath('ui/glossary.js')); // define window.tip (tooltips) usado por las vistas
+global.tip = global.window.tip;    // las vistas llaman a `tip` como global libre en Node
 const CatalogView = require(jsPath('ui/catalogView.js'));
 const ImportFlow = require(jsPath('ui/importFlow.js'));
 

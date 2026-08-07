@@ -320,25 +320,25 @@ const UIModals = {
     let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px; margin-bottom: 20px;">`;
 
     html += `<div class="card kpi-mini">
-    <div class="kpi-mini-label">Inversión Total CIF (Mercadería + Flete)</div>
-    <div class="kpi-mini-value val-blue">$${Math.round(s.cifTotalUsd).toLocaleString()} USD</div>
-    <div class="kpi-mini-sub">FOB $${Math.round(s.fobTotalUsd).toLocaleString()} + Flete $${Math.round(s.fleteTotalUsd).toLocaleString()}</div>
-  </div>`;
+        <div class="kpi-mini-label">Inversión Total CIF ${tip('CIF')} (Mercadería + Flete)</div>
+        <div class="kpi-mini-value val-blue">$${Math.round(s.cifTotalUsd).toLocaleString()} USD</div>
+        <div class="kpi-mini-sub">FOB $${Math.round(s.fobTotalUsd).toLocaleString()} + Flete $${Math.round(s.fleteTotalUsd).toLocaleString()}</div>
+      </div>`;
 
-    html += `<div class="card kpi-mini">
-    <div class="kpi-mini-label">Tributos Aduana SIM (sin IVA)</div>
+        html += `<div class="card kpi-mini">
+        <div class="kpi-mini-label">Tributos Aduana SIM ${tip('DI')}${tip('TE')} (sin IVA)</div>
     <div class="kpi-mini-value val-yellow">$${Math.round(s.totalTributosAduanaUsd).toLocaleString()} USD</div>
     <div class="kpi-mini-sub">ARS $${Math.round(s.totalTributosAduanaUsd * tc).toLocaleString()}</div>
   </div>`;
 
     html += `<div class="card kpi-mini is-pink">
-    <div class="kpi-mini-label val-pink-soft">IVA separado / repercutible</div>
+    <div class="kpi-mini-label val-pink-soft">IVA separado ${tip('IVA')} / repercutible</div>
     <div class="kpi-mini-value val-pink">$${Math.round(s.totalIvaAduanaUsd || 0).toLocaleString()} USD</div>
     <div class="kpi-mini-sub val-pink-soft">ARS $${Math.round((s.totalIvaAduanaUsd || 0) * tc).toLocaleString()}</div>
   </div>`;
 
     html += `<div class="card kpi-mini">
-    <div class="kpi-mini-label">Despacho, Depósito & Certificaciones</div>
+    <div class="kpi-mini-label">Despacho, Depósito ${tip('DEPOSITO')} & Certificaciones ${tip('DESPACHANTE')}</div>
     <div class="kpi-mini-value val-indigo">$${Math.round(s.totalGastosFijosDestinoUsd).toLocaleString()} USD</div>
     <div class="kpi-mini-sub">Despachante + TCA + Certs + Acarreo</div>
   </div>`;
@@ -353,12 +353,12 @@ const UIModals = {
         const netoReal = s.costoNetoRealUsd || 0;
         const credito = s.totalRecuperableUsd || 0;
         html += `<div class="card kpi-mini">
-        <div class="kpi-mini-label val-blue">COSTO NETO REAL (post crédito fiscal)</div>
+        <div class="kpi-mini-label val-blue">COSTO NETO REAL ${tip('CRED')} (post crédito fiscal)</div>
         <div class="kpi-mini-value val-blue">$${Math.round(netoReal).toLocaleString()} USD</div>
         <div class="kpi-mini-sub">ARS $${Math.round((s.costoNetoRealArs || 0)).toLocaleString()} — tu costo VERDADERO de la mercadería</div>
       </div>`;
         html += `<div class="card kpi-mini is-green">
-        <div class="kpi-mini-label">Crédito fiscal a favor (recuperable)</div>
+        <div class="kpi-mini-label">Crédito fiscal a favor ${tip('CRED')} (recuperable)</div>
         <div class="kpi-mini-value">$${Math.round(credito).toLocaleString()} USD</div>
         <div class="kpi-mini-sub">IVA + IVA adicional + Ganancias + IIBB (pagos a cuenta) — ARS $${Math.round((s.creditoFiscalArs || 0)).toLocaleString()}</div>
       </div>`;
@@ -376,7 +376,7 @@ const UIModals = {
 
     html += `<div class="modal-section-title">Detalle Exacto por Producto (Posición Arancelaria NCM & Costo Puerta Unitario)</div>`;
     html += `<table class="data-table">`;
-    html += `<thead><tr style="border-bottom: 1px solid var(--border); text-align: left; color: var(--text-muted);"><th style="padding: 6px;">SKU</th><th style="padding: 6px;">Producto</th><th style="padding: 6px;">Posición NCM</th><th style="padding: 6px; text-align: right;">FOB Unit</th><th style="padding: 6px; text-align: right;">Tributos SIM</th><th style="padding: 6px; text-align: right; color: #34d399;">Costo Puerta Unit (USD)</th><th style="padding: 6px; text-align: right; color: var(--accent);">Costo Puerta Unit (ARS)</th></tr></thead><tbody>`;
+    html += `<thead><tr style="border-bottom: 1px solid var(--border); text-align: left; color: var(--text-muted);"><th style="padding: 6px;">SKU</th><th style="padding: 6px;">Producto</th><th style="padding: 6px;">Posición NCM ${tip('NCM')}</th><th style="padding: 6px; text-align: right;">FOB Unit ${tip('FOB')}</th><th style="padding: 6px; text-align: right;">Tributos ${tip('DI')}${tip('TE')}</th><th style="padding: 6px; text-align: right; color: #34d399;">Costo Puerta Unit (USD)</th><th style="padding: 6px; text-align: right; color: var(--accent);">Costo Puerta Unit (ARS)</th></tr></thead><tbody>`;
 
     res.items.forEach(i => {
       html += `<tr style="border-bottom: 1px solid var(--border);">`;

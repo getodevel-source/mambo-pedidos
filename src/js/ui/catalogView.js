@@ -282,8 +282,8 @@ const CatalogView = {
         const variantHtml = r.variante ? `<span style="display: inline-block; font-size: 10px; font-weight: 600; color: #a7f3d0; background: rgba(16,185,129,0.15); padding: 1px 5px; border-radius: 4px; margin-left: 6px;">${esc(r.variante)}</span>` : '';
         gridHtml += `<div style="font-weight: 700; font-size: 13px; color: #fff; line-height: 1.3; height: 34px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${esc(r.modelo)}${variantHtml}</div>`;
         gridHtml += `<div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 6px 10px; border-radius: 6px;">`;
-        gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">FOB</span><strong style="color: #38bdf8;">$${r.fob.toFixed(2)}</strong></div>`;
-        gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">PVP Est.</span><strong style="color: #34d399;">$${pvp}</strong></div>`;
+        gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">FOB ${tip('FOB')}</span><strong style="color: #38bdf8;">$${r.fob.toFixed(2)}</strong></div>`;
+                gridHtml += `<div><span style="font-size: 10px; color: var(--text-muted); display: block;">PVP Est. ${tip('PVP')}</span><strong style="color: #34d399;">$${pvp}</strong></div>`;
         gridHtml += `</div>`;
         gridHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 4px;">`;
         gridHtml += `<button class="btn btn-sm" onclick="adjustQty('${skuJs}', -1)" style="padding: 4px 10px; font-weight: 800;">-</button>`;
