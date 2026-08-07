@@ -267,8 +267,10 @@ const CatalogView = {
         const qty = selection[r.sku] || 0;
         const isSel = qty > 0;
         const skuJs = escJs(r.sku);
-        const markup = parseFloat(document.getElementById('cMarkup')?.value) || 2.5;
-        const pvp = (r.fob * markup).toFixed(2);
+        const markup = (typeof Calculator !== 'undefined' && typeof Calculator.getMarkup === 'function')
+                  ? Calculator.getMarkup(r.cat, parseFloat(document.getElementById('cMarkup')?.value) || 2.5, null)
+                  : (parseFloat(document.getElementById('cMarkup')?.value) || 2.5);
+                const pvp = (r.fob * markup).toFixed(2);
         const imgSrc = hasCatalogImage(r.img) ? r.img : DEFAULT_SVG_IMG;
 
         gridHtml += `<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; border: ${isSel ? '2px solid var(--primary)' : '1px solid var(--border)'}; background: ${isSel ? 'rgba(255,87,34,0.05)' : 'var(--surface)'}; border-radius: 12px; position: relative;">`;

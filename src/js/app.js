@@ -194,7 +194,7 @@ function getCostInputs() {
     logisticaModo: getRadioVal('rLogisticaModo', 'courier'),
     transporteModo: getRadioVal('rTransporteModo', 'aereo'),
     seguro: document.getElementById('cSeguro')?.value || 2,
-    derechos: document.getElementById('cDerechos')?.value || 16,
+    derechos: (function(){ const v = document.getElementById('cDerechos')?.value; return v !== undefined && v !== '' ? parseFloat(v) : undefined; })(),
     tasa: document.getElementById('cTasa')?.value || 3,
     perc: document.getElementById('cPerc')?.value || 6,
     ivaPct: document.getElementById('cIvaPct')?.value !== undefined && document.getElementById('cIvaPct')?.value !== '' ? document.getElementById('cIvaPct').value : 21,
