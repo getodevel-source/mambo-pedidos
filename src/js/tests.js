@@ -25,6 +25,7 @@ const Tests = {
     this.testZeroCosts();
     this.testLatamDecimalFormat();
     this.test8BitDoBrand();
+    this.testParserGeneralizationFixes();
     this.testWeightBasedFreight();
     this.testCourierWarnings();
     this.testTextSanitizer();
@@ -204,6 +205,39 @@ const Tests = {
 
     const cat = PdfParser.guessCategory('8BitDo Ultimate Controller', 'Wireless');
     this.assert(cat === 'CONTROLLER', 'Clasificación correcta de categoría CONTROLLER para mandos 8BitDo');
+  },
+
+  testParserGeneralizationFixes() {
+    // IT14 (SLICE 5): fixes GENERALIZABLES de extracción — validados con el
+    // harness anti-overfit (FP_rate_clean 8% estable) y el audit fail-closed.
+    // 1. Códigos v\d desnudos (V8/V6/V5 de Attack Shark) NO se limpian ni se
+    //    reemplazan por specs de la variante.
+    const s8 = PdfParser.sanitizeProductNames('V8', 'PAW3950MAX Black', 'Attack shark');
+    this.assert(s8.modelo === 'V8', 'SLICE5: código v\\d desnudo se conserva como modelo (V8)');
+    const s6 = PdfParser.sanitizeProductNames('V6', 'Magnetic Charging Dock Tri mode Black', 'Attack shark');
+    this.assert(s6.modelo === 'V6', 'SLICE5: V6 se conserva con specs en variante');
+    // 2. TextSanitizer respeta el código (no promueve el sensor desde variante).
+    if (typeof TextSanitizer !== 'undefined') {
+      const t8 = TextSanitizer.sanitizeItem({ marca: 'Attack shark', modelo: 'V8', variante: 'PAW3950MAX Black', cat: 'MOUSE' }, []);
+      this.assert(t8.modelo === 'V8', 'SLICE5: TextSanitizer conserva V8 (no promueve PAW3950MAX)');
+    }
+    // 3. isSpecOnlyModel discrimina specs de modelos legítimos sin dígitos.
+    this.assert(PdfParser.isSpecOnlyModel('PAW3950MAX') === true, 'SLICE5: PAW3950MAX es spec');
+    this.assert(PdfParser.isSpecOnlyModel('8KHz') === true, 'SLICE5: 8KHz es spec');
+    this.assert(PdfParser.isSpecOnlyModel('X3 Wireless') === false, 'SLICE5: X3 Wireless NO es spec');
+    this.assert(PdfParser.isSpecOnlyModel('Cheese') === false, 'SLICE5: Cheese (keycap) NO es spec');
+    // 4. Grounding: celda de specs de switch (Haimu) y celda marca+color (Mchose)
+    //    NO generan gap — el modelo por herencia/columna es legítimo.
+    const gapHaimu = PdfParser.modelEvidenceGap({
+      modelo: 'SeaSalt Switch Silent',
+      marca: 'Haimu',
+      cellRawText: 'Total Brown Switch Bottoming stroke: 3.60 0.40mm Upper cover material: PC Working stroke Lower cover material: PA Tactile force Axle core material: POM'
+    });
+    this.assert(gapHaimu.gap === false, 'SLICE5: celda de specs de switch no genera gap (Haimu)');
+    const gapMchose = PdfParser.modelEvidenceGap({ modelo: 'A7V3Pro+', marca: 'Mchose', cellRawText: 'MChose Red' });
+    this.assert(gapMchose.gap === false, 'SLICE5: celda marca+color no genera gap (Mchose)');
+    const gapEv = PdfParser.modelEvidenceGap({ modelo: 'V8', marca: 'Attack shark', cellRawText: 'V8 Black' });
+    this.assert(gapEv.gap === false, 'SLICE5: V8 con evidencia literal no genera gap');
   },
 
   testWeightBasedFreight() {

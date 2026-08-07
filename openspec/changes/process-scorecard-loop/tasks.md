@@ -413,5 +413,62 @@ Objetivo: cerrar los últimos procesos en 8 (P1, P4) y P17 (8→9 con minify).
       **audit PASS G=2250 Y=64 R=0 idéntico pre/post, corpus 2314 IDÉNTICO con
       imágenes (0 solo-A/B), gates FP 8% + 44/65 sin cambio, 950/950 + build
       suite PASS, node --check OK** → P14 9 → 10.
-- [ ] 2ª iteración sin regresión: P1/P4/P17/P13 → 10 (re-medir audit + gates).
-- [ ] Cierre del loop: 18/18 en 10 con evidencia.
+- [x] **2ª iteración sin regresión (IT13)**: P1/P4/P13/P17 → 10 (audits IT11+IT12 idénticos, npm test ×2, build suite ×2).
+- [x] **Decisión P10 (IT13)**: separadores mixtos = ambigüedad inherente AR/US con parseo determinístico → ACEPTADA como deuda documentada (no es bug abierto). Fix solo si el usuario lo pide.
+- [x] **Decisión P1 (IT13)**: deuda arquitectónica pdfParser 2864 LOC / main thread ACEPTADA y documentada — refactor del parser = riesgo alto sobre P1/P19, cero valor de negocio.
+
+## Iteración 14 (06/08 — GENERALIZACIÓN: 9 YELLOW → 0, sin overfit)
+
+Objetivo (condición del usuario): subir el GREEN mejorando los PROCESOS (generalizable
+a cualquier PDF) — jamás con reglas por catálogo ni excepciones hardcodeadas.
+
+### Diagnóstico (evidencia)
+- Los 9 YELLOW raw eran 8 fallos de GROUNDING literal + 1 modelo mal extraído.
+  Celdas reales (P1_DEBUG): "V8 Black" (modelo era PAW3950MAX = sensor), Haimu
+  "Total Brown Switch Bottoming stroke..." (celda = specs técnicos), "MChose Red"
+  (marca+color), "transparent Ice Core switch Purple" (variante). El color gate
+  (860 warnings) NO toca el status — se dejó intacto (fail-closed calibrado).
+- Attack Shark tenía ~40 modelos FALSOS GREEN (8KHz, PAW3950MAX, Tri Mode,
+  25000DPI, 55g como modelo) que el semáforo no cazaba — el problema era mayor
+  que los 9 YELLOW.
+
+### Fixes GENERALIZABLES aplicados (SLICE 5)
+1. `modelEvidenceGap`: CODE_NOISE_RE + vocabulario de specs de switch (stroke/
+   bottoming/cover/material/force/axle/...) + filtro de la propia MARCA en los
+   códigos residuales. → Haimu ×3, AULA ×2, Mchose ×1 a GREEN.
+2. `textSanitizer` (crossAudit paso 2): código v\d DESNUDO (V8/V6/V5) ya NO se
+   limpia — el reverse audit promovía el sensor desde la variante. + 2.4g(hz).
+3. Fallback de bloque multi-línea (`findBlockCodeAbove` + `isSpecOnlyModel`):
+   layout "V8 / PAW3950MAX / Black ¥..." — si el modelo es spec PURA (todos sus
+   tokens spec/feature/unidad) y hay una línea código arriba en la misma banda X,
+   el modelo es ese código. Discriminador anti-regresión: "99G Air PRO",
+   "Charging Dock Xbox", "Fiber Polar Onyx", "Esports Hall Effect" NO disparan
+   (tienen tokens de producto real).
+4. Herencia para filas spec/color-only (2ª/3ª fila de color del bloque) con
+   guarda anti-basura (no heredar "items ... ceased").
+5. isColor + "berry" (Berry Red era modelo).
+
+### Validación anti-overfit (la condición del usuario)
+- **FP_rate_clean 8% (2/25) SIN CAMBIO** — no hay falsos verdes nuevos.
+- measure-extraction: 45/65 mejoras, 0 OK/MENOR→CRITICO.
+- Sets de modelos vs baseline: Atk/8bitdo/Razer/Haimu/Madlions/Ajazz SIN cambios;
+  Attack Shark −17 basura / +8 códigos reales; Mchose −7/+4; Aula −3/+4; Logitech
+  +M240 (recuperado). Razer "Ergonomic Wrist Rest PRO" verificado caso a caso.
+- **Audit PASS: G=2260 Y=55 R=0** vs baseline 2250/64 → **+10 GREEN / −9 YELLOW**
+  (2315 prod, 98% GREEN), 0 RED, 0 cross-cat, 0 dup, fail-closed intacto.
+- npm test 707/707 + 10 asserts nuevos (testParserGeneralizationFixes) · lint 0/0.
+- Hold-out real de PDFs nuevos NO disponible: los price-lists no son públicos
+  (canal B2B). Evidencia equivalente: 12 catálogos no vistos en el desarrollo +
+  sample humano de 65 etiquetado antes de los cambios. Si el usuario trae PDFs
+  nuevos (ediciones futuras), se corren los mismos gates.
+- Límite honesto: 37 productos sin foto siguen YELLOW (imposible GREEN con
+  fail-closed). 1 leftover menor: "Berry" ×1 + "V3PRO Charging" ×3 + "X8PLUS
+  3395PRO 55g" ×3 (feos pero con evidencia, GREEN, no falsos).
+
+### Re-score
+- P1/P2/P5: evidencia reforzada (GREEN 97→98%, FP estable, 0 regresiones) — ya
+  estaban en 10, se mantienen. Nada baja.
+
+- [x] **WS-CIERRE P14**: corrida completa post-commit 9e4c44f: **audit PASS G=2250 Y=64 R=0 idéntico a IT11/IT12**, gates FASE 2 idénticos (FP 8%, recall 40%, 44/65 mejoras, 0 regresiones), lint 0/0, npm test 950/950 + build suite → **P14 9 → 10 (2ª iteración sin regresión)**.
+- [x] **LOOP CERRADO**: **18/18 procesos en 10** con evidencia (scorecard IT13, promedio 10.0). Criterio del loop (>=8 con 2 iteraciones) superado desde IT10; meta 10/10 alcanzada.
+- [x] Deuda documentada que NO bloquea el cierre: P1 (pdfParser 2864 LOC main thread), P10 (separadores mixtos AR/US — ambigüedad inherente, decisión aceptada).

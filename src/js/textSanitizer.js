@@ -198,7 +198,7 @@ const TextSanitizer = {
 
   // ── Connection/type words that belong in variante, not modelo ──
   // NOTE: pro/plus/lite/mini/se removed — these are model suffixes (AK820 Pro, V3 Lite)
-  CONNECTION_WORDS_RE: /\b(wired|wireless|bluetooth|2\.4g|tri[\s-]?mode|usb[\s-]?c|rgb|mechanical|optical|gaming|v\d|version)\b/gi,
+  CONNECTION_WORDS_RE: /\b(wired|wireless|bluetooth|2\.4g(hz)?|tri[\s-]?mode|usb[\s-]?c|rgb|mechanical|optical|gaming|v\d|version)\b/gi,
 
   /**
    * Cross-field audit: detects and fixes contamination between modelo, variante, marca.
@@ -254,8 +254,13 @@ const TextSanitizer = {
         if (newConns.length > 0) {
           variante = (variante + ' ' + newConns.join(' ')).replace(/\s+/g, ' ').trim();
         }
-      } else {
-        // Modelo is ONLY connection words — move to variante, clear modelo
+      } else if (!/^v\d+$/i.test(modeloNoConn)) {
+        // Modelo es SOLO palabras de conexión — mover a variante, limpiar modelo.
+        // SLICE 5 (Attack Shark V8/V6/V5): un código v\d DESNUDO (sin otro token
+        // antes) ES el modelo real (serie V8 de Attack Shark) — NO se limpia, o
+        // el reverse audit promueve specs de la variante ("PAW3950MAX" como
+        // modelo). El caso "MAD 68 V2" (sufijo tras código) ya queda cubierto
+        // por la rama de arriba.
         if (newConns.length > 0) {
           variante = (newConns.join(' ') + ' ' + variante).replace(/\s+/g, ' ').trim();
         }
