@@ -265,14 +265,19 @@ const Calculator = {
       const ncmRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
       ncmRule.certs.forEach(c => certsSet.add(c));
 
+      // IT20: overrides configurables (jurisdicción IIBB, NCM por producto)
+      const iibbPct = doorConfig.iibbPct != null ? doorConfig.iibbPct : ncmRule.iibb;
+      const derechoPct = (doorConfig.ncmOverrides && doorConfig.ncmOverrides[ncmKey] && doorConfig.ncmOverrides[ncmKey].derechos != null)
+        ? doorConfig.ncmOverrides[ncmKey].derechos : ncmRule.derechos;
+
       // Impuestos SIM Aduana Argentina
-      const derechosUsd = itemCif * ncmRule.derechos;
+      const derechosUsd = itemCif * derechoPct;
       const tasaUsd = itemCif * ncmRule.tasa;
       const baseImp = itemCif + derechosUsd + tasaUsd;
       const ivaUsd = baseImp * ncmRule.iva;
       const ivaAddUsd = baseImp * ncmRule.ivaAdd;
       const percGanUsd = baseImp * ncmRule.percGan;
-      const iibbUsd = baseImp * ncmRule.iibb;
+      const iibbUsd = baseImp * iibbPct;
        const totalTributosItemUsd = derechosUsd + tasaUsd + ivaAddUsd + percGanUsd + iibbUsd;
 
       return {

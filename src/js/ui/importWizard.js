@@ -19,16 +19,44 @@ const ImportWizard = {
     fleteModo: 'peso', pesoKg: 15, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
     depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
     recuperaCredito: true,
+    iibbJurisdiccion: 'cab', iibbPctCustom: 0.025,
     ncmOverrides: {}
   },
   CACHE_KEY: 'mamboImportWizardState',
+  PROJECT_KEY: 'mamboImportProyecto',
+  // IIBB por jurisdicción (olmoscomex: CABA ~2.5%, PBA más alto). Configurable.
+  IIBB_JURISDICCIONES: { cab: 0.025, pba: 0.035, otra: null },
+
+  _iibbPct() {
+    const j = ImportWizard.state.iibbJurisdiccion;
+    const base = ImportWizard.IIBB_JURISDICCIONES[j];
+    return base != null ? base : (ImportWizard.state.iibbPctCustom || 0.025);
+  },
 
   open() {
     const saved = localStorage.getItem(ImportWizard.CACHE_KEY);
     if (saved) { try { ImportWizard.state = Object.assign(ImportWizard.state, JSON.parse(saved)); } catch (e) {} }
+    // IT20: restaurar proyecto guardado (pedido + paso) si existe
+    const proy = localStorage.getItem(ImportWizard.PROJECT_KEY);
+    if (proy) { try { const p = JSON.parse(proy); if (p.step != null) ImportWizard.step = p.step; } catch (e) {} }
     const modal = document.getElementById('importWizardModal');
     if (modal) modal.style.display = 'flex';
     ImportWizard.render();
+  },
+
+  // Guarda el proyecto completo (pedido + paso + inputs) para retomar.
+  saveProject() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items.map(i => ({ sku: i.sku, qty: i.qty })) : [];
+    try {
+      localStorage.setItem(ImportWizard.PROJECT_KEY, JSON.stringify({
+        step: ImportWizard.step, items, state: ImportWizard.state, guardado: Date.now()
+      }));
+    } catch (e) {}
+    if (typeof toast === 'function') toast('Proyecto de importación guardado', 'success');
+  },
+
+  clearProject() {
+    try { localStorage.removeItem(ImportWizard.PROJECT_KEY); } catch (e) {}
   },
 
   close() {
@@ -127,6 +155,8 @@ const ImportWizard = {
   // ---- impuestos + aduana ----
   _render_impuestos() {
     const matrix = (typeof Calculator !== 'undefined' && Calculator.NCM_MATRIX) ? Calculator.NCM_MATRIX : {};
+    const s = ImportWizard.state;
+    const ii = ImportWizard._iibbPct();
     const rows = Object.entries(matrix).map(([k, r]) => {
       const ov = ImportWizard.state.ncmOverrides && ImportWizard.state.ncmOverrides[k];
       const di = (ov && ov.derechos != null) ? ov.derechos : r.derechos;
@@ -138,12 +168,23 @@ const ImportWizard = {
         <td style="padding:6px 8px;font-size:12px;">IVA ${Math.round(r.iva*100)}%</td>
         <td style="padding:6px 8px;font-size:12px;">+${Math.round(r.ivaAdd*100)}%</td>
         <td style="padding:6px 8px;font-size:12px;">Gan ${Math.round(r.percGan*100)}%</td>
-        <td style="padding:6px 8px;font-size:12px;">IIBB ${Math.round(r.iibb*1000)/10}%</td>
+        <td style="padding:6px 8px;font-size:12px;">IIBB ${Math.round(ii*1000)/10}%</td>
       </tr>`;
     }).join('');
     return `<div class="card" style="padding:18px;">
       <div class="page-sub" style="color:var(--text-muted);margin-bottom:8px;">Paso 4 — Tributos por NCM (matriz auditada 2026: ARCA, AFIP, Decreto 333/25)</div>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Base = CIF + Derechos + Tasa. IVA adicional 20% y anticipos (Ganancias 6%, IIBB 2.5%) son <strong>crédito fiscal recuperable</strong>. Podés ajustar el Derecho por categoría.</p>
+      <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 12px;font-size:12px;color:#fde047;margin-bottom:10px;">⚠️ Alícuotas verificadas a <strong>2026</strong>. Revisá actualizaciones de ARCA antes de despachar (la matriz no se actualiza sola).</div>
+      <div style="display:flex;gap:12px;align-items:end;margin-bottom:10px;">
+        <div><label class="wz-lbl">Jurisdicción IIBB</label>
+          <select class="select" onchange="ImportWizard.state.iibbJurisdiccion=this.value;ImportWizard.render()">
+            <option value="cab" ${s.iibbJurisdiccion==='cab'?'selected':''}>CABA (2.5%)</option>
+            <option value="pba" ${s.iibbJurisdiccion==='pba'?'selected':''}>PBA (3.5%)</option>
+            <option value="otra" ${s.iibbJurisdiccion==='otra'?'selected':''}>Otra — configurar</option>
+          </select></div>
+        ${s.iibbJurisdiccion==='otra'
+          ? `<div><label class="wz-lbl">IIBB %</label><input type="number" step="0.1" class="input" style="width:90px;" value="${Math.round((s.iibbPctCustom||0.025)*1000)/10}" onchange="ImportWizard.state.iibbPctCustom=Number(this.value)/100;ImportWizard.render()"></div>`
+          : ''}
+      </div>
       <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>NCM</th><th>Derecho</th><th>Tasa</th><th>IVA</th><th>IVA adic</th><th>Gan</th><th>IIBB</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
   },
@@ -176,6 +217,7 @@ const ImportWizard = {
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
     const res = Calculator.calculateDoorToDoorExactCost(items, {
       tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
       simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
     });
@@ -209,7 +251,54 @@ const ImportWizard = {
         <div><div class="iw-kpi-lbl">Multiplicador (caja/FOB)</div><div class="iw-kpi">${(sum.totalPuertaConIvaUsd / fobTotal).toFixed(2)}x</div></div>
       </div>
       <div class="table-scroll" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>NCM</th><th>Qty</th><th>Tributos</th><th>Costo unit+IVA</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportCsv()">⬇ Exportar resumen CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="ImportWizard.saveProject()">💾 Guardar proyecto</button>
+        <button class="btn btn-ghost btn-sm" onclick="ImportWizard.clearProject()">Descartar proyecto</button>
+      </div>
     </div>`;
+  },
+
+  // Exporta el resumen del proyecto a CSV (descarga).
+  exportCsv() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    if (!items.length) { if (typeof toast === 'function') toast('No hay pedido para exportar', 'error'); return; }
+    const s = ImportWizard.state;
+    const pesoKg = s.fleteModo === 'peso' ? s.pesoKg : 0;
+    const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
+    const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
+    const res = Calculator.calculateDoorToDoorExactCost(items, {
+      tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
+      depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
+      simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
+    });
+    const sum = res.summary;
+    const sep = ',';
+    const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const lines = [
+      ['Concepto', 'Valor USD'].join(sep),
+      ['FOB', sum.fobTotalUsd],
+      ['Flete', sum.fleteTotalUsd],
+      ['Seguro', sum.seguroTotalUsd],
+      ['CIF', sum.cifTotalUsd],
+      ['Derechos + Tasa + Anticipos', sum.totalTributosAduanaUsd],
+      ['IVA', sum.totalIvaAduanaUsd],
+      ['Gastos destino', sum.totalGastosFijosDestinoUsd],
+      ['Caja (todo lo que sale)', sum.totalPuertaConIvaUsd],
+      ['Costo neto real', sum.costoNetoRealUsd],
+      ['Crédito fiscal a favor', sum.totalRecuperableUsd],
+      [], ['SKU', 'NCM', 'Cantidad', 'Tributos USD', 'Costo unit+IVA USD']
+    ].map(r => r.length ? r.map(x => q(x)).join(sep) : '');
+    res.items.forEach(i => lines.push([i.sku, i.ncm, i.qty, Math.round(i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd), Math.round(i.costoRealItemUsd + i.ivaUsd)].map(x => q(x)).join(sep)));
+    const csv = '\uFEFF' + lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'importacion-mambo.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    if (typeof toast === 'function') toast('Resumen exportado a CSV', 'success');
   },
 
   _finish() {
