@@ -707,6 +707,11 @@ td {
 tbody tr {
   transition: var(--transition-fast);
 }
+/* IT18: zebra striping sutil para leer filas horizontales en tablas de muchas
+   columnas (pedido/catálogo). El hover lo pisa por encima (mismo selector). */
+tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
 
 tbody tr:hover td {
   background: rgba(255, 87, 34, 0.05);
