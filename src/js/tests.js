@@ -238,6 +238,11 @@ const Tests = {
     this.assert(gapMchose.gap === false, 'SLICE5: celda marca+color no genera gap (Mchose)');
     const gapEv = PdfParser.modelEvidenceGap({ modelo: 'V8', marca: 'Attack shark', cellRawText: 'V8 Black' });
     this.assert(gapEv.gap === false, 'SLICE5: V8 con evidencia literal no genera gap');
+    // IT15: filas nameless de specs (Haimu "Total Bottoming") son spec pura →
+    // heredan; palabras de plantilla (Standard/Business) NO son spec.
+    this.assert(PdfParser.isSpecOnlyModel('Total Bottoming') === true, 'IT15: Total Bottoming es spec pura (hereda)');
+    this.assert(PdfParser.isSpecOnlyModel('Standard') === false, 'IT15: Standard (plantilla) NO es spec');
+    this.assert(PdfParser.isSpecOnlyModel('Business') === false, 'IT15: Business (plantilla) NO es spec');
   },
 
   testWeightBasedFreight() {

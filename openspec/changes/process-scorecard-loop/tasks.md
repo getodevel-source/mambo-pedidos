@@ -417,7 +417,52 @@ Objetivo: cerrar los últimos procesos en 8 (P1, P4) y P17 (8→9 con minify).
 - [x] **Decisión P10 (IT13)**: separadores mixtos = ambigüedad inherente AR/US con parseo determinístico → ACEPTADA como deuda documentada (no es bug abierto). Fix solo si el usuario lo pide.
 - [x] **Decisión P1 (IT13)**: deuda arquitectónica pdfParser 2864 LOC / main thread ACEPTADA y documentada — refactor del parser = riesgo alto sobre P1/P19, cero valor de negocio.
 
-## Iteración 14 (06/08 — GENERALIZACIÓN: 9 YELLOW → 0, sin overfit)
+## Iteración 15 (06/08 — RESIDUOS: 12+6 YELLOW → 2, techo del parser ~alcanzado)
+
+Objetivo: los residuales del semáforo (generic-model ×5, bare-type ×3, truncated
+×2, mid-model ×2, ambiguous ×6 = 16 filas localizadas) — misma clase de bug,
+fixes generalizables, sin reglas por catálogo.
+
+### Diagnóstico
+- 16 filas: Irok "Black"/"Silver" (inicio de página, herencia sin cruzar páginas),
+  Logitech "Black" (cámara), KZ "New" ×2, Atk "BILL", AS "Business" ×2 +
+  "Receiver" ×3, Aula "Standard" ×3 + "(Extra keycap need be" ×2, Haimu
+  "3.0 0.50mn Switch 44..." ×2 (switch sin nombre en el texto — solo imagen).
+
+### Fixes GENERALIZABLES (SLICE 5, ronda 2)
+1. **Backfill de swap (bug preexistente)**: `for (k = pageProducts.length - 1...`
+   → `length - 2` — arrancaba en la fila recién pusheada (sin _needsModel) →
+   era dead code. Con el fix, las filas swap de inicio de página (Irok
+   Black/Silver, Logitech Black, KZ New) se corrigen con el modelo del bloque.
+2. `TYPE_KEYWORDS` + "receiver" (los 3 "Receiver" de Attack Shark → variante).
+3. Palabras de plantilla (Standard/Business/BILL/Special) → nunca modelo.
+4. Modelo que empieza con "(" → nota del PDF, fila bare (Aula "(Extra keycap").
+5. Specs numéricos puros en banda modelo → typeParts (Haimu "3.0"/"0.50mn"/"44").
+6. isDescriptor + isSpecOnlyModel += total|bottoming (filas nameless de switch).
+7. **Pitfall**: un patch de debug (P7) metió `|| headersFound` (variable
+   inexistente) en la condición de layout → todas las páginas fallaban
+   (ReferenceError silenciado por el catch por-página) → KZ −88 (catálogo
+   entero). Detectado por los missing del measure-extraction (casos 31-35).
+   Restaurada la condición exacta del commit.
+
+### Validación anti-overfit
+- **FP_rate_clean 8% (2/25) SIN CAMBIO** · recall 40% · measure-extraction
+  46/65 mejoras, 0 missing, 0 OK/MENOR→CRITICO.
+- **Audit PASS: G=2269 Y=40 R=0 (2309 prod)** vs IT14 2260/55 (2315) →
+  **+9 GREEN / −15 YELLOW** (−6 productos = consolidación de duplicados reales:
+  Irok Black/Silver → MG75 MAX, etc.). generic-model 6→2, bare-type 3→0,
+  mid-model 2→0, truncated 2→0.
+- YELLOW restantes = 38 placeholder sin foto (techo estructural fail-closed) +
+  2 "New" de KZ (el nombre del producto solo existe en la imagen del PDF —
+  irrecuperable desde el texto; el gate los flaguea honestamente).
+- npm test 710/710 (13 asserts SLICE5/IT15) · lint 0/0.
+- **El parser llegó a su techo práctico**: el pool mejorable quedó en ~2
+  productos (0.09%). El siguiente salto es de DATOS (fotos del proveedor para
+  los 38 placeholders) o PDFs nuevos para revalidar el hold-out.
+
+### Re-score
+- P1/P2/P5 se mantienen en 10 (evidencia reforzada: 98.2% GREEN, FP estable,
+  semáforo 6→2 genéricos). Nada baja.
 
 Objetivo (condición del usuario): subir el GREEN mejorando los PROCESOS (generalizable
 a cualquier PDF) — jamás con reglas por catálogo ni excepciones hardcodeadas.

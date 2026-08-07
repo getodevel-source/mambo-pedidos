@@ -874,7 +874,6 @@ const PdfParser = {
         });
       }
     }
-
     if (!priceAnchors.length) return [];
 
     // 4. Detectar layout: TABLA (1 columna de precios) vs GRILLA (múltiples columnas)
@@ -888,6 +887,7 @@ const PdfParser = {
     const hasSameRowColumns = priceAnchors.some((left, index) => priceAnchors.some((right, rightIndex) =>
       rightIndex > index && Math.abs(left.y - right.y) <= 30 && Math.abs(left.x - right.x) >= 40));
     if (uniqueXs.length === 1 || (uniqueXs.length <= 2 && !hasSameRowColumns)) {
+      // TABLE
       return this.extractPageProductsByTableRows(rawElements, priceAnchors, viewportHeight, pageNum, pageImages, brandFallback, customBrands, existingProducts, isPageNoise, isHeaderNoiseLine);
     }
 
@@ -1021,9 +1021,6 @@ const PdfParser = {
             // SLICE 5: bloque multi-línea — si la primera línea es spec pura
             // (sensor, unidad, feature) y hay una línea código arriba en la misma
             // banda X, el modelo es ese código ("V8 / PAW3950MAX / Black ¥...").
-            if (process.env.P6_DEBUG && /wrist|clicky|yellow|orange|ergonomic/i.test(rawModelo + ' ' + rawVariante)) {
-              console.error(`[P6A] rawModelo="${rawModelo}" var="${rawVariante}" cellLines=[${cellLines.join('|')}]`);
-            }
             if (rawModelo && this.isSpecOnlyModel(rawModelo) && cellTextItems.length) {
             const xRef = cellTextItems[0].x;
             const blockCode = this.findBlockCodeAbove(rawElements, isPageNoise, cellMinY, xRef - 60, xRef + 60);
@@ -1273,7 +1270,7 @@ pageProducts.push({
     // Regex para números CNY bare (ej: 235.75, 1,170.21)
     const CNY_BARE_RE = /^[\d,]+\.\d{1,2}$/;
     // Keywords de tipo de producto
-    const TYPE_KEYWORDS = /\b(wired|wireless|bluetooth|mechanical|optical|gaming|mouse|keyboard|headset|controller|earphone|earbuds|switch|numpad|mousepad|webcam|camera|microphone|chair|desk|hub|adapter|cable|stand)\b/i;
+    const TYPE_KEYWORDS = /\b(wired|wireless|bluetooth|mechanical|optical|gaming|mouse|keyboard|headset|controller|earphone|earbuds|switch|numpad|mousepad|webcam|camera|microphone|chair|desk|hub|adapter|cable|stand|receiver)\b/i;
 
     for (let i = 0; i < priceAnchors.length; i++) {
       const anchor = priceAnchors[i];
@@ -1314,6 +1311,9 @@ pageProducts.push({
         // the model band — they are part of the code, not noise.
         if (isPageNoise(txt) && !(el.x < 150 && /^[A-Z]$/.test(txt))) continue;
         if (isHeaderNoiseLine(txt)) continue;
+        // IT15: palabras de plantilla (labels de sección/estado del catálogo)
+        // como modelo — "Standard", "Business", "BILL" — nunca son un modelo.
+        if (/^(standard|business|bill|special)$/i.test(txt.trim()) && el.x < priceColX * 0.5) continue;
 
         // Filtrar CNY: símbolo ¥ y números bare cerca de la columna de precios
         if (CNY_SYMBOL_RE.test(txt)) continue;
@@ -1351,6 +1351,9 @@ pageProducts.push({
                 // SLICE 1b: residuo de cabecera/sub-cabecera en la banda modelo
                 // (ej: el label "Color" de las filas RK61) — nunca es un modelo.
                 if (this.HEADER_TOKEN_RE.test(txt)) continue;
+                // IT15: en la banda modelo, los valores numéricos puros de specs
+                // (Haimu "3.0"/"0.50mn"/"44") son parámetros técnicos, no modelo.
+                if (/^[\d.]+(\s*(mm|mn|g|kg))?$/i.test(txt.trim())) continue;
                 nameParts.push(txt);
                 if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
                 continue;
@@ -1368,7 +1371,7 @@ pageProducts.push({
             const isSwitchType = /\b(magnetic|hall\s*effect|linear|tactile|clicky|optical|mechanical|hot[\s-]?swap|pcb|gasket|foam|silicone|poron|ixpe|pet|fr4|aluminum|brass|carbon|axis|speed|kailh|kaihua|misty|biluo|gateron|outemu|ttc|hmx)\b/i.test(txt);
             const isSensorSpec = /\b(paw\d{4}\w*|8k|4k|2\.4g|tri[\s-]?mode|25k|30k|35k|26000|dpi)\b/i.test(txt);
             const isConnectionType = /\b(bluetooth|wired|wireless|usb[\s-]?c|rgb|nfc)\b/i.test(txt);
-            const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material)\b/i.test(txt);
+            const isDescriptor = /\b(print|side|limited|edition|engraving|release|new|matte|glossy|translucent|gradient|aurora|ice|cream|vein|axle|stroke|force|working|lower|upper|core|cover|material|total|bottoming)\b/i.test(txt);
             const isColor = /\b(black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|periwinkle|lavender|cream|obsidian|sakura|phantom|faker|wukong|myth|gunmetal|blackberry|berry|periwinkle|neon|flash|shadow|warrior|hunter|night|zenith|iceblade|primordial|wolf|arctic|fox|dream|whimsy|perilla|obsidian|any|tea)\b/i.test(txt);
 
                 if (isSwitchType || isSensorSpec || isConnectionType || isDescriptor) {
@@ -1376,8 +1379,14 @@ pageProducts.push({
                   // (x<180) holds the switch NAME (SeaSalt, Brown, Voice Actor),
                   // while "Switch"/"Mechanical" there are part of that name.
                   if (hasSpecsColumn && el.x < 60) {
-                    nameParts.push(txt);
-                    if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                    // IT15: una línea de specs EMPIEZA con dígito ("3.0 0.50mn
+                    // Switch 44 55 Pink Blue") — es parámetro técnico, no nombre.
+                    if (/^\d/.test(txt.trim())) {
+                      typeParts.push(txt);
+                    } else {
+                      nameParts.push(txt);
+                      if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                    }
                   } else {
                     typeParts.push(txt);
                   }
@@ -1388,8 +1397,15 @@ pageProducts.push({
                   colorParts.push(txt);
                 } else if (relX < 0.45) {
                   if (hasSpecsColumn && el.x < 60) {
-                    nameParts.push(txt);
-                    if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                    // IT15: en la banda de specs (Haimu), los VALORES numéricos
+                    // puros ("3.0", "0.50mn", "44", "55") son parámetros técnicos,
+                    // no parte del nombre — van a typeParts, no al modelo.
+                    if (/^[\d.]+(\s*(mm|mn|g|kg))?$/i.test(txt.trim())) {
+                      typeParts.push(txt);
+                    } else {
+                      nameParts.push(txt);
+                      if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
+                    }
                   } else if (TYPE_KEYWORDS.test(txt) && txt.split(' ').length <= 3) {
                     typeParts.push(txt);
                   } else if (/^[A-Za-z]+$/.test(txt) && nameParts.some(p => /\d/.test(p)) && firstCodeY !== null && relX > 0.15 && el.y > firstCodeY + 5) {
@@ -1423,9 +1439,6 @@ pageProducts.push({
       // Construir modelo y variante
       let rawModelo = nameParts.join(' ').replace(/\s+/g, ' ').trim();
       const rawVariante = [...typeParts, ...colorParts].join(' ').replace(/\s+/g, ' ').trim();
-      if (process.env.P6_DEBUG && /wrist|clicky|yellow|orange/i.test(rawModelo + ' ' + rawVariante)) {
-        console.error(`[P6] rawModelo="${rawModelo}" var="${rawVariante}" lastInh="${lastInheritedModel}" | nameParts=[${nameParts.join('|')}] type=[${typeParts.join('|')}] color=[${colorParts.join('|')}]`);
-      }
 
       // SLICE 5: bloque multi-línea — modelo spec puro con código arriba
       // (layout "V8 / PAW3950MAX / Black ¥...") → el modelo es ese código.
@@ -1450,7 +1463,11 @@ pageProducts.push({
       // ("Tri mode Berry" bajo un bloque G3). Sin esto, el modelo queda como
       // la spec y el reverse audit promueve basura desde la variante.
       const PURE_COLOR_RE = /^(transparent|black|white|pink|blue|red|green|purple|grey|gray|silver|gold|orange|brown|cyan|magenta|yellow|coffee|cream|berry|mint|navy|teal|beige|ivory|charcoal|rose|slate|olive|maroon|aqua|violet|indigo|peach|sky|jade|amber|coral|mocha|latte)$/i;
-      const modelIsBare = !rawModelo || this.isSpecOnlyModel(rawModelo) || PURE_COLOR_RE.test(rawModelo.trim());
+      // IT15: un modelo que empieza con "(" es una nota del PDF ("(Extra keycap
+      // need be ordered...") — nunca un modelo real → tratar como fila bare.
+      const noteAsModel = /^\s*\(/.test(rawModelo);
+      const modelIsBare = noteAsModel || !rawModelo || this.isSpecOnlyModel(rawModelo) || PURE_COLOR_RE.test(rawModelo.trim());
+      if (noteAsModel) rawModelo = '';
       // Guarda anti-basura: no heredar modelos ruidosos (líneas de estado de
       // producción, "items Mount Tai ... ceased") como modelo de familia.
       const MODEL_NOISE_RE = /\b(items?|ceased|released|production|those|small|only|new|upcoming|total|the)\b/i;
@@ -1577,8 +1594,12 @@ if (!rawModelo) continue;
       // SLICE 2 backfill: esta fila tiene modelo real y las anteriores quedaron con
       // un swap de color/switch (celda de modelo fusionada con texto centrado).
       // Corrige TODAS las filas swap consecutivas pendientes (no solo la última).
+      // IT15: arranca en length-2 — la fila recién pusheada (length-1) tiene modelo
+      // real y nunca lleva _needsModel; sin esto el backfill era dead code y las
+      // filas swap de inicio de página (Irok "Black"/"Silver", Logitech "Black")
+      // quedaban con el color como modelo.
       if (!rowModelEmpty && !modelFromSwap) {
-        for (let k = pageProducts.length - 1; k >= 0 && pageProducts[k] && pageProducts[k]._needsModel; k--) {
+        for (let k = pageProducts.length - 2; k >= 0 && pageProducts[k] && pageProducts[k]._needsModel; k--) {
           const prev = pageProducts[k];
           const restoredVariante = prev.variante || '';
           prev.modelo = sanitized.modelo;
@@ -1766,7 +1787,7 @@ if (!rawModelo) continue;
     const tokens = text.toLowerCase().split(/[\s\-+/]+/).filter(Boolean);
     if (!tokens.length) return false;
     if (/^paw\d[\w]*$/i.test(tokens.join(''))) return true;
-    const SPEC_TOKEN_RE = /^(tri|mode|charging|charge|dock|wireless|wired|bluetooth|mechanical|magnetic|carbon|fiber|rapid|trigger|hall|effect|ice|axis|switch|keycap|engraving|gradient|screen|display|paw\d[\w]*|with|and|\d+(\.\d+)?(k|khz|ghz|mhz|hz|dpi|g|mm|%|mah|mv|db))$/i;
+    const SPEC_TOKEN_RE = /^(tri|mode|charging|charge|dock|wireless|wired|bluetooth|mechanical|magnetic|carbon|fiber|rapid|trigger|hall|effect|ice|axis|switch|keycap|engraving|gradient|screen|display|paw\d[\w]*|with|and|total|bottoming|\d+(\.\d+)?(k|khz|ghz|mhz|hz|dpi|g|mm|%|mah|mv|db))$/i;
     return tokens.every(t => SPEC_TOKEN_RE.test(t));
   },
 
