@@ -193,6 +193,15 @@ function testCalculator() {
   const cfgOverride = Calculator.getCostConfig({ derechos: 10 }, [{ cat: 'TECLADO', modelo: 'F75', variante: '' }]);
   assert(Math.abs(cfgOverride.derechos - 0.10) < 1e-9, 'IT30: override del usuario mantiene prioridad');
 
+  // IT33: markup por categoría (precedencia override > matriz-default > global)
+  assert(Math.abs(Calculator.getMarkup('CABLE', 2.5, null) - 2.0) < 1e-9, 'IT33: cable usa markup de matriz (2.0)');
+  assert(Math.abs(Calculator.getMarkup('TECLADO', 2.0, null) - 2.0) < 1e-9, 'IT33: markup global explícito (2.0) gana sobre matriz');
+  assert(Math.abs(Calculator.getMarkup('CABLE', 2.5, { CABLE: 3.0 }) - 3.0) < 1e-9, 'IT33: override por categoría gana');
+  assert(Math.abs(Calculator.getMarkup('GATO', 2.5, null) - 2.5) < 1e-9, 'IT33: categoría desconocida usa default');
+  const pvpCable = Calculator.getMarkup('CABLE', 2.5, null);
+  const pvpTecl = Calculator.getMarkup('TECLADO', 2.5, null);
+  assert(Math.abs(pvpCable - 2.0) < 1e-9 && Math.abs(pvpTecl - 2.5) < 1e-9, 'IT33: cable y teclado tienen márgenes distintos en default');
+
   // IT23: override de NCM por categoría (código + DI) se refleja en el motor
   const d2dOv = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'M-1', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],

@@ -59,6 +59,29 @@ const Calculator = {
     'LITIO_DG': { title: '🔋 Recargo Batería de Litio (IATA Dangerous Goods)', costUsd: 75, description: 'Recargo de transporte aéreo por materiales peligrosos (Li-Ion)' }
   },
 
+  // IT33: márgenes de referencia por categoría (markup sobre costo neto real).
+  // Valores realistas del rubro: accesorios baratos (cables, pads) llevan markup
+  // mayor; hardware (teclados, mouse) menos. Override por configuración del usuario.
+  MARKUP_MATRIX: {
+    TECLADO: 2.5, MOUSE: 2.5, MOUSEPAD: 2.8, AURICULARES: 2.8, HEADSET: 2.8,
+    EARBUDS: 2.8, CONTROLLER: 2.4, SWITCH: 2.2, KEYCAP: 2.6, CABLE: 2.0,
+    HUB: 2.0, ADAPTER: 1.9, DOCK: 2.0, STAND: 2.2, WEBCAM: 2.3, CAMARA: 2.3,
+    MONITOR: 1.8, SILLA: 1.6, DESK: 1.7, MICROFONO: 2.4, RECEIVER: 2.0,
+    LAVADORA: 1.5, ELECTRODOMESTICO: 1.5, CELULAR: 1.35, TV: 1.4, IMPRESORA: 1.6,
+    OTRO: 2.5
+  },
+
+  // IT33: markup efectivo para una categoría. Precedencia:
+  // 1. overrides[cat] (override por categoría del usuario — máxima prioridad)
+  // 2. matriz por categoría SOLO si el user usa el default 2.5 (no fijó markup global)
+  // 3. defaultMarkup (lo que fijó el user, o 2.5)
+  getMarkup(cat, defaultMarkup = 2.5, overrides = null) {
+    const key = String(cat || '').toUpperCase();
+    if (overrides && overrides[key] != null) return overrides[key];
+    if (this.MARKUP_MATRIX[key] != null && Math.abs((defaultMarkup || 0) - 2.5) < 1e-9) return this.MARKUP_MATRIX[key];
+    return defaultMarkup;
+  },
+
   getCostConfig(inputs = {}, items = []) {
     // IT30: default de derechos NCM-aware — si el usuario no fija derechos,
     // deriva del NCM dominante de los ítems (teclados/mouse BIT = 0%, no 16% stale).
@@ -91,6 +114,7 @@ const Calculator = {
       desp: this.parseNum(inputs.desp, 500),
       courier: this.parseNum(inputs.courier, 8),
       markup: this.parseNum(inputs.markup, 2.5),
+      markupOverrides: inputs.markupOverrides || null,
       tipoCambio: this.parseNum(inputs.tipoCambio, 1400.0),
       incluirIva: inputs.incluirIva !== undefined ? inputs.incluirIva : false,
     };
@@ -134,7 +158,7 @@ const Calculator = {
       const costoU = totalFob > 0
         ? Math.round(fob * factorCosto * 100) / 100
         : (totalQty > 0 ? Math.round((totalCostoNeto / totalQty) * 100) / 100 : 0);
-      const pvp = Math.round(costoU * config.markup * 100) / 100;
+      const pvp = Math.round(costoU * this.getMarkup(item.cat, config.markup, config.markupOverrides) * 100) / 100;
       const subFob = fob * qty;
       const subPvp = pvp * qty;
       const subCosto = costoU * qty;
