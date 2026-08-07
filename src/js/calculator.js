@@ -37,7 +37,20 @@ const Calculator = {
     'MONITOR': { ncm: '8528.52.00', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
     'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
     'SWITCH': { ncm: '8536.50.90', derechos: 0.14, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
-    'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] }
+    'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    // IT22: generalización — electrodomésticos y electrónica de consumo (DI validado
+    // vía pcram.net/AEC MERCOSUR ≈20%; celular 0% por Decreto 333/25).
+    'IMPRESORA': { ncm: '8443.32.90', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'LAVADORA': { ncm: '8450.11.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'HELADERA': { ncm: '8418.21.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'TV': { ncm: '8528.72.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'MICROONDAS': { ncm: '8516.50.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'AIRE': { ncm: '8415.10.19', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'ASPIRADORA': { ncm: '8508.11.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'CAFETERA': { ncm: '8516.71.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'LICUADORA': { ncm: '8509.40.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'PLANCHA': { ncm: '8516.40.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'CELULAR': { ncm: '8517.13.00', derechos: 0, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] }
   },
 
   CERTIFICATIONS_INFO: {

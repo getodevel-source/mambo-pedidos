@@ -2569,8 +2569,20 @@ if (!rawModelo) continue;
       { cat: 'SPEAKER', re: /\b(speaker|leviathan|nommo|soundbar)\b/i, conf: 85 },
       { cat: 'SILLA_GAMING', re: /\b(chair|enki|iskur|fujin|gaming\s*chair)\b/i, conf: 85 },
       { cat: 'ACCESORIO', re: /\b(fan|kunai|hanbo|computer\s*case|tomahawk|aio\s*cooler|cpu\s*cooler)\b/i, conf: 75 },
-      { cat: 'TECLADO', re: /\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i, conf: 60 }
-    ];
+      { cat: 'TECLADO', re: /\b(keys?\b.*\baxis|axis\b.*\bkeys?|\d+\s*keys|\baxis\b)\b/i, conf: 60 },
+            // IT22: electrodomésticos / electrónica de consumo (generalización)
+            { cat: 'CELULAR', re: /\b(smartphone|celular|iphone|galaxy|redmi|poco x|poco f|aparelho)\b/i, conf: 85 },
+            { cat: 'IMPRESORA', re: /\b(printer|impresora|multifunction|multifuncional|inkjet|laserjet)\b/i, conf: 88 },
+            { cat: 'LAVADORA', re: /\b(washing machine|lavadora|lavarropas|washer|lavasecarropas)\b/i, conf: 88 },
+            { cat: 'HELADERA', re: /\b(refrigerator|fridge|heladera|freezer|congelador|refrigerador)\b/i, conf: 88 },
+            { cat: 'MICROONDAS', re: /\b(microwave|microondas|micro ondas)\b/i, conf: 88 },
+            { cat: 'AIRE', re: /\b(air conditioner|aire acondicionado|split acondicionado|acondicionado de aire)\b/i, conf: 88 },
+            { cat: 'ASPIRADORA', re: /\b(vacuum cleaner|aspiradora|robot vacuum|roomba|scooba)\b/i, conf: 88 },
+            { cat: 'CAFETERA', re: /\b(coffee maker|cafetera|espresso machine|nespresso|dolce gusto)\b/i, conf: 88 },
+            { cat: 'LICUADORA', re: /\b(blender|licuadora|food processor|procesadora)\b/i, conf: 85 },
+            { cat: 'PLANCHA', re: /\b(steam iron|plancha|vaporizador)\b/i, conf: 85 },
+            { cat: 'TV', re: /\b(television|smart tv|led tv|oled tv|qled tv|curved tv)\b/i, conf: 85 }
+          ];
 
     // #6: Short ambiguous tokens that cause false positives
     const AMBIGUOUS_TOKENS = new Set(['a5', 'l7', 'g3', 'x3', 'r1', 'mat', 'a5v3']);
