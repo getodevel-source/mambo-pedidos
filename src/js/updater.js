@@ -266,6 +266,7 @@ const AppUpdater = {
       await new Promise((resolve, reject) => {
         let channel = null;
         let timeout = null;
+        let downloadedBytes = 0;
 
         const cleanup = () => {
           if (channel) { try { channel.onmessage = null; } catch { } channel = null; }
@@ -281,12 +282,16 @@ const AppUpdater = {
               const ev = e && e.event;
               if (ev === 'Started') {
                 if (progressText) progressText.textContent = '⬇️ Descargando actualización firmada...';
-                if (progressBarInner) progressBarInner.style.width = '15%';
+                if (progressBarInner) progressBarInner.style.width = '10%';
               } else if (ev === 'Progress') {
                 const chunk = (e && e.data && e.data.chunkLength) || 0;
-                const pct = Math.min(90, Math.max(15, Math.round(chunk / 1024)));
+                downloadedBytes += chunk;
+                // El plugin no da el total → barra indeterminada honesta: crece
+                // logarítmicamente hacia 90% y se muestra el MB acumulado real.
+                const mb = (downloadedBytes / 1048576).toFixed(1);
+                const pct = Math.min(90, 10 + Math.log10(downloadedBytes + 1) * 8);
                 if (progressBarInner) progressBarInner.style.width = pct + '%';
-                if (progressText) progressText.textContent = '⬇️ Descargando... ' + pct + '%';
+                if (progressText) progressText.textContent = `⬇️ Descargando... ${mb} MB`;
               } else if (ev === 'Finished') {
                 if (progressBarInner) progressBarInner.style.width = '95%';
                 if (progressText) progressText.textContent = '🔧 Instalando actualización...';
