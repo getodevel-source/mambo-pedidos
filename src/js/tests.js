@@ -758,6 +758,15 @@ const Tests = {
     this.assert(res.items.some(i => i.ncm === '8471.60.53'), 'Identificó la Posición Arancelaria NCM 8471.60.53 para teclados/mouses inalámbricos');
     this.assert(res.certificationsRequired.some(c => c.title.includes('ENACOM')), 'Detectó la necesidad de trámite de Homologación ENACOM por Radiofrecuencia/BT');
     this.assert(res.items[0].costoPuertaUnitUsd > items[0].fob, 'El Costo Puerta Unitario contempla tributos SIM, fletes y certificaciones');
+
+    // IT19 (crédito fiscal validado ARCA/AFIP): IVA adicional 20% (no 10%),
+    // y desglose caja vs costo neto real (restando lo recuperable).
+    const kb = res.items.find(i => i.ncm === '8471.60.53');
+    this.assert(Math.abs(kb.ivaAddUsd / (kb.baseImp || kb.itemCif + kb.derechosUsd + kb.tasaUsd) - 0.20) < 0.001, 'IT19: IVA adicional = 20% (validado ARCA — alícuota general)');
+    this.assert(kb.recuperableUsd > kb.ivaUsd, 'IT19: lo recuperable (IVA+anticipos) supera el IVA solo');
+    const s = res.summary;
+    this.assert(s.costoNetoRealUsd > 0 && s.costoNetoRealUsd < s.totalPuertaConIvaUsd, 'IT19: costo neto real < caja (bruto con IVA)');
+    this.assert(s.creditoFiscalArs > 0, 'IT19: hay crédito fiscal a favor en ARS (recuperable)');
   },
 
   testCorporateNoiseSanitizer() {

@@ -344,12 +344,26 @@ const UIModals = {
   </div>`;
 
     html += `<div class="card kpi-mini is-hero">
-    <div class="kpi-mini-label val-green">COSTO NETO PUESTO EN PUERTA</div>
-    <div style="font-size: 20px; font-weight: 800; color: #34d399;">$${Math.round(s.totalPuertaUsd).toLocaleString()} USD</div>
-    <div style="font-size: 11px; color: #34d399; font-weight: 700;">ARS $${Math.round(s.totalPuertaArs).toLocaleString()} · Bruto con IVA $${Math.round(s.totalPuertaConIvaUsd).toLocaleString()} USD</div>
-  </div>`;
+        <div class="kpi-mini-label val-green">COSTO NETO PUESTO EN PUERTA</div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399;">$${Math.round(s.totalPuertaUsd).toLocaleString()} USD</div>
+        <div style="font-size: 11px; color: #34d399; font-weight: 700;">ARS $${Math.round(s.totalPuertaArs).toLocaleString()} · Bruto con IVA $${Math.round(s.totalPuertaConIvaUsd).toLocaleString()} USD</div>
+      </div>`;
 
-    html += `</div>`;
+        // IT19: costo neto real (deduciendo el crédito fiscal recuperable) vs caja
+        const netoReal = s.costoNetoRealUsd || 0;
+        const credito = s.totalRecuperableUsd || 0;
+        html += `<div class="card kpi-mini">
+        <div class="kpi-mini-label val-blue">COSTO NETO REAL (post crédito fiscal)</div>
+        <div class="kpi-mini-value val-blue">$${Math.round(netoReal).toLocaleString()} USD</div>
+        <div class="kpi-mini-sub">ARS $${Math.round((s.costoNetoRealArs || 0)).toLocaleString()} — tu costo VERDADERO de la mercadería</div>
+      </div>`;
+        html += `<div class="card kpi-mini is-green">
+        <div class="kpi-mini-label">Crédito fiscal a favor (recuperable)</div>
+        <div class="kpi-mini-value">$${Math.round(credito).toLocaleString()} USD</div>
+        <div class="kpi-mini-sub">IVA + IVA adicional + Ganancias + IIBB (pagos a cuenta) — ARS $${Math.round((s.creditoFiscalArs || 0)).toLocaleString()}</div>
+      </div>`;
+
+        html += `</div>`;
 
     if (res.certificationsRequired && res.certificationsRequired.length > 0) {
       html += `<div class="card" style="padding: 14px; background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); border-radius: 8px; margin-bottom: 16px;">`;

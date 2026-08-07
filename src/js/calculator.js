@@ -27,17 +27,17 @@ const Calculator = {
 
   // Matriz NCM Aduanera y Regulaciones (Argentina / MERCOSUR)
   NCM_MATRIX: {
-    'TECLADO_CABLE': { ncm: '8471.60.52', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
-    'TECLADO_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'MOUSE_CABLE': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
-    'MOUSE_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'HEADSET_CABLE': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
-    'HEADSET_WIRELESS': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'CONTROLLER_WIRELESS': { ncm: '9504.50.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'MONITOR': { ncm: '8528.52.00', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
-    'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
-    'SWITCH': { ncm: '8536.50.90', derechos: 0.14, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] },
-    'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.10, percGan: 0.06, iibb: 0.025, certs: [] }
+    'TECLADO_CABLE': { ncm: '8471.60.52', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'TECLADO_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'MOUSE_CABLE': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'MOUSE_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'HEADSET_CABLE': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'HEADSET_WIRELESS': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'CONTROLLER_WIRELESS': { ncm: '9504.50.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'MONITOR': { ncm: '8528.52.00', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'SWITCH': { ncm: '8536.50.90', derechos: 0.14, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] }
   },
 
   CERTIFICATIONS_INFO: {
@@ -286,6 +286,11 @@ const Calculator = {
          iibbUsd,
          totalTributosItemUsd,
          totalTributosItemConIvaUsd: totalTributosItemUsd + ivaUsd,
+        // IT19 (crédito fiscal): IVA + IVA adicional + Ganancias + IIBB son
+        // pagos a cuenta recuperables (crédito fiscal a favor del inscripto).
+        // El costo REAL neto = solo DI + TE (no recuperables).
+        recuperableUsd: ivaUsd + ivaAddUsd + percGanUsd + iibbUsd,
+        costoRealItemUsd: itemCif + derechosUsd + tasaUsd,
         certs: ncmRule.certs
       };
     });
@@ -304,6 +309,11 @@ const Calculator = {
     const totalGastosFijosDestinoUsd = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd + totalCertsCostUsd;
     const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd, 0);
     const totalIvaAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.ivaUsd, 0);
+    // IT19 (crédito fiscal): lo recuperable = IVA + anticipos (IVA add + Ganancias + IIBB).
+    // Caja = todo lo que sale al despachar. Costo neto real = solo lo NO recuperable.
+    const totalRecuperableUsd = totalIvaAduanaUsd + itemCalculations.reduce((sum, i) => sum + i.ivaAddUsd + i.percGanUsd + i.iibbUsd, 0);
+    const totalAnticiposRecuperablesUsd = totalRecuperableUsd - totalIvaAduanaUsd;
+    const costoNetoRealUsd = cifTotal + (totalTributosAduanaUsd - totalAnticiposRecuperablesUsd) + totalGastosFijosDestinoUsd;
 
     const totalPuertaUsd = cifTotal + totalTributosAduanaUsd + totalGastosFijosDestinoUsd;
     const totalPuertaConIvaUsd = totalPuertaUsd + totalIvaAduanaUsd;
@@ -347,6 +357,12 @@ const Calculator = {
         totalPuertaConIvaUsd,
         totalPuertaConIvaArs: totalPuertaConIvaUsd * tc,
         totalPuertaArs,
+        // IT19: crédito fiscal a favor (recuperable) y costo neto real
+        totalRecuperableUsd,
+        totalAnticiposRecuperablesUsd,
+        costoNetoRealUsd,
+        costoNetoRealArs: costoNetoRealUsd * tc,
+        creditoFiscalArs: totalRecuperableUsd * tc,
         tipoCambio: tc
       }
     };
