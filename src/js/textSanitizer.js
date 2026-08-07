@@ -580,6 +580,22 @@ const TextSanitizer = {
       reasons.push('El código del producto no llegó al modelo (celda fusionada/matriz)');
     }
 
+    // Infalibilidad IT17 (spec infallibility-contract): los 24 falsos negativos
+    // auditados son (a) modelos con código real + sufijo de TIPO al final, y
+    // (b) modelos degenerados a palabra genérica. Dos reglas:
+    const mHasCode = /(?:^|[\s-])(?!paw\d)([A-Za-z]{1,6}\d{1,4}[\w+]?)/i.test(m);
+    // (a) DESCARTADA en la auditoría IT17: "M720 Wireless Mouse" y "F75 Gasket
+    //     Keyboard" son estructuralmente idénticos (código + palabras de tipo) y
+    //     el gate no puede distinguir "inflado-dirty" de "nombre descriptivo
+    //     legítimo" sin conocimiento del catálogo. La propia convención del app
+    //     (testCatalogValidatorRules) trata "F75 Gasket Keyboard" como GREEN
+    //     válido. El tipo-inflado va a la COLA HUMANA (P4), no al gate.
+    // (b) "Rose", "Standard", "Zero", "Ultimate" — palabra genérica sin código.
+    const GENERIC_WORD_RE = /^(?:rose|zero|standard|ultimate|long|high\s+resolution|transparent|charging\s*dock|contour|turbo\+?|business|new|item|product)$/i;
+    if (!mHasCode && GENERIC_WORD_RE.test(m.trim())) {
+      reasons.push('El modelo es una palabra genérica (no un código de producto) — requiere revisión');
+    }
+
     return { level: reasons.length ? 'YELLOW' : 'GREEN', reasons };
   }
 };

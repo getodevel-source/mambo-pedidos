@@ -26,6 +26,7 @@ const Tests = {
     this.testLatamDecimalFormat();
     this.test8BitDoBrand();
     this.testParserGeneralizationFixes();
+    this.testInfallibilityGate();
     this.testWeightBasedFreight();
     this.testCourierWarnings();
     this.testTextSanitizer();
@@ -243,6 +244,27 @@ const Tests = {
     this.assert(PdfParser.isSpecOnlyModel('Total Bottoming') === true, 'IT15: Total Bottoming es spec pura (hereda)');
     this.assert(PdfParser.isSpecOnlyModel('Standard') === false, 'IT15: Standard (plantilla) NO es spec');
     this.assert(PdfParser.isSpecOnlyModel('Business') === false, 'IT15: Business (plantilla) NO es spec');
+  },
+
+  testInfallibilityGate() {
+    // IT17 (spec infallibility-contract): el gate de calidad de modelo debe
+    // flaguear los modelos inflados/degenerados (los 24 falsos negativos
+    // auditados) sin flaguear los modelos reales.
+    const q = (m) => TextSanitizer.assessModelQuality(m, '', 'MOUSE', (m || '') + ' row');
+    const y = (m, label) => this.assert((q(m) || {}).level === 'YELLOW', label);
+    const g = (m, label) => this.assert((q(m) || {}).level === 'GREEN', label);
+    // palabra genérica degenerada → YELLOW (regla segura IT17)
+    y('Rose', 'INF: Rose degenerado → YELLOW');
+    y('Standard', 'INF: Standard degenerado → YELLOW');
+    y('Zero', 'INF: Zero degenerado → YELLOW');
+    y('Ultimate', 'INF: Ultimate degenerado → YELLOW');
+    // modelos reales NO se flaguean
+    g('M720', 'INF: M720 limpio → GREEN');
+    g('BlackWidow V4', 'INF: BlackWidow V4 limpio → GREEN');
+    g('G502', 'INF: G502 limpio → GREEN');
+    g('V8', 'INF: V8 limpio → GREEN');
+    // modelo descriptivo legítimo NO se flaguea (convención del app)
+    g('F75 Gasket Keyboard', 'INF: F75 Gasket Keyboard (descriptivo legítimo) → GREEN');
   },
 
   testWeightBasedFreight() {
