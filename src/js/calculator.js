@@ -59,7 +59,23 @@ const Calculator = {
     'LITIO_DG': { title: '🔋 Recargo Batería de Litio (IATA Dangerous Goods)', costUsd: 75, description: 'Recargo de transporte aéreo por materiales peligrosos (Li-Ion)' }
   },
 
-  getCostConfig(inputs = {}) {
+  getCostConfig(inputs = {}, items = []) {
+    // IT30: default de derechos NCM-aware — si el usuario no fija derechos,
+    // deriva del NCM dominante de los ítems (teclados/mouse BIT = 0%, no 16% stale).
+    let defaultDerechos = 16;
+    if (inputs.derechos === undefined && Array.isArray(items) && items.length) {
+      const dis = items.map(it => {
+        const key = this.ncmKeyFor(it);
+        const info = this.NCM_MATRIX[key];
+        if (!info) return null;
+        if (typeof NcmDatabase !== 'undefined' && NcmDatabase._db) {
+          const db = NcmDatabase.byCode(info.ncm);
+          if (db && db.di != null) return db.di;
+        }
+        return info.derechos;
+      }).filter(v => v != null);
+      if (dis.length) defaultDerechos = dis.reduce((a, b) => a + b, 0) / dis.length * 100;
+    }
     return {
       fletePct: this.parseNum(inputs.flete, 15) / 100,
       fleteModo: inputs.fleteModo || 'porcentaje',
@@ -68,7 +84,7 @@ const Calculator = {
       logisticaModo: inputs.logisticaModo || 'courier',
       transporteModo: inputs.transporteModo || 'aereo',
       seguro: this.parseNum(inputs.seguro, 2) / 100,
-      derechos: this.parseNum(inputs.derechos, 16) / 100,
+      derechos: this.parseNum(inputs.derechos, defaultDerechos) / 100,
       tasa: this.parseNum(inputs.tasa, 3) / 100,
       perc: this.parseNum(inputs.perc, 6) / 100,
       ivaPct: this.parseNum(inputs.ivaPct, 21) / 100,
@@ -81,7 +97,7 @@ const Calculator = {
   },
 
   calculateOrder(items = [], costConfig = {}) {
-    const config = this.getCostConfig(costConfig);
+    const config = this.getCostConfig(costConfig, items);
     const tc = config.tipoCambio;
 
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);

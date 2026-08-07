@@ -185,6 +185,14 @@ function testCalculator() {
   assert(keyMouse === 'MOUSE_WIRELESS' && Calculator.NCM_MATRIX[keyMouse].ncm === '8471.60.53', 'IT23: mouse wireless → 8471.60.53');
   assert(NcmDatabase.byCode(Calculator.NCM_MATRIX[keyTecl].ncm).di === 0, 'IT23: DI teclado 0% (autoritativo ARCA, no 12%)');
 
+  // IT30: default de derechos NCM-aware (teclado BIT → 0%, no 16% stale)
+  const cfgTecl = Calculator.getCostConfig({}, [{ cat: 'TECLADO', modelo: 'F75', variante: '' }]);
+  assert(Math.abs(cfgTecl.derechos - 0) < 1e-9, `IT30: default derechos para teclado BIT = 0% (got ${cfgTecl.derechos})`);
+  const cfgStale = Calculator.getCostConfig({}, [{ cat: 'LAVADORA', modelo: 'X', variante: '' }]);
+  assert(Math.abs(cfgStale.derechos - 0.2) < 1e-9, 'IT30: default derechos para lavadora = 20%');
+  const cfgOverride = Calculator.getCostConfig({ derechos: 10 }, [{ cat: 'TECLADO', modelo: 'F75', variante: '' }]);
+  assert(Math.abs(cfgOverride.derechos - 0.10) < 1e-9, 'IT30: override del usuario mantiene prioridad');
+
   // IT23: override de NCM por categoría (código + DI) se refleja en el motor
   const d2dOv = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'M-1', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],
