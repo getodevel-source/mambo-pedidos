@@ -31,9 +31,9 @@
 
   /* Typography Colors */
   --text: #F8FAFC;
-  --text-muted: #94A3B8;
-  --text-dim: #64748B;
-  --text-inverse: #07080C;
+    --text-muted: #A8B5C7;
+    --text-dim: #8B98AC;
+    --text-inverse: #07080C;
 
   /* Primary Accent — Ignition Orange */
   --primary: #FF5722;
@@ -862,6 +862,12 @@ select option, .select option {
   flex-shrink: 0;
   box-shadow: 0 0 6px currentColor;
 }
+/* IT18: dots del banner usan tokens/clases, no hex inline */
+.dolar-dot.d-mayorista { background: #e2e8f0; color: #e2e8f0; }
+.dolar-dot.d-oficial   { background: #94a3b8; color: #94a3b8; }
+.dolar-dot.d-blue      { background: var(--blue); color: var(--blue); }
+.dolar-dot.d-mep       { background: #a5b4fc; color: #a5b4fc; }
+.dolar-dot.d-cripto    { background: var(--green); color: var(--green); }
 .dolar-label {
   font-family: var(--font-body);
   font-size: 10.5px;
