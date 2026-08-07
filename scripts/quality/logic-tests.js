@@ -297,6 +297,19 @@ function testSkuAllocator() {
   assert(SkuAllocator.generatedSku({ marca: 'Logitech', modelo: 'G203', variante: 'Black', cat: 'MOUSE' }, '') === gen, 'generatedSku es determinista para el mismo identity+salt');
   assert(SkuAllocator.generatedSku({ marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, '#1234') !== SkuAllocator.generatedSku({ marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, ''), 'Salt distinto → SKU generado distinto');
 
+  // IT27: parseo DRY compartido (CSV y Excel producen los mismos items)
+  const FileImporter = require('../../src/js/fileImporter.js');
+  const parsed = FileImporter._parseItems([
+    { 'Modelo': 'F75', 'Marca': 'AULA', 'Categoría': 'Teclado', 'FOB USD': '31.75', 'SKU': 'TEC-001' },
+    { 'Modelo': 'G203', 'Marca': 'Logitech', 'Categoría': 'Mouse', 'FOB USD': '20.00' },
+    { 'Marca': 'X', 'FOB USD': '10' },          // sin modelo → skip
+    { 'Modelo': 'Y', 'Marca': 'Z', 'FOB USD': '' } // sin FOB → skip
+  ], []);
+  assert(parsed.items.length === 2, `IT27: _parseItems importa 2 filas válidas (got ${parsed.items.length})`);
+  assert(parsed.items[0].sku === 'TEC-001' && parsed.items[0].fob === 31.75, 'IT27: SKU y FOB resueltos');
+  assert(parsed.items[1].sku.length > 0, 'IT27: SKU auto-generado cuando falta');
+  assert(parsed.skippedNoModel === 1 && parsed.skippedNoFob === 1, 'IT27: filas incompletas contadas');
+
   // allocateBatch: entradas inválidas
   assert(Array.isArray(SkuAllocator.allocateBatch('nope', [])) && SkuAllocator.allocateBatch('nope', []).length === 0, 'allocateBatch con input no-array retorna []');
   const withNulls = [{ sku: '', marca: 'AULA', modelo: 'F75', cat: 'TECLADO' }, null, undefined, 'string'];

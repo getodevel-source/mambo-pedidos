@@ -68,6 +68,35 @@ const FileImporter = {
     return `${prefix}-${catCode}-${String(n).padStart(4, '0')}`;
   },
 
+  // IT27: parseo compartido de filas (DRY — usado por CSV y Excel).
+  // Devuelve { items, skippedNoModel, skippedNoFob }.
+  _parseItems(jsonRows, catalog) {
+    const items = [];
+    let skippedNoModel = 0;
+    let skippedNoFob = 0;
+    for (const row of jsonRows) {
+      const modelo = this.resolveField(row, 'modelo');
+      if (!modelo) { skippedNoModel++; continue; }
+      const fobRaw = this.resolveField(row, 'fob');
+      const fob = parseFloat(fobRaw) || 0;
+      if (!fob) { skippedNoFob++; continue; }
+      const marca = this.resolveField(row, 'marca');
+      const cat = this.resolveField(row, 'categoria') || 'OTRO';
+      const variante = this.getVariant(row);
+      const sku = this.resolveField(row, 'sku') || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
+      items.push({ sku, cat, marca, modelo, variante, fob });
+    }
+    return { items, skippedNoModel, skippedNoFob };
+  },
+
+  _reportSkipped(skippedNoModel, skippedNoFob, total, source) {
+    if (skippedNoModel > 0 || skippedNoFob > 0) {
+      const msg = `${source}: ${skippedNoModel} filas sin Modelo, ${skippedNoFob} sin FOB (de ${total} totales)`;
+      console.warn(msg);
+      if (typeof toast === 'function') toast(`⚠️ ${source}: se saltaron ${skippedNoModel + skippedNoFob} filas incompletas`, 'warning');
+    }
+  },
+
   async processCsvFile(file, catalog = []) {
     return new Promise((resolve, reject) => {
       Papa.parse(file, {
@@ -85,26 +114,8 @@ const FileImporter = {
             }
           }
 
-          const items = [];
-          let skippedNoModel = 0;
-          let skippedNoFob = 0;
-          for (const row of r.data) {
-            const modelo = this.resolveField(row, 'modelo');
-            if (!modelo) { skippedNoModel++; continue; }
-            const fobRaw = this.resolveField(row, 'fob');
-            const fob = parseFloat(fobRaw) || 0;
-            if (!fob) { skippedNoFob++; continue; }
-
-            const marca = this.resolveField(row, 'marca');
-            const cat = this.resolveField(row, 'categoria') || 'OTRO';
-            const variante = this.getVariant(row);
-            const sku = this.resolveField(row, 'sku') || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
-
-            items.push({ sku, cat, marca, modelo, variante, fob });
-          }
-          if (skippedNoModel > 0 || skippedNoFob > 0) {
-            console.warn(`CSV import: ${skippedNoModel} filas sin Modelo, ${skippedNoFob} sin FOB (de ${r.data.length} totales). Headers detectados: ${(r.meta.fields || []).join(', ')}`);
-          }
+          const { items, skippedNoModel, skippedNoFob } = this._parseItems(r.data, catalog);
+          this._reportSkipped(skippedNoModel, skippedNoFob, r.data.length, 'CSV import');
           resolve(items);
         },
         error: reject,
@@ -149,30 +160,9 @@ const FileImporter = {
       }
     }
 
-    const items = [];
-    let skippedNoModel = 0;
-    let skippedNoFob = 0;
-
-    for (const row of json) {
-      const modelo = this.resolveField(row, 'modelo');
-      if (!modelo) { skippedNoModel++; continue; }
-      const fobRaw = this.resolveField(row, 'fob');
-      const fob = parseFloat(fobRaw) || 0;
-      if (!fob) { skippedNoFob++; continue; }
-
-      const marca = this.resolveField(row, 'marca');
-      const cat = this.resolveField(row, 'categoria') || 'OTRO';
-      const variante = this.getVariant(row);
-      const sku = this.resolveField(row, 'sku') || this.generateUniqueSku([...catalog, ...items], marca, cat, modelo, variante);
-
-      items.push({ sku, cat, marca, modelo, variante, fob });
-    }
-
-    if (skippedNoModel > 0 || skippedNoFob > 0) {
-      console.warn(`XLSX import: ${skippedNoModel} filas sin Modelo, ${skippedNoFob} sin FOB (de ${json.length} totales). Hoja: "${bestSheetName}"`);
-    }
-
-    return items;
+    const items = this._parseItems(json, catalog);
+    this._reportSkipped(items.skippedNoModel, items.skippedNoFob, json.length, `XLSX "${bestSheetName}"`);
+    return items.items;
   },
 
   exportCSV(pedido) {
@@ -382,9 +372,9 @@ const FileImporter = {
       ['Modo de Transporte', c.transporteModo || c.transporte || 'Aéreo', '-', '-'],
       ['Flete Internacional', `${fleteVal}% FOB / $${c.costoPorKg || 12} Kg`, (t.fleteUsd || (t.fob ? t.fob * (fleteVal / 100) : 0)).toFixed(2), (t.fleteArs || (t.fob ? t.fob * (fleteVal / 100) * tc : 0)).toFixed(2)],
       ['Seguro Internacional', `${c.seguro || 2}% FOB`, (t.fob ? t.fob * ((c.seguro || 2)/100) : 0).toFixed(2), (t.fob ? t.fob * ((c.seguro || 2)/100) * tc : 0).toFixed(2)],
-      ['Derechos de Importación', `${c.derechos || 16}% CIF`, (t.derechosUsd || 0).toFixed(2), ((t.derechosUsd || 0) * tc).toFixed(2)],
-      ['Tasa Estadística Aduanera', `${c.tasa || 3}% CIF`, (t.tasaUsd || 0).toFixed(2), ((t.tasaUsd || 0) * tc).toFixed(2)],
-      ['Percepción Ganancias', `${c.perc || 6}% CIF`, (t.percUsd || 0).toFixed(2), ((t.percUsd || 0) * tc).toFixed(2)],
+      ['Derechos de Importación', `${c.derechos !== undefined ? c.derechos : 0}% CIF`, (t.derechosUsd || 0).toFixed(2), ((t.derechosUsd || 0) * tc).toFixed(2)],
+      ['Tasa Estadística Aduanera', `${c.tasa !== undefined ? c.tasa : 3}% CIF`, (t.tasaUsd || 0).toFixed(2), ((t.tasaUsd || 0) * tc).toFixed(2)],
+      ['Percepción Ganancias', `${c.perc !== undefined ? c.perc : 6}% CIF`, (t.percUsd || 0).toFixed(2), ((t.percUsd || 0) * tc).toFixed(2)],
       ['IVA separado / repercutible', `${c.ivaPct !== undefined ? c.ivaPct : 21}%`, (t.ivaUsd || 0).toFixed(2), ((t.ivaUsd || 0) * tc).toFixed(2)],
       ['Honorarios Despachante', `$${despUsd} USD`, despUsd.toFixed(2), (despUsd * tc).toFixed(2)],
       ['Procesamiento Courier Fijo', `$${c.courier || 8} USD / unidad`, ((c.courier || 8) * (t.qty || 0)).toFixed(2), ((c.courier || 8) * (t.qty || 0) * tc).toFixed(2)]
