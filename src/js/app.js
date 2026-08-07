@@ -858,7 +858,37 @@ window.addEventListener('keydown', (e) => {
     if (typeof closeSupplierCompareModal === 'function') closeSupplierCompareModal();
     if (typeof closeSensitivitySimulatorModal === 'function') closeSensitivitySimulatorModal();
     if (typeof closeBreakEvenModal === 'function') closeBreakEvenModal();
-    if (typeof closeDoorToDoorModal === 'function') closeDoorToDoorModal();
-    if (window.AppUpdater && typeof window.AppUpdater.closeModal === 'function') window.AppUpdater.closeModal();
-  }
-});
+        if (typeof closeDoorToDoorModal === 'function') closeDoorToDoorModal();
+        if (window.AppUpdater && typeof window.AppUpdater.closeModal === 'function') window.AppUpdater.closeModal();
+      }
+    });
+
+    // IT18 (accesibilidad): focus trap + focus inicial dentro del modal abierto.
+    // Un solo bootstrap global, sin tocar cada modal. El Trap aplica al modal
+    // visible de mayor z-index (el último con display:flex).
+    function __modalFocusTrap(e) {
+      if (e.key !== 'Tab') return;
+      const modals = Array.from(document.querySelectorAll('.modal-backdrop'))
+        .filter(m => m.style.display === 'flex');
+      if (!modals.length) return;
+      const top = modals[modals.length - 1];
+      const focusables = top.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!focusables.length) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    window.addEventListener('keydown', __modalFocusTrap);
+
+    // Al abrir un modal, mover el foco al primer elemento interactivo dentro de él.
+    if (typeof MutationObserver !== 'undefined') {
+      new MutationObserver(() => {
+        const modals = Array.from(document.querySelectorAll('.modal-backdrop'))
+          .filter(m => m.style.display === 'flex');
+        if (!modals.length) return;
+        const top = modals[modals.length - 1];
+        if (top.contains(document.activeElement)) return;
+        const f = top.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (f) f.focus();
+      }).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['style'] });
+    }
