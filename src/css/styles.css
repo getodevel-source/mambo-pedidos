@@ -1871,3 +1871,24 @@ select option, .select option {
   transition: var(--transition-fast);
 }
 .toast-undo:hover { background: rgba(255, 87, 34, 0.18); border-color: var(--primary); color: #fff; }
+
+/* ===============================================================
+   IMPORT WIZARD (IT20) — stepper y KPIs
+   =============================================================== */
+.iw-step {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 7px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.iw-step:hover { border-color: var(--primary); color: var(--text); }
+.iw-step.active { background: var(--primary-dim); border-color: var(--primary); color: var(--text); }
+.iw-step.done { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.5); color: var(--green-hover); }
+.wz-lbl { font-size: 12px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; }
+.iw-kpi-lbl { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.iw-kpi { font-size: 20px; font-weight: 800; color: var(--text); font-family: var(--font-mono); }

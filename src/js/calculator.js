@@ -226,8 +226,10 @@ const Calculator = {
 
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
-    const fleteTotal = pesoTotal > 0 ? pesoTotal * costoPorKg : totalFob * 0.15;
-    const seguroTotal = totalFob * 0.015;
+    const fletePct = doorConfig.fletePct != null ? doorConfig.fletePct : 0.15;
+    const fleteTotal = pesoTotal > 0 ? pesoTotal * costoPorKg : totalFob * fletePct;
+    const seguroPct = doorConfig.seguroPct != null ? doorConfig.seguroPct : 0.015;
+    const seguroTotal = totalFob * seguroPct;
     const cifTotal = totalFob + fleteTotal + seguroTotal;
 
     const certsSet = new Set();

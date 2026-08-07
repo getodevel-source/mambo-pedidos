@@ -151,6 +151,13 @@ function testCalculator() {
   assert(d2d.items[0].ncm === '8471.60.52', 'NCM 8471.60.52 para TECLADO con cable');
   assert(d2d.items[0].costoPuertaUnitUsd === d2d.summary.totalPuertaUsd, 'Costo unitario puerta == total (un solo ítem, sin gastos fijos)');
 
+  // IT20 (wizard): fletePct y seguroPct configurables en el motor puerta a puerta
+  const d2dPct = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'D2D-2', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'G Pro', variante: 'Black' }],
+    { tipoCambio: 1000, pesoKg: 0, fletePct: 0.20, seguroPct: 0.02, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  assert(Math.abs(d2dPct.summary.cifTotalUsd - (100 + 20 + 2)) < 1e-9, 'IT20: CIF = FOB + flete 20% + seguro 2% cuando fleteModo=pct');
+
   // Puerta a puerta: certificaciones inalámbricas suman costo (ENACOM 350 + LITIO 75)
   const d2dW = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'D2D-W', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'M185', variante: 'Wireless' }],
