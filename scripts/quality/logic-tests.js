@@ -145,9 +145,9 @@ function testCalculator() {
     [{ sku: 'D2D-1', fob: 100, qty: 1, cat: 'TECLADO', modelo: 'K552', variante: 'Black' }],
     { tipoCambio: 1000, pesoKg: 0, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
   );
-  assert(Math.abs(d2d.summary.totalPuertaUsd - 172.157875) < 1e-9, 'Puerta a puerta: total exacto 172.157875 USD (CIF 116.5 + tributos 55.66 con IVA adicional 20%)');
-  assert(Math.abs(d2d.summary.totalPuertaConIvaUsd - 200.292625) < 1e-9, 'Puerta a puerta: total con IVA 200.292625 USD');
-  assert(Math.abs(d2d.summary.costoNetoRealUsd - (116.5 + 13.98 + 3.495)) < 1e-9, 'Puerta a puerta: costo neto real = CIF + DI + TE (sin anticipos recuperables)');
+  assert(Math.abs(d2d.summary.totalPuertaUsd - 149.7025) < 1e-9, 'Puerta a puerta: total exacto 149.7025 USD (CIF 116.5 + tributos 33.20, teclado BIT DI 0%/TE 0%)');
+  assert(Math.abs(d2d.summary.totalPuertaConIvaUsd - 174.1675) < 1e-9, 'Puerta a puerta: total con IVA 174.1675 USD');
+  assert(Math.abs(d2d.summary.costoNetoRealUsd - 116.5) < 1e-9, 'Puerta a puerta: costo neto real = CIF + DI + TE (teclado BIT: DI 0%/TE 0%, sin anticipos recuperables)');
   assert(d2d.items[0].ncm === '8471.60.52', 'NCM 8471.60.52 para TECLADO con cable');
   assert(d2d.items[0].costoPuertaUnitUsd === d2d.summary.totalPuertaUsd, 'Costo unitario puerta == total (un solo ítem, sin gastos fijos)');
 

@@ -20,13 +20,13 @@ const ImportWizard = {
     transporte: 'maritimo', regimen: 'importador',
     depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
     recuperaCredito: true,
-    iibbJurisdiccion: 'cab', iibbPctCustom: 0.025,
+    iibbJurisdiccion: 'santa_fe', iibbPctCustom: 0.03,
     ncmOverrides: {}
   },
   CACHE_KEY: 'mamboImportWizardState',
   PROJECT_KEY: 'mamboImportProyecto',
   // IIBB por jurisdicción (olmoscomex: CABA ~2.5%, PBA más alto). Configurable.
-  IIBB_JURISDICCIONES: { cab: 0.025, pba: 0.035, otra: null },
+  IIBB_JURISDICCIONES: { cab: 0.025, pba: 0.035, santa_fe: 0.03, otra: null },
 
   _iibbPct() {
     const j = ImportWizard.state.iibbJurisdiccion;
@@ -222,6 +222,7 @@ const ImportWizard = {
           <select class="select" onchange="ImportWizard.state.iibbJurisdiccion=this.value;ImportWizard.render()">
             <option value="cab" ${s.iibbJurisdiccion==='cab'?'selected':''}>CABA (2.5%)</option>
             <option value="pba" ${s.iibbJurisdiccion==='pba'?'selected':''}>PBA (3.5%)</option>
+            <option value="santa_fe" ${s.iibbJurisdiccion==='santa_fe'?'selected':''}>Santa Fe (3%)</option>
             <option value="otra" ${s.iibbJurisdiccion==='otra'?'selected':''}>Otra — configurar</option>
           </select></div>
         ${s.iibbJurisdiccion==='otra'
@@ -381,9 +382,12 @@ const ImportWizard = {
 
   // ---- Guía Fiscal FAQ (IT21) ----
   FAQ_ITEMS: [
-    { q: '¿Qué impuestos pago al importar periféricos?', a: 'Los periféricos (teclados, mouse, auriculares, controllers) pagan: Derechos de Importación (12-20% según NCM), Tasa de Estadística (3% CIF), IVA (21%), IVA adicional (20% — pago a cuenta), Percepción Ganancias (6% inscripto) e IIBB (2.5% según jurisdicción). El Impuesto PAIS fue ELIMINADO.' },
+    { q: '¿Qué impuestos pago al importar periféricos?', a: 'Depende del NCM. Teclados/mouse/monitores/celulares son BIENES BIT → Derecho de Importación 0% y Tasa de Estadística 0% (Decreto 557/23 + 1140/24, vigente hasta 31/12/2028/2027). Auriculares (20%) y controllers (20%) pagan DI. Todos pagan IVA 21%, IVA adicional 20% (pago a cuenta), Percepción Ganancias 6% (inscripto) e IIBB (según jurisdicción: Santa Fe 3%). El Impuesto PAIS fue ELIMINADO.' },
     { q: '¿Cuál es la base imponible?', a: 'Todos los tributos se calculan sobre la base = CIF + Derechos + Tasa de Estadística. CIF = FOB + Flete + Seguro.' },
-    { q: '¿Qué es el crédito fiscal y por qué importa?', a: 'El IVA (21%), el IVA adicional (20%), Ganancias (6%) e IIBB (2.5%) son pagos a cuenta RECUPERABLES si revendés como responsable inscripto. Tu costo REAL neto descuenta eso; solo DI + TE son costo definitivo. Por eso el precio de venta se calcula sobre el costo neto real, no sobre la caja.' },
+    { q: '¿Qué es el crédito fiscal y por qué importa?', a: 'El IVA (21%), el IVA adicional (20%), Ganancias (6%) e IIBB (3% Santa Fe) son pagos a cuenta RECUPERABLES si revendés como responsable inscripto. Tu costo REAL neto descuenta eso; solo DI + TE son costo definitivo. Por eso el precio de venta se calcula sobre el costo neto real, no sobre la caja.' },
+    { q: '¿Qué es la TE (Tasa de Estadística) y la exención BIT?', a: 'La TE es un tributo del 3% sobre el CIF (con tope por tramo: máx USD 180 hasta 10k, USD 3.000 hasta 100k, USD 30.000 hasta 1M, USD 150.000 sobre 1M). Está EXENTA (0%) para bienes BIT y BK nuevos (Decreto 1140/24). Por eso teclados/mouse/monitores/celulares no la pagan.' },
+    { q: '¿Qué es RE y me aplica?', a: 'RE = Reintegros a la Exportación (recupero al EXPORTAR). Es una columna del NCM que NO aplica a tus importaciones — no es un costo de importación.' },
+    { q: 'IIBB: ¿cuánto pago según mi provincia?', a: 'Ingresos Brutos sobre la importación varía por jurisdicción: Santa Fe 3%, CABA 2.5%, PBA 3.5%. Elegí tu provincia en el Paso 4 del asistente; es configurable.' },
     { q: '¿Régimen courier o importador?', a: 'Courier: ≤ USD 3.000 y 50kg. Primeros USD 400 exentos, arancel simplificado 50% sobre el excedente, IVA 21%, sin anticipos (Ganancias/IIBB/IVA adicional). Importador (despacho general): matriz NCM completa. Para revender en volumen conviene importador; courier solo para muestras o compras puntuales.' },
     { q: '¿La suspensión de IVA adicional y Ganancias (RG 5807) me aplica?', a: 'NO. La RG 5807 (vigente hasta 30/06/2026) suspende esas percepciones SOLO para canasta básica, medicamentos e insumos MiPyME con Certificado MiPyME. Los periféricos no están alcanzados: se pagan.' },
     { q: '¿Hay antidumping en periféricos de China?', a: 'Actualmente NO hay derechos antidumping vigentes sobre teclados, mouse, auriculares ni controllers de China (CNCE medidas vigentes). Pero hay "valores criterio": AFIP puede ajustar valores subdeclarados si el FOB va muy bajo.' },

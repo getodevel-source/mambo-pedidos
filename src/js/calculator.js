@@ -27,16 +27,16 @@ const Calculator = {
 
   // Matriz NCM Aduanera y Regulaciones (Argentina / MERCOSUR)
   NCM_MATRIX: {
-    'TECLADO_CABLE': { ncm: '8471.60.52', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
-    'TECLADO_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'MOUSE_CABLE': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
-    'MOUSE_WIRELESS': { ncm: '8471.60.53', derechos: 0.12, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'HEADSET_CABLE': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
-    'HEADSET_WIRELESS': { ncm: '8518.30.00', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'TECLADO_CABLE': { ncm: '8471.60.52', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'TECLADO_WIRELESS': { ncm: '8471.60.53', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'MOUSE_CABLE': { ncm: '8471.60.53', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'MOUSE_WIRELESS': { ncm: '8471.60.53', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
+    'HEADSET_CABLE': { ncm: '8518.30.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'HEADSET_WIRELESS': { ncm: '8518.30.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
     'CONTROLLER_WIRELESS': { ncm: '9504.50.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] },
-    'MONITOR': { ncm: '8528.52.00', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
-    'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.18, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
-    'SWITCH': { ncm: '8536.50.90', derechos: 0.14, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'MONITOR': { ncm: '8528.52.00', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
+    'MOUSEPAD': { ncm: '3926.90.90', derechos: 0.35, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
+    'SWITCH': { ncm: '8536.50.90', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
     'OTRO': { ncm: '8473.30.99', derechos: 0.16, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: [] },
     // IT22: generalización — electrodomésticos y electrónica de consumo (DI validado
     // vía pcram.net/AEC MERCOSUR ≈20%; celular 0% por Decreto 333/25).
@@ -50,7 +50,7 @@ const Calculator = {
     'CAFETERA': { ncm: '8516.71.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
     'LICUADORA': { ncm: '8509.40.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
     'PLANCHA': { ncm: '8516.40.00', derechos: 0.20, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['SEGURIDAD_ELECTRICA_SMARK'] },
-    'CELULAR': { ncm: '8517.13.00', derechos: 0, tasa: 0.03, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] }
+    'CELULAR': { ncm: '8517.13.00', derechos: 0, tasa: 0, iva: 0.21, ivaAdd: 0.20, percGan: 0.06, iibb: 0.025, certs: ['ENACOM', 'LITIO_DG'] }
   },
 
   CERTIFICATIONS_INFO: {
