@@ -18,6 +18,7 @@ module.exports = [
         // Lazy loaders (P17 opción 2)
         ensurePdfLib: 'readonly',
         ensureXlsxLib: 'readonly',
+        ensureNcmDbLib: 'readonly',
         // App module globals (browser-global pattern)
         AppStorage: 'writable',
         AppUpdater: 'writable',
@@ -25,7 +26,9 @@ module.exports = [
         CatalogAssignmentGates: 'writable',
         CatalogValidator: 'writable',
         FileImporter: 'writable',
+        NcmDatabase: 'writable',
         PdfParser: 'writable',
+        PdfParserClassifier: 'writable',
         QuoteGenerator: 'writable',
         SkuAllocator: 'writable',
         TextSanitizer: 'writable',
@@ -36,6 +39,7 @@ module.exports = [
         Tests: 'writable',
         // App UI globals
         toast: 'readonly',
+        tip: 'readonly',
         esc: 'readonly',
         escJs: 'readonly',
         switchView: 'readonly',
