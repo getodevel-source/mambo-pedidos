@@ -60,7 +60,15 @@ const QuoteGenerator = {
     const currency = opts.currency || 'USD';
     const decimals = opts.decimals !== undefined ? opts.decimals : 2;
     try {
-      return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value || 0);
+      const nf = new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      // Node/Linux resuelve locales inválidos al default (en-US) SILENCIOSAMENTE
+      // (Windows lanza RangeError). Verificamos que la BASE del idioma resuelto
+      // coincida con la pedida (tolerante a 'es-AR'→'es' en ICU mínimo) para que
+      // el fallback sea determinístico en todas las plataformas (IT35c).
+      const requestedBase = String(locale).split('-')[0].toLowerCase();
+      const resolvedBase = nf.resolvedOptions().locale.split('-')[0].toLowerCase();
+      if (resolvedBase !== requestedBase) throw new Error('locale no resuelto');
+      return nf.format(value || 0);
     } catch {
       return `$${(value || 0).toFixed(decimals)}`;
     }
