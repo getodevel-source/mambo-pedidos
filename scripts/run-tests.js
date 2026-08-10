@@ -93,6 +93,23 @@ global.Tests = require(jsPath('tests.js'));
   const result = await Tests.runAll();
   if (result.failed > 0) process.exitCode = 1;
 
+  // IT40: regresión de llamadas DINÁMICAS — el wizard renderiza vía
+  // ImportWizard['_render_' + step.id]() (notación de corchete, nombre computado).
+  // El escáner de referencias textuales NO lo detecta; un borrado dejaría el
+  // wizard roto sin que los tests (que mockean DOM a null) lo cachen. Este
+  // check verifica que cada step tenga su método _render_X.
+  (function checkDynamicRenderMethods() {
+    const src = _fs.readFileSync(path.join(__dirname, '..', 'src', 'js', 'ui', 'importWizard.js'), 'utf8');
+    const ids = [...src.matchAll(/id:\s*'([^']+)'/g)].map(m => m[1]);
+    const missing = ids.filter(id => !new RegExp(`_render_${id}\\s*\\(`).test(src));
+    if (missing.length) {
+      console.error('❌ Wizard dynamic render FAILED — faltan métodos _render_ para: ' + missing.join(', '));
+      process.exitCode = 1;
+    } else {
+      console.log(`✅ Wizard dynamic render OK (${ids.length} pasos con su _render_*)`);
+    }
+  })();
+
   // Suite de UI (jsdom) — integrada al runner oficial (loop de calidad)
   try {
     const { execFileSync } = require('child_process');
