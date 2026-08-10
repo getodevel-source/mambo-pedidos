@@ -363,12 +363,23 @@ const Calculator = {
         ncmKey = 'SWITCH';
       }
 
-      const ncmRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
-      ncmRule.certs.forEach(c => certsSet.add(c));
-
-      // IT20: overrides configurables (jurisdicción IIBB, NCM por producto)
-      const iibbPct = doorConfig.iibbPct != null ? doorConfig.iibbPct : ncmRule.iibb;
+      const baseRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
       const ov = doorConfig.ncmOverrides && doorConfig.ncmOverrides[ncmKey];
+
+      // IT40: override NCM con utilidad real — el código elegido por el usuario
+      // reemplaza al de la matriz en el resultado y, si mapea a OTRA entrada de
+      // la matriz (ej: eligió el NCM de un mousepad para un teclado), se usan
+      // SUS rates (TE/IVA/adic/Ganancias/IIBB/certs). Si no mapea, se mantienen
+      // los estructurales de la categoría (dependen del tipo de producto) y el
+      // DI real viene del override.
+      let ncmRule = baseRule;
+      if (ov && ov.ncm) {
+        const matched = Object.values(this.NCM_MATRIX).find(r => r.ncm === ov.ncm);
+        ncmRule = matched ? { ...matched } : { ...baseRule, ncm: ov.ncm };
+      }
+
+      ncmRule.certs.forEach(c => certsSet.add(c));
+      const iibbPct = doorConfig.iibbPct != null ? doorConfig.iibbPct : ncmRule.iibb;
       const derechoPct = ov && ov.derechos != null ? ov.derechos : ncmRule.derechos;
 
       // Impuestos SIM Aduana Argentina

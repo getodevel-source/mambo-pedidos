@@ -210,6 +210,27 @@ function testCalculator() {
   assert(d2dOv.items[0].ncm === '8471.60.53', 'IT23: motor usa el NCM override por categoría');
   assert(Math.abs(d2dOv.items[0].derechosUsd - (100 + 10 + 1) * 0.05) < 1e-9, 'IT23: motor usa el DI override (5%)');
 
+  // IT40: override NCM con utilidad real — el código elegido reemplaza al de la
+  // matriz y, si mapea a OTRA entrada (ej: NCM de mousepad en un teclado), se
+  // usan sus rates completos.
+  const d2dMatch = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'N-1', fob: 100, qty: 1, cat: 'TECLADO', modelo: 'Mecánico', variante: '' }],
+    { tipoCambio: 1000, pesoKg: 0, fletePct: 0, seguroPct: 0, ncmOverrides: { TECLADO_CABLE: { ncm: '3926.90.90', derechos: 0.35 } }, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  assert(d2dMatch.items[0].ncm === '3926.90.90', 'IT40: NCM override reemplaza al de la matriz en el resultado');
+  assert(Math.abs(d2dMatch.items[0].tasaUsd - 100 * 0.03) < 1e-9, 'IT40: override mapea a MOUSEPAD → usa sus rates (TE 3%)');
+  assert(Math.abs(d2dMatch.items[0].derechosUsd - 100 * 0.35) < 1e-9, 'IT40: DI del override (35%)');
+
+  // IT40: NCM no mapeado a la matriz → se muestra en el resultado, mantiene los
+  // rates estructurales de la categoría y usa el DI del override.
+  const d2dNoMatch = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'NM-1', fob: 100, qty: 1, cat: 'TECLADO', modelo: 'X', variante: '' }],
+    { tipoCambio: 1000, pesoKg: 0, fletePct: 0, seguroPct: 0, ncmOverrides: { TECLADO_CABLE: { ncm: '8517.62.00', derechos: 0.10 } }, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  assert(d2dNoMatch.items[0].ncm === '8517.62.00', 'IT40: NCM no mapeado se muestra igual en el resultado');
+  assert(Math.abs(d2dNoMatch.items[0].tasaUsd - 0) < 1e-9, 'IT40: NCM no mapeado mantiene rates estructurales (teclado TE 0%)');
+  assert(Math.abs(d2dNoMatch.items[0].derechosUsd - 100 * 0.10) < 1e-9, 'IT40: DI del override no mapeado (10%)');
+
   // Puerta a puerta: certificaciones inalámbricas suman costo (ENACOM 350 + LITIO 75)
   const d2dW = Calculator.calculateDoorToDoorExactCost(
     [{ sku: 'D2D-W', fob: 100, qty: 1, cat: 'MOUSE', modelo: 'M185', variante: 'Wireless' }],

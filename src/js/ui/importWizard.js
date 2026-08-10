@@ -206,19 +206,20 @@ const ImportWizard = {
     const s = ImportWizard.state;
     const ii = ImportWizard._iibbPct();
     const rows = Object.entries(matrix).map(([k, r]) => {
-      const ov = ImportWizard.state.ncmOverrides && ImportWizard.state.ncmOverrides[k];
-      const di = (ov && ov.derechos != null) ? ov.derechos : r.derechos;
-      return `<tr>
-        <td style="padding:6px 8px;font-size:12px;">${ImportWizard._esc(k)}</td>
-        <td style="padding:6px 8px;font-size:12px;font-family:var(--font-mono);">${r.ncm}</td>
-        <td style="padding:6px 8px;font-size:12px;">DI <input type="number" step="0.01" style="width:60px;font-size:12px;" value="${Math.round(di*100)}" onchange="ImportWizard.state.ncmOverrides['${k}']={derechos:Number(this.value)/100};ImportWizard.render()">%</td>
-        <td style="padding:6px 8px;font-size:12px;">TE ${Math.round(r.tasa*100)}%</td>
-        <td style="padding:6px 8px;font-size:12px;">IVA ${Math.round(r.iva*100)}%</td>
-        <td style="padding:6px 8px;font-size:12px;">+${Math.round(r.ivaAdd*100)}%</td>
-        <td style="padding:6px 8px;font-size:12px;">Gan ${Math.round(r.percGan*100)}%</td>
-        <td style="padding:6px 8px;font-size:12px;">IIBB ${Math.round(ii*1000)/10}%</td>
-      </tr>`;
-    }).join('');
+          const ov = ImportWizard.state.ncmOverrides && ImportWizard.state.ncmOverrides[k];
+          const di = (ov && ov.derechos != null) ? ov.derechos : r.derechos;
+          const shownNcm = (ov && ov.ncm) ? ov.ncm : r.ncm;
+          return `<tr>
+            <td style="padding:6px 8px;font-size:12px;">${ImportWizard._esc(k)}</td>
+            <td style="padding:6px 8px;font-size:12px;font-family:var(--font-mono);">${shownNcm}</td>
+            <td style="padding:6px 8px;font-size:12px;">DI <input type="number" step="0.01" style="width:60px;font-size:12px;" value="${Math.round(di*100)}" onchange="ImportWizard.state.ncmOverrides['${k}']={derechos:Number(this.value)/100};ImportWizard.render()">%</td>
+            <td style="padding:6px 8px;font-size:12px;">TE ${Math.round(r.tasa*100)}%</td>
+            <td style="padding:6px 8px;font-size:12px;">IVA ${Math.round(r.iva*100)}%</td>
+            <td style="padding:6px 8px;font-size:12px;">+${Math.round(r.ivaAdd*100)}%</td>
+            <td style="padding:6px 8px;font-size:12px;">Gan ${Math.round(r.percGan*100)}%</td>
+            <td style="padding:6px 8px;font-size:12px;">IIBB ${Math.round(ii*1000)/10}%</td>
+          </tr>`;
+        }).join('');
     return `<div class="card" style="padding:18px;">
       <div class="page-sub" style="color:var(--text-muted);margin-bottom:8px;">Paso 4 — Tributos por NCM (matriz auditada 2026: ARCA, AFIP, Decreto 333/25)</div>
       <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 12px;font-size:12px;color:#fde047;margin-bottom:10px;">⚠️ Alícuotas verificadas a <strong>2026</strong>. Revisá actualizaciones de ARCA antes de despachar (la matriz no se actualiza sola).</div>
