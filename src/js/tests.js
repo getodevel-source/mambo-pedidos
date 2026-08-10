@@ -1039,13 +1039,29 @@ const Tests = {
       return;
     }
 
-    this.assert(AppUpdater.CURRENT_VERSION === '2.0.1', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
+    this.assert(AppUpdater.CURRENT_VERSION === '2.0.2', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
     this.assert(typeof AppUpdater.isNewerVersion === 'function', 'AppUpdater.isNewerVersion disponible');
     this.assert(AppUpdater.isNewerVersion('1.5.8', '1.5.7') === true, 'Compara correctamente 1.5.8 > 1.5.7');
     this.assert(AppUpdater.isNewerVersion('1.5.7', '1.5.7') === false, 'Compara correctamente 1.5.7 no es superior a 1.5.7');
     this.assert(AppUpdater.isNewerVersion('1.5.6', '1.5.7') === false, 'Compara correctamente 1.5.6 < 1.5.7');
     this.assert(typeof AppUpdater.openInBrowser === 'function', 'AppUpdater.openInBrowser disponible');
     this.assert(typeof AppUpdater.showModal === 'function', 'AppUpdater.showModal disponible para emerger pop-ups');
+
+    // IT37: el auto-check del arranque NO abre el modal (backdrop taparía la app
+    // y mataría todos los clics); el check manual SÍ lo abre.
+    const origCheck = AppUpdater._tauriCheck;
+    const origShow = AppUpdater.showModal;
+    let showModalCalls = 0;
+    AppUpdater.showModal = () => { showModalCalls++; };
+    AppUpdater._tauriCheck = () => Promise.resolve({ available: true, currentVersion: '2.0.1', version: '9.9.9', body: 'x' });
+    return AppUpdater.checkUpdate(false)
+      .then(() => { const autoCalls = showModalCalls; return AppUpdater.checkUpdate(true).then(() => autoCalls); })
+      .then((autoCalls) => {
+        this.assert(autoCalls === 0, 'IT37: auto-check NO abre el modal (evita backdrop que mata clics)');
+        this.assert(showModalCalls - autoCalls === 1, 'IT37: check manual SÍ abre el modal');
+        AppUpdater.showModal = origShow;
+        AppUpdater._tauriCheck = origCheck;
+      });
   },
 
   testUpdaterConfigValidation() {
