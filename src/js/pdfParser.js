@@ -256,6 +256,12 @@ const PdfParser = {
             let outH = sh;
             try {
               const imgData = renderCtx.getImageData(sx, sy, sw, sh);
+              // photo-quality: descartar crops marginales (caso: borde de página
+              // tipo MCHOSE — casi blanco con franja). Opt-in si ImageQuality no
+              // está cargado (harness Node).
+              if (typeof ImageQuality !== 'undefined' && ImageQuality.isMarginalCrop(imgData)) {
+                continue;
+              }
               const cropCanvas = document.createElement('canvas');
               const scaleUp = Math.min(1, MAX_DIM / Math.max(sw, sh));
               outW = Math.max(1, Math.round(sw * scaleUp));
