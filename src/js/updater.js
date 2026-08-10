@@ -194,14 +194,6 @@ const AppUpdater = {
     }
   },
 
-  showCurrentModal() {
-    if (this.latestVersion) {
-      this.showModal(this.latestVersion, this.latestNotes);
-    } else {
-      this.checkUpdate(true);
-    }
-  },
-
   formatNotes(text) {
     return text ? String(text) : 'Se publicaron arreglos y optimizaciones.';
   },

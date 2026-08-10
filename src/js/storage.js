@@ -459,27 +459,6 @@ const AppStorage = {
    * @param {Object} [existingReceipt] - Previous receipt for idempotence check
    * @returns {Object} { audit, receipt, idempotence, committed }
    */
-  runImageMigration(items, existingReceipt) {
-    const audit = this.auditInlineImages(items);
-    const receipt = this.buildMigrationReceipt(audit, 'image-ref-v1');
-    const idempotence = this.checkIdempotence(existingReceipt || null, receipt);
-
-    if (idempotence.idempotent) {
-      return { audit, receipt, idempotence, committed: false, reason: 'no-op' };
-    }
-
-    // Structural commit: attach ImageRefs to items (actual file copy is runtime-only)
-    for (const mapping of receipt.mappings) {
-      if (mapping.status === 'mapped' && mapping.imageRef) {
-        const item = items.find(i => (i.sku || '') === mapping.sku);
-        if (item) {
-          item._imageRef = mapping.imageRef;
-        }
-      }
-    }
-    receipt.committed = true;
-    return { audit, receipt, idempotence, committed: true, reason: 'first-migration' };
-  }
 };
 
 if (typeof window !== 'undefined') window.AppStorage = AppStorage;

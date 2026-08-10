@@ -183,26 +183,6 @@ const Validations = {
     if (totalFob > 100000) warnings.push({ field: 'total', message: 'Total FOB muy alto (>$100,000), verificá' });
 
     return { valid: errors.length === 0, errors, warnings };
-  },
-
-  sanitizeInput(field, value) {
-    const rule = this.rules[field];
-    if (!rule) return value;
-    let v = String(value || '');
-
-    if (field === 'sku') {
-      v = v.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    }
-    if (field === 'fob') {
-      v = v.replace(/[^0-9.]/g, '');
-    }
-    if (field === 'qty') {
-      v = v.replace(/[^0-9]/g, '');
-    }
-    if (rule.maxLength && v.length > rule.maxLength) {
-      v = v.substring(0, rule.maxLength);
-    }
-    return v;
   }
 };
 

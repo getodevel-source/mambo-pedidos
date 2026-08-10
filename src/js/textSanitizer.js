@@ -454,21 +454,6 @@ const TextSanitizer = {
   },
 
   /**
-   * Repara un ítem de catálogo formateando sus atributos al estándar esperado.
-   */
-  repairCatalogItem(item) {
-    return this.sanitizeItem(item);
-  },
-
-  /**
-   * Procesa en lote una lista de ítems de catálogo.
-   */
-  autoCorrectItems(items = [], customBrands = []) {
-    if (!Array.isArray(items)) return [];
-    return items.map(item => this.sanitizeItem(item, customBrands)).filter(Boolean);
-  },
-
-  /**
    * SINGLE SOURCE OF TRUTH for in-place fix logic.
    * Used by fixCatalog() and runFixOnPreview().
    * Returns count of modified items.
