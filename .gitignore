@@ -67,5 +67,6 @@ ground-truth/crops/
 
 # FASE 2 scratch / debug scripts (table-parser rewrite; no commitear)
 scripts/_dbg_*
+scripts/_img_audit/
 scripts/_splice*
 scripts/_t1.js
