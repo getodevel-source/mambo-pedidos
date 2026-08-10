@@ -1,6 +1,6 @@
 [package]
 name = "mambo-pedidos"
-version = "2.0.2"
+version = "2.0.3"
 description = "Mambo Pedidos - Gestor de catalogos y pedidos"
 authors = ["Mambo"]
 edition = "2021"
