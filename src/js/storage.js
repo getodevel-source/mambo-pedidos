@@ -16,9 +16,25 @@ const AppStorage = {
     try {
       const storePlugin = window.__TAURI_PLUGIN_STORE__ || window.__TAURI__?.store || window.__TAURI__?.plugin?.store;
       if (storePlugin && typeof storePlugin.createStore === 'function') {
-        this.storeInstance = await storePlugin.createStore('.mambo-store.json');
+        // IT37: guard de timeout — si el store file está lockeado (otra
+        // instancia corriendo) o el IPC no responde, NUNCA colgamos el init
+        // (init colgado = app renderizada sin listeners = ningún botón).
+        const timeoutMs = 3000;
+        let timer;
+        const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Store init timeout')), timeoutMs); });
+        try {
+          this.storeInstance = await Promise.race([storePlugin.createStore('.mambo-store.json'), timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
         if (this.storeInstance && typeof this.storeInstance.load === 'function') {
-          await this.storeInstance.load();
+          let loadTimer;
+          const loadTimeout = new Promise((_, reject) => { loadTimer = setTimeout(() => reject(new Error('Store load timeout')), 3000); });
+          try {
+            await Promise.race([this.storeInstance.load(), loadTimeout]);
+          } finally {
+            clearTimeout(loadTimer);
+          }
         }
       }
     } catch (e) {
