@@ -252,7 +252,6 @@ const ImportWizard = {
     q = (q || '').trim();
     if (q.length < 2) { box.style.display = 'none'; return; }
     const res = NcmDatabase.search(q, 10);
-    const catSel = document.getElementById('iwNcmCat');
     box.innerHTML = res.map(r => `<div style="padding:5px 8px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.06)" onmousedown="event.preventDefault();ImportWizard._setNcmOverride('${r.ncm}','${String(r.di||0)}')">${r.ncm} · ${ImportWizard._esc(String(r.desc||'').slice(0,60))} · <b>DI ${Math.round((r.di!=null?r.di:0)*100)}%</b></div>`).join('');
     box.style.display = 'block';
   },

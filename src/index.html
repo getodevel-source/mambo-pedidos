@@ -956,6 +956,10 @@
   <script src="js/ncmDatabase.js"></script>
     <!-- data/ncmDatabase.js (872KB) se carga LAZY vía ensureNcmDbLib() al primer
              uso real (búsqueda NCM del wizard). Ahorra ~870KB de parseo en el arranque. -->
+    <!-- IT38: restaurado js/fileImporter.js — IT31 (0446fa7) lo borró por
+         accidente al quitar data/ncmDatabase.js del eager (FileImporter
+         undefined → botones import/export muertos). -->
+    <script src="js/fileImporter.js"></script>
     <script src="js/quoteGenerator.js"></script>
 <script src="js/ui/notifications.js"></script>
 <script src="js/ui/historyView.js"></script>

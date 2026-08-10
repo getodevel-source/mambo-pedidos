@@ -60,6 +60,35 @@ global.UpdaterSmoke = require(path.join(__dirname, 'quality', 'updater-smoke.js'
 global.esc = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 global.Tests = require(jsPath('tests.js'));
 
+// IT38: integridad de scripts — todo archivo JS de la app debe estar referenciado
+// en index.html. IT31 (0446fa7) borró js/fileImporter.js por accidente y los
+// botones import/export quedaron muertos (FileImporter undefined) sin que
+// ninguna suite lo detectara. Este check corta esa clase de bug.
+(function checkScriptIntegrity() {
+  const html = _fs.readFileSync(path.join(__dirname, '..', 'src', 'index.html'), 'utf8');
+  const loaded = new Set();
+  for (const m of html.matchAll(/src="(js\/[^"]+\.js)"/g)) loaded.add(m[1]);
+  const appDir = path.join(__dirname, '..', 'src', 'js');
+  const missing = [];
+  const walk = (dir) => {
+    for (const ent of _fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      const rel = 'js/' + path.relative(appDir, full).replace(/\\/g, '/');
+      if (ent.isDirectory()) walk(full);
+      else if (ent.name.endsWith('.js') && !ent.name.endsWith('.min.js')) {
+        if (!loaded.has(rel) && !['tests.js', 'catalogAssignmentGates.js'].includes(ent.name)) missing.push(rel);
+      }
+    }
+  };
+  walk(appDir);
+  if (missing.length) {
+    console.error('❌ Script integrity FAILED — archivos de app no cargados en index.html: ' + missing.join(', '));
+    process.exitCode = 1;
+  } else {
+    console.log('✅ Script integrity OK: todos los módulos de src/js están en index.html');
+  }
+})();
+
 (async () => {
   const result = await Tests.runAll();
   if (result.failed > 0) process.exitCode = 1;
