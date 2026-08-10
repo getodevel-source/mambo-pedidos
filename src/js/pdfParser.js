@@ -110,7 +110,7 @@ const PdfParser = {
         // decodifica las imágenes a la escala de dibujo durante el render.
         // Las coordenadas x/y/centerY se calculan IGUAL que antes (del CTM),
         // así el matcher imagen→producto no cambia (cero riesgo de cruzado).
-        const MAX_DIM = 150;
+        const MAX_DIM = 300;
         // Escala adaptativa por la imagen MÁS CHICA válida (para que hasta los
         // switches de ~25pt queden ≥150px — calidad ≥ baseline). El render a
         // escala alta cuesta ~igual que a escala baja (pdf.js decodifica a la

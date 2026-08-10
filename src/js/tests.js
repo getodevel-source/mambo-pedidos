@@ -111,6 +111,8 @@ const Tests = {
     this.testImageRefAndAudit();
     this.testImageMigrationReceipt();
     this.testImageIdempotenceAndOrphans();
+    await this.testPhotoQualityStorageRoundTrip();
+    this.testMarginalCropDetector();
     this.testSkuAuditThreeDomains();
     this.testSkuDeterministicMapping();
     this.testSkuAmbiguityGate();
@@ -1946,6 +1948,56 @@ const Tests = {
     const ref2 = AppStorage.buildImageRef('data:image/png;base64,CCCC', 'M-999-RENAMED');
     this.assert(ref1.id === ref2.id, 'ImageRef ID es independiente del SKU');
     this.assert(ref1.sha256 === ref2.sha256, 'ImageRef sha256 es independiente del SKU');
+  },
+
+  async testPhotoQualityStorageRoundTrip() {
+    // Sin plugin fs (Node / no-Tauri): la serialización mantiene dataURL inline
+    // y NO muta el catálogo original.
+    const orig = [{ sku: 'P-001', img: 'data:image/png;base64,AAAA' }];
+    const payload = await AppStorage._serializeImagesToFiles(orig, {});
+    this.assert(payload.items[0].img === 'data:image/png;base64,AAAA', 'Sin fs: img queda como dataURL inline');
+    this.assert(typeof payload.items[0]._imageRef === 'undefined', 'Sin fs: no se agrega _imageRef');
+    this.assert(orig[0].img === 'data:image/png;base64,AAAA', 'La serialización no muta el catálogo original');
+    this.assert(payload.sel && Object.keys(payload.sel).length === 0, 'Payload preserva sel');
+
+    // _fileNameFromDataUrl devuelve ruta content-addressed
+    const rel = AppStorage._fileNameFromDataUrl('data:image/png;base64,iVBORw0KGgo=');
+    this.assert(typeof rel === 'string' && rel.startsWith('images/') && rel.endsWith('.png'), `_fileNameFromDataUrl da ruta images/ (got "${rel}")`);
+
+    // round-trip bytes → dataURL
+    const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    const bytes = AppStorage._dataUrlToBytes('data:image/png;base64,' + b64);
+    this.assert(bytes instanceof Uint8Array && bytes.length > 0, '_dataUrlToBytes devuelve Uint8Array');
+    const back = AppStorage._bytesToDataUrl(bytes, 'png');
+    this.assert(back === 'data:image/png;base64,' + b64, 'Round-trip bytes→dataURL reproduce el original');
+
+    // _embedImagesFromFiles sin items / sin fs es no-op
+    this.assert(await AppStorage._embedImagesFromFiles([]) === undefined, '_embedImagesFromFiles([]) es no-op');
+    this.assert(await AppStorage._embedImagesFromFiles(null) === undefined, '_embedImagesFromFiles(null) es no-op');
+    this.assert(await AppStorage._embedImagesFromFiles(undefined) === undefined, '_embedImagesFromFiles(undefined) es no-op');
+  },
+
+  testMarginalCropDetector() {
+    const white = () => new Uint8ClampedArray(100 * 100 * 4).fill(255);
+    const px = (img, x, y, r, g, b) => { const o = (y * 100 + x) * 4; img[o] = r; img[o + 1] = g; img[o + 2] = b; img[o + 3] = 255; };
+
+    // 100x100 blanco puro → marginal
+    const blank = white();
+    this.assert(ImageQuality.isMarginalCrop({ width: 100, height: 100, data: blank }) === true, 'Imagen 100% blanca es marginal');
+
+    // franja oscura sobre blanco (caso MCHOSE) → marginal (contenido ~5%)
+    const strip = white();
+    for (let y = 40; y < 45; y++) for (let x = 0; x < 100; x++) px(strip, x, y, 20, 20, 20);
+    this.assert(ImageQuality.isMarginalCrop({ width: 100, height: 100, data: strip }) === true, 'Franja oscura sobre blanco es marginal');
+
+    // foto con contenido real (cuadrado 60x60 de 100x100 = 36%) → NO marginal
+    const photo = white();
+    for (let y = 20; y < 80; y++) for (let x = 20; x < 80; x++) px(photo, x, y, 30, 120, 200);
+    this.assert(ImageQuality.isMarginalCrop({ width: 100, height: 100, data: photo }) === false, 'Foto con contenido real NO es marginal');
+
+    // entradas inválidas → marginal (no sirve)
+    this.assert(ImageQuality.isMarginalCrop(null) === true, 'isMarginalCrop(null) es marginal');
+    this.assert(ImageQuality.isMarginalCrop({}) === true, 'isMarginalCrop({}) es marginal');
   },
 
   testImageIdempotenceAndOrphans() {

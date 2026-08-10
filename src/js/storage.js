@@ -152,11 +152,16 @@ const AppStorage = {
     if (typeof Reliability !== 'undefined') {
       Reliability.createBackup({ items, sel: selection });
     }
-    await this.setItem(this.KEYS.CATALOG, { items, sel: selection });
+    // photo-quality (FASE B): escribe las dataURLs a archivos y persiste _imageRef
+    // (contrato runtime item.img=dataURL se mantiene intacto).
+    const payload = await this._serializeImagesToFiles(items, selection);
+    await this.setItem(this.KEYS.CATALOG, payload);
   },
 
   async loadCatalog() {
     const data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
+    // photo-quality (FASE B): resuelve _imageRef → item.img (dataURL) leyendo archivo.
+    await this._embedImagesFromFiles(data && data.items);
     if (data && data.items && Array.isArray(data.items)) {
       data.items = data.items.filter(item => item && typeof item === 'object').map(item => {
         if (typeof TextSanitizer !== 'undefined' && typeof TextSanitizer.sanitizeItem === 'function') {
@@ -242,6 +247,93 @@ const AppStorage = {
       height: 0,
       sourceSku: sku || ''
     };
+  },
+
+  // ── Slice 5b: imágenes a archivos (photo-quality, FASE B) ──
+  // Mantiene el contrato runtime item.img=dataURL; mueve SOLO la persistencia:
+  // save → archivos (images/<id>.<ext>) + _imageRef; load → resuelve ref→dataURL.
+
+  _fsApi() {
+    try { return (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.fs) || null; } catch { return null; }
+  },
+
+  _dataUrlToBytes(dataUrl) {
+    const b64 = dataUrl.replace(/^data:image\/[\w.+-]+;base64,/i, '');
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  },
+
+  _bytesToDataUrl(bytes, mime) {
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    let bin = '';
+    for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+    return 'data:image/' + (mime || 'png') + ';base64,' + btoa(bin);
+  },
+
+  _fileNameFromDataUrl(dataUrl) {
+    const ref = this.buildImageRef(dataUrl, '');
+    return ref ? ref.relativePath : null;
+  },
+
+  // Devuelve un payload persistible: escribe cada dataURL a archivo y deja
+  // _imageRef en el item. Sin plugin fs (tests / no-Tauri) → dataURL inline.
+  async _serializeImagesToFiles(items, selection) {
+    const fsApi = this._fsApi();
+    const clone = (items || []).map(o => Object.assign({}, o));
+    const refs = [];
+    if (fsApi) {
+      for (const item of clone) {
+        if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
+          const rel = this._fileNameFromDataUrl(item.img);
+          if (rel) {
+            try {
+              const mime = (item.img.match(/^data:image\/([\w.+-]+);/i) || [])[1] || 'png';
+              await fsApi.mkdir('images', { recursive: true });
+              await fsApi.writeBinaryFile(rel, this._dataUrlToBytes(item.img));
+              item._imageRef = { relativePath: rel, mime };
+              item.img = '';
+              refs.push(rel);
+            } catch (e) { console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message); }
+          }
+        } else if (item && item._imageRef && item._imageRef.relativePath) {
+          refs.push(item._imageRef.relativePath);
+        }
+      }
+      await this._gcOrphanImages(refs, fsApi);
+    }
+    return { items: clone, sel: selection || {} };
+  },
+
+  // Resuelve _imageRef → item.img (dataURL) leyendo el archivo.
+  async _embedImagesFromFiles(items) {
+    const fsApi = this._fsApi();
+    if (!fsApi || !Array.isArray(items)) return;
+    for (const item of items) {
+      if (item && item._imageRef && item._imageRef.relativePath &&
+          !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
+        try {
+          const bytes = await fsApi.readBinaryFile(item._imageRef.relativePath);
+          item.img = this._bytesToDataUrl(bytes, item._imageRef.mime);
+        } catch (e) { item.img = '-'; }
+        delete item._imageRef;
+      }
+    }
+  },
+
+  // Elimina archivos de images/ no referenciados por el catálogo actual.
+  async _gcOrphanImages(refs, fsApi) {
+    try {
+      const entries = await fsApi.readDir('images');
+      for (const e of entries) {
+        if (!e || !e.name) continue;
+        const rel = 'images/' + e.name;
+        if (/\.(png|jpe?g|webp|gif)$/i.test(rel) && refs.indexOf(rel) === -1) {
+          try { await fsApi.remove(rel, { recursive: true }); } catch {}
+        }
+      }
+    } catch {}
   },
 
   /**

@@ -26,6 +26,7 @@ module.exports = [
         CatalogAssignmentGates: 'writable',
         CatalogValidator: 'writable',
         FileImporter: 'writable',
+        ImageQuality: 'writable',
         NcmDatabase: 'writable',
         PdfParser: 'writable',
         PdfParserClassifier: 'writable',
