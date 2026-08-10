@@ -1039,7 +1039,7 @@ const Tests = {
       return;
     }
 
-    this.assert(AppUpdater.CURRENT_VERSION === '2.0.0', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
+    this.assert(AppUpdater.CURRENT_VERSION === '2.0.1', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
     this.assert(typeof AppUpdater.isNewerVersion === 'function', 'AppUpdater.isNewerVersion disponible');
     this.assert(AppUpdater.isNewerVersion('1.5.8', '1.5.7') === true, 'Compara correctamente 1.5.8 > 1.5.7');
     this.assert(AppUpdater.isNewerVersion('1.5.7', '1.5.7') === false, 'Compara correctamente 1.5.7 no es superior a 1.5.7');

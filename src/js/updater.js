@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.0.0',
+  CURRENT_VERSION: '2.0.1',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -35,7 +35,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.0.0';
+    return this.CURRENT_VERSION || '2.0.1';
   },
 
   /**
@@ -126,22 +126,24 @@ const AppUpdater = {
       const timeout = setTimeout(() => controller.abort(), 10000);
       let res;
       try {
-        res = await fetch(`${this.REPO_URL.replace('github.com', 'api.github.com/repos')}/releases/latest`, {
-          headers: { 'Accept': 'application/vnd.github.v3+json' },
+        // IT36: usar el manifiesto latest.json (URL directa de descarga, sin
+        // rate-limit de api.github.com) — el mismo endpoint que usa el plugin.
+        res = await fetch(`${this.REPO_URL}/releases/latest/download/latest.json`, {
           cache: 'no-store',
           signal: controller.signal
         });
       } finally {
         clearTimeout(timeout);
       }
-      if (!res.ok) throw new Error(`GitHub API HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`latest.json HTTP ${res.status}`);
 
-      const release = await res.json();
-      const latestVersion = release.tag_name?.replace(/^v/, '') || '';
+      const manifest = await res.json();
+      const latestVersion = String(manifest.version || '').replace(/^v/, '');
 
       if (this.isValidVersion(latestVersion) && this.isNewerVersion(latestVersion, activeVer)) {
         this.latestVersion = latestVersion;
-        this.latestNotes = release.body || 'Correcciones y mejoras generales.';
+        this.latestNotes = manifest.notes || 'Correcciones y mejoras generales.';
+        this._fallbackManifest = manifest;
 
         this.showSidebarBadge(latestVersion);
         this.showModal(latestVersion, this.latestNotes);
@@ -153,7 +155,7 @@ const AppUpdater = {
         toast(`✅ Estás en la versión más reciente (v${activeVer})`, 'success');
       }
     } catch (err) {
-      console.error('GitHub API fallback error:', err);
+      console.error('latest.json fallback error:', err);
       if (userInitiated) {
         toast(`ℹ️ Sin conexión para verificar actualizaciones (v${this.getCurrentVersion()})`, 'info');
       }
@@ -214,11 +216,13 @@ const AppUpdater = {
       linkAnchor.textContent = releaseUrl;
     }
     // El enlace manual a GitHub es el último recurso: oculto por defecto y
-    // se muestra únicamente si falla la instalación automática 1-Click.
-    if (directLink) directLink.style.display = 'none';
+    // se muestra únicamente si falla la instalación automática 1-Click o si
+    // la actualización vino por el fallback (sin rid verificado del plugin).
+    const hasVerifiedUpdate = this._updateHandle && typeof this._updateHandle.rid === 'number';
+    if (directLink) directLink.style.display = hasVerifiedUpdate ? 'none' : 'block';
     if (btnEl) {
       btnEl.disabled = false;
-      btnEl.textContent = '⚡ Instalar Actualización';
+      btnEl.textContent = hasVerifiedUpdate ? '⚡ Instalar Actualización' : '⬇️ Descargar manualmente (GitHub)';
     }
 
     const progressWrap = document.getElementById('updateProgressWrap');
@@ -244,6 +248,13 @@ const AppUpdater = {
    * Requiere el resource `rid` devuelto por el check + un Channel de progreso.
    */
   async startDirectDownload() {
+    // IT36: si la actualización vino por el fallback (sin rid verificado del
+    // plugin), no hay instalación 1-Click — abrimos la release en el navegador.
+    if (!this._updateHandle || typeof this._updateHandle.rid !== 'number') {
+      toast('⬇️ Abriendo la descarga manual en el navegador...', 'info');
+      this.openInBrowser();
+      return;
+    }
     const progressWrap = document.getElementById('updateProgressWrap');
     const progressText = document.getElementById('updateProgressText');
     const progressBarInner = document.getElementById('updateProgressBarInner');
