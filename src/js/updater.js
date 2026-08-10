@@ -99,11 +99,15 @@ const AppUpdater = {
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;
 
+        // IT37: el auto-check del ARRANQUE (userInitiated=false) NO abre el modal:
+        // un backdrop de modal abierto solo cubre la app y mata todos los clics
+        // (reporte de usuario: "ningún botón funciona"). Solo badge + toast sutil.
         this.showSidebarBadge(updateInfo.version);
-        this.showModal(updateInfo.version, this.latestNotes);
-
         if (userInitiated) {
+          this.showModal(updateInfo.version, this.latestNotes);
           toast(`🚀 ¡Nueva versión v${updateInfo.version} disponible!`, 'success');
+        } else {
+          toast(`📦 Nueva versión v${updateInfo.version} disponible — tocá "Buscar actualización" para verla.`, 'info');
         }
       } else if (userInitiated) {
         toast(`✅ Estás en la versión más reciente (v${currentVer})`, 'success');
@@ -146,10 +150,12 @@ const AppUpdater = {
         this._fallbackManifest = manifest;
 
         this.showSidebarBadge(latestVersion);
-        this.showModal(latestVersion, this.latestNotes);
-
+        // IT37: el modal solo se abre en check manual (mismo criterio que el plugin).
         if (userInitiated) {
+          this.showModal(latestVersion, this.latestNotes);
           toast(`🚀 ¡Nueva versión v${latestVersion} disponible!`, 'success');
+        } else {
+          toast(`📦 Nueva versión v${latestVersion} disponible — tocá "Buscar actualización" para verla.`, 'info');
         }
       } else if (userInitiated) {
         toast(`✅ Estás en la versión más reciente (v${activeVer})`, 'success');
@@ -215,14 +221,15 @@ const AppUpdater = {
       linkAnchor.href = releaseUrl;
       linkAnchor.textContent = releaseUrl;
     }
-    // El enlace manual a GitHub es el último recurso: oculto por defecto y
-    // se muestra únicamente si falla la instalación automática 1-Click o si
-    // la actualización vino por el fallback (sin rid verificado del plugin).
-    const hasVerifiedUpdate = this._updateHandle && typeof this._updateHandle.rid === 'number';
-    if (directLink) directLink.style.display = hasVerifiedUpdate ? 'none' : 'block';
+    // El enlace manual a GitHub es el último recurso: oculto por defecto y se
+    // muestra solo si la actualización vino por el fallback (sin update del
+    // plugin verificable). IT37: no exigir rid — el plugin v2 trae el handle
+    // sin ese campo; startDirectDownload ya resuelve el caso sin plugin.
+    const hasPluginUpdate = !!this._updateHandle;
+    if (directLink) directLink.style.display = hasPluginUpdate ? 'none' : 'block';
     if (btnEl) {
       btnEl.disabled = false;
-      btnEl.textContent = hasVerifiedUpdate ? '⚡ Instalar Actualización' : '⬇️ Descargar manualmente (GitHub)';
+      btnEl.textContent = hasPluginUpdate ? '⚡ Instalar Actualización' : '⬇️ Descargar manualmente (GitHub)';
     }
 
     const progressWrap = document.getElementById('updateProgressWrap');

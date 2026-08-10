@@ -749,8 +749,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   fetchLiveDolarRates(false);
   await AppStorage.init();
-  const saved = await AppStorage.loadCatalog();
-  if (saved && saved.items && saved.items.length) {
+  // IT37: la restauración de datos NUNCA debe matar el wiring de botones —
+  // un throw acá (datos corruptos) dejaría la app renderizada pero muerta.
+  // Los listeners de abajo SIEMPRE se adjuntan.
+  try {
+    const saved = await AppStorage.loadCatalog();
+    if (saved && saved.items && saved.items.length) {
     // Layer 2: Validate integrity on load
     if (typeof Reliability !== 'undefined') {
       const integrity = Reliability.validateCatalogIntegrity(saved.items);
@@ -776,6 +780,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     showCatalogContent();
     renderCatalog();
     toast(catalog.length + ' productos restaurados', 'info');
+    }
+  } catch (restoreErr) {
+    console.error('Error restaurando catálogo — se continúa con app vacía:', restoreErr);
+    if (typeof toast === 'function') toast('⚠️ No se pudo restaurar el catálogo guardado', 'warning');
   }
 
   // Inputs de Archivos
