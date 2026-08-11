@@ -70,3 +70,6 @@ scripts/_dbg_*
 scripts/_img_audit/
 scripts/_splice*
 scripts/_t1.js
+
+# Session exports (nunca versionar)
+session-export-*.md
