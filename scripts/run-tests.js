@@ -111,6 +111,40 @@ global.Tests = require(jsPath('tests.js'));
     }
   })();
 
+  // Browser-runtime: ningún archivo de src/js puede referenciar `process.` sin
+  // guarda. `process` existe en Node (donde corren los tests/auditorías) pero NO
+  // en WebView2 (runtime real de la app). Un `process.env.X` sin guard en el
+  // parser hacía que importar los 13 PDFs diera 0 productos ("process is not
+  // defined") mientras todos los tests en Node pasaban verde. Este check pinne
+  // la clase entera del bug.
+  (function checkNoUnguardedProcessRefs() {
+    const dir = path.join(__dirname, '..', 'src', 'js');
+    const hits = [];
+    const walk = (d) => {
+      for (const ent of _fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, ent.name);
+        if (ent.isDirectory()) walk(p);
+        else if (ent.name.endsWith('.js')) {
+          const lines = _fs.readFileSync(p, 'utf8').split('\n');
+          lines.forEach((ln, i) => {
+            // Ignora la línea del propio guard (envFlag) y typeof-guards.
+            if (/envFlag\(/.test(ln)) return;
+            if (/typeof\s+process\s*!==/.test(ln)) return;
+            if (/\bprocess\./.test(ln)) hits.push(path.relative(dir, p) + ':' + (i + 1) + '  ' + ln.trim().slice(0, 80));
+          });
+        }
+      }
+    };
+    walk(dir);
+    if (hits.length) {
+      console.error('❌ Browser-runtime FAILED — referencias a `process.` sin guarda (rompen en WebView2):');
+      hits.forEach(h => console.error('   ' + h));
+      process.exitCode = 1;
+    } else {
+      console.log('✅ Browser-runtime OK: src/js no referencia `process.` sin guarda');
+    }
+  })();
+
   // Suite de UI (jsdom) — integrada al runner oficial (loop de calidad)
   try {
     const { execFileSync } = require('child_process');

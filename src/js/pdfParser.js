@@ -5,6 +5,15 @@
 //  Desarrollado por @geto_dev
 // ============================================
 
+// Switches de debug por env-var. Safe en runtime de la app (WebView2) donde
+// `process` NO existe (a diferencia de Node, donde corren las auditorías).
+// Sin este guard, cada PDF lanzaba "process is not defined" y el import real
+// no producía ni un producto (los tests/auditorías en Node nunca lo veían).
+const envFlag = (name) => {
+  try { return (typeof process !== 'undefined' && process.env) ? process.env[name] : undefined; }
+  catch { return undefined; }
+};
+
 const PdfParser = {
 
   async processPdfFile(file, catalogLength = 0, customBrands = [], onProgress = null) {
@@ -1450,7 +1459,7 @@ pageProducts.push({
       // (layout "V8 / PAW3950MAX / Black ¥...") → el modelo es ese código.
       if (rawModelo && this.isSpecOnlyModel(rawModelo)) {
         const blockCode = this.findBlockCodeAbove(rawElements, isPageNoise, topBound, 0, priceColX * 0.35);
-        if (process.env.P5_DEBUG) console.error(`[SLICE5] y=${topBound.toFixed(0)} | raw="${rawModelo}" | found="${blockCode}" | band=0..${(priceColX*0.35).toFixed(0)}`);
+        if (envFlag('P5_DEBUG')) console.error(`[SLICE5] y=${topBound.toFixed(0)} | raw="${rawModelo}" | found="${blockCode}" | band=0..${(priceColX*0.35).toFixed(0)}`);
         if (blockCode && !rawModelo.toLowerCase().includes(blockCode.split(/\s+/)[0].toLowerCase())) {
           rawModelo = blockCode;
         }
@@ -2259,7 +2268,7 @@ if (!rawModelo) continue;
     // ("MChose Red" → codes=[MChose] → gap falso). Se filtra por token.
     const brandTokens = (item.marca || '').toLowerCase().split(/\s+/).filter(w => w.length >= 2);
     const filteredCodes = cellCodes.filter(w => !brandTokens.includes(w.toLowerCase()));
-    if (process.env.P1_DEBUG && cellCodes.length >= 1) {
+    if (envFlag('P1_DEBUG') && cellCodes.length >= 1) {
       console.error(`[GRND] "${item.modelo}" | cell="${cellText.slice(0, 80)}" | codes=${cellCodes.join(',')}`);
     }
     return { gap: filteredCodes.length >= 1, cellCodes: filteredCodes, cellText };
@@ -2655,7 +2664,7 @@ if (!rawModelo) continue;
       // anti-loop (CIERRE 05/08) eliminó el colgado (8BitDo: >600s → 1.4s
       // verificado IT6). Desactivar con HUNGARIAN_P4=0 si algún catálogo
       // regresiona (medición de corpus es la evidencia, no la opinión).
-      if (process.env.HUNGARIAN_P4 !== '0') {
+      if (envFlag('HUNGARIAN_P4') !== '0') {
       {
         const urlCount = {};
         for (const pp of pageProds) {
@@ -2756,7 +2765,7 @@ if (!rawModelo) continue;
           }
         }
       } else if ((stillEmptyIdx.length + sharedIdx.length) >= 1 && (stillEmptyIdx.length + sharedIdx.length) <= 20 && fullPageImgs.length >= 3) {
-        if (process.env.P3_DEBUG) console.log(`[P3] p${pNum} empty=${stillEmptyIdx.length} shared=${sharedIdx.length} free=${fullPageImgs.length}`);
+        if (envFlag('P3_DEBUG')) console.log(`[P3] p${pNum} empty=${stillEmptyIdx.length} shared=${sharedIdx.length} free=${fullPageImgs.length}`);
         // Huérfanas individuales: la foto de la fila está ~250-700px debajo del
         // texto (layout foto-bajo-texto con espacio variable). El fallback del
         // row engine (distY < -160) y las gates del matcher (distYRaw < -100)
