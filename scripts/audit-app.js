@@ -93,11 +93,17 @@ async function auditImageFit(product) {
   } else return null;
   const cat = (product.cat || '').toUpperCase();
   const aspect = w / Math.max(1, h);
+  // ADVISORY, no FAIL: espeja la política de validateImageForProduct (pdfParser.js),
+  // que en backfill (relaxed) PENALIZA pero ACEPTA fotos anchas/retrato (un mouse
+  // top-down es ancho ~2:1; fotos retrato de teclado ATK aspect~0.5 son legítimas).
+  // Un shape inusual no es un defecto: el pipeline lo acepta con warning (159 GREEN
+  // + 14 YELLOW / 0 RED en la muestra real). Los defectos duros (imagen ausente /
+  // inválida) se reportan aparte y sí hacen FAIL.
   if (COMPACT_CATS.includes(cat) && aspect > 1.9) {
-    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'wide photo on compact product' };
+    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'wide photo on compact product (advisory)', advisory: true };
   }
   if (WIDE_CATS.includes(cat) && aspect < 0.65) {
-    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'tall photo on wide product' };
+    return { cat, aspect: +aspect.toFixed(2), w, h, reason: 'tall photo on wide product (advisory)', advisory: true };
   }
   return null;
 }
@@ -177,6 +183,7 @@ async function main() {
   const tR = all.reduce((s, r) => s + r.red, 0);
   const tImg = all.reduce((s, r) => s + r.withImage, 0);
   const tMism = all.reduce((s, r) => s + r.mismatches.length, 0);
+  const tMismHard = all.reduce((s, r) => s + r.mismatches.filter(m => !m.advisory).length, 0);
 
   console.log(`\n  📦 Productos: ${tP}`);
   console.log(`  🟢 GREEN:  ${tG} (${pct(tG, tP)}%)`);
@@ -209,13 +216,13 @@ async function main() {
   let gateRed = 0;
   for (const r of all) for (const [k, v] of Object.entries(r.redReasons || {})) if (k.includes("specs técnicas")) gateRed += v;
   const structRed = tR - gateRed;
-  const pass = tMism === 0 && structRed === 0 && all.every(r => !r.error);
+  const pass = tMismHard === 0 && structRed === 0 && all.every(r => !r.error);
   console.log(pass
     ? `
-  ✅ PASS — pipeline íntegro (0 image-mismatches, 0 RED estructurales). Semáforo honesto: ${gateRed} RED de calidad de modelo (rechazados por diseño) + ${tY} YELLOW a revisar.
+  ✅ PASS — pipeline íntegro (0 image-mismatches duros, 0 RED estructurales). Semáforo honesto: ${gateRed} RED de calidad de modelo (rechazados por diseño) + ${tY} YELLOW a revisar + ${tMism} shape-advisories (aceptados por política del parser).
 `
     : `
-  ❌ FAIL — ${structRed} RED estructurales, ${tMism} image-mismatches, ${all.filter(r=>r.error).length} errores de archivo.
+  ❌ FAIL — ${structRed} RED estructurales, ${tMismHard} image-mismatches duros, ${all.filter(r=>r.error).length} errores de archivo.
 `);
 
   if (args.json) {
