@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.0.6',
+  CURRENT_VERSION: '2.0.7',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -35,7 +35,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.0.6';
+    return this.CURRENT_VERSION || '2.0.7';
   },
 
   /**
@@ -94,7 +94,12 @@ const AppUpdater = {
 
       const currentVer = this.getCurrentVersion();
 
-      if (updateInfo?.available && this.isValidVersion(updateInfo.version) && this.isNewerVersion(updateInfo.version, currentVer)) {
+      // El plugin v2 devuelve { rid, currentVersion, version, date, body, rawJson }
+      // SIN campo `available`. Antes se guardaba con `updateInfo?.available`, que
+      // es undefined → el if nunca entraba y la app decía "estás al día" aunque
+      // el plugin sí hubiera encontrado una versión nueva. La disponibilidad se
+      // infiere de que exista un `version` más nuevo (isNewerVersion ya lo valida).
+      if (updateInfo?.version && this.isValidVersion(updateInfo.version) && this.isNewerVersion(updateInfo.version, currentVer)) {
         this.latestVersion = updateInfo.version;
         this.latestNotes = updateInfo.body || 'Correcciones y mejoras generales.';
         this._updateHandle = updateInfo;

@@ -1042,7 +1042,7 @@ const Tests = {
       return;
     }
 
-    this.assert(AppUpdater.CURRENT_VERSION === '2.0.6', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
+    this.assert(AppUpdater.CURRENT_VERSION === '2.0.7', 'AppUpdater CURRENT_VERSION configurado en 1.9.2');
     this.assert(typeof AppUpdater.isNewerVersion === 'function', 'AppUpdater.isNewerVersion disponible');
     this.assert(AppUpdater.isNewerVersion('1.5.8', '1.5.7') === true, 'Compara correctamente 1.5.8 > 1.5.7');
     this.assert(AppUpdater.isNewerVersion('1.5.7', '1.5.7') === false, 'Compara correctamente 1.5.7 no es superior a 1.5.7');
@@ -1056,9 +1056,16 @@ const Tests = {
     const origShow = AppUpdater.showModal;
     let showModalCalls = 0;
     AppUpdater.showModal = () => { showModalCalls++; };
-    AppUpdater._tauriCheck = () => Promise.resolve({ available: true, currentVersion: '2.0.1', version: '9.9.9', body: 'x' });
+    // Forma REAL del plugin v2: { rid, currentVersion, version, body, rawJson } — SIN
+    // `available`. El bug era que el código guardaba con updateInfo?.available (undefined),
+    // por lo que nunca detectaba actualizaciones aunque el plugin sí encontrara una.
+    AppUpdater._tauriCheck = () => Promise.resolve({ rid: 123, currentVersion: '2.0.1', version: '9.9.9', body: 'x' });
     return AppUpdater.checkUpdate(false)
-      .then(() => { const autoCalls = showModalCalls; return AppUpdater.checkUpdate(true).then(() => autoCalls); })
+      .then(() => {
+        this.assert(AppUpdater.latestVersion === '9.9.9', 'Detecta actualización cuando el plugin devuelve version SIN campo available');
+        const autoCalls = showModalCalls;
+        return AppUpdater.checkUpdate(true).then(() => autoCalls);
+      })
       .then((autoCalls) => {
         this.assert(autoCalls === 0, 'IT37: auto-check NO abre el modal (evita backdrop que mata clics)');
         this.assert(showModalCalls - autoCalls === 1, 'IT37: check manual SÍ abre el modal');
