@@ -112,6 +112,7 @@ const Tests = {
     this.testImageMigrationReceipt();
     this.testImageIdempotenceAndOrphans();
     await this.testPhotoQualityStorageRoundTrip();
+    this.testStoreInitStoreLoadFallback();
     this.testMarginalCropDetector();
     this.testSkuAuditThreeDomains();
     this.testSkuDeterministicMapping();
@@ -1975,6 +1976,32 @@ const Tests = {
     this.assert(await AppStorage._embedImagesFromFiles([]) === undefined, '_embedImagesFromFiles([]) es no-op');
     this.assert(await AppStorage._embedImagesFromFiles(null) === undefined, '_embedImagesFromFiles(null) es no-op');
     this.assert(await AppStorage._embedImagesFromFiles(undefined) === undefined, '_embedImagesFromFiles(undefined) es no-op');
+  },
+
+  async testStoreInitStoreLoadFallback() {
+    // Tauri v2 plugin-store NO expone createStore (usa Store.load). Verifica que
+    // init() lo detecta y crea el store en vez de caer a localStorage.
+    const prevStore = AppStorage.storeInstance;
+    const prevPlugin = global.window.__TAURI_PLUGIN_STORE__;
+    const mockStore = { get: async () => null, set: async () => {}, save: async () => {}, delete: async () => {} };
+    global.window.__TAURI_PLUGIN_STORE__ = { Store: { load: async () => mockStore } };
+    try {
+      await AppStorage.init();
+      this.assert(AppStorage.storeInstance !== null, 'init() usa Store.load (Tauri v2) y crea el store');
+      this.assert(AppStorage.storeInstance === mockStore, 'storeInstance es el store creado vía Store.load');
+    } finally {
+      AppStorage.storeInstance = prevStore;
+      global.window.__TAURI_PLUGIN_STORE__ = prevPlugin;
+    }
+    // Sin plugin → cae a localStorage (storeInstance null)
+    global.window.__TAURI_PLUGIN_STORE__ = undefined;
+    try {
+      await AppStorage.init();
+      this.assert(AppStorage.storeInstance === null, 'sin plugin store → fallback localStorage');
+    } finally {
+      AppStorage.storeInstance = prevStore;
+      global.window.__TAURI_PLUGIN_STORE__ = prevPlugin;
+    }
   },
 
   testMarginalCropDetector() {

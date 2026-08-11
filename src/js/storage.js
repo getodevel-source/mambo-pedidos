@@ -15,7 +15,16 @@ const AppStorage = {
   async init() {
     try {
       const storePlugin = window.__TAURI_PLUGIN_STORE__ || window.__TAURI__?.store || window.__TAURI__?.plugin?.store;
-      if (storePlugin && typeof storePlugin.createStore === 'function') {
+      // photo-quality/fix: Tauri v2 plugin-store expone Store.load / LazyStore /
+      // getStore — NO createStore. Sin este fallback, nunca se crea el store y la
+      // app cae siempre a localStorage (cuota limitada). Verificado 10/08.
+      let createStore = null;
+      if (storePlugin) {
+        if (typeof storePlugin.createStore === 'function') createStore = storePlugin.createStore;
+        else if (storePlugin.Store && typeof storePlugin.Store.load === 'function') createStore = storePlugin.Store.load;
+        else if (typeof storePlugin.getStore === 'function') createStore = storePlugin.getStore;
+      }
+      if (createStore) {
         // IT37: guard de timeout — si el store file está lockeado (otra
         // instancia corriendo) o el IPC no responde, NUNCA colgamos el init
         // (init colgado = app renderizada sin listeners = ningún botón).
@@ -23,15 +32,19 @@ const AppStorage = {
         let timer;
         const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Store init timeout')), timeoutMs); });
         try {
-          this.storeInstance = await Promise.race([storePlugin.createStore('.mambo-store.json'), timeout]);
+          this.storeInstance = await Promise.race([createStore('.mambo-store.json'), timeout]);
         } finally {
           clearTimeout(timer);
         }
+        // Store.load (Tauri v2) ya devuelve el store cargado (sin método .load);
+        // createStore legacy sí necesita load() explícito.
         if (this.storeInstance && typeof this.storeInstance.load === 'function') {
+          if (this.storeInstance._loaded) return;
           let loadTimer;
           const loadTimeout = new Promise((_, reject) => { loadTimer = setTimeout(() => reject(new Error('Store load timeout')), 3000); });
           try {
             await Promise.race([this.storeInstance.load(), loadTimeout]);
+            this.storeInstance._loaded = true;
           } finally {
             clearTimeout(loadTimer);
           }
