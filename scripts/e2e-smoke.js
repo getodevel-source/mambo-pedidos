@@ -1,0 +1,171 @@
+#!/usr/bin/env node
+/**
+ * Mambo Pedidos — E2E smoke test (Tauri/WebView2 real).
+ *
+ * Arranca la app real (o se conecta a una ya corriendo con
+ * --remote-debugging-port=9222) y verifica por CDP las capas de integración
+ * que los unit tests no cubren:
+ *   1. Consola/excepciones limpias al load.
+ *   2. Botones de navegación vivos (tamaño>0) y click real cambia la vista.
+ *   3. Store real del plugin (no null, no fallback silencioso) + roundtrip.
+ *   4. Catálogo carga filas.
+ *
+ * Exit: 0 = todo OK; 1 = hay bugs; 2 = error de harness.
+ * Uso:
+ *   node scripts/e2e-smoke.js                 # abre/adjunta a :9222
+ *   node scripts/e2e-smoke.js ws://.../target # target concreto
+ */
+'use strict';
+
+const { spawn } = require('child_process');
+const path = require('path');
+
+const DEBUG_PORT = 9222;
+const EXE = path.join(__dirname, '..', 'src-tauri', 'target', 'release', 'mambo-pedidos.exe');
+
+// ── descubrimiento / lanzamiento del target CDP ─────────────────────────────
+async function discoverWsUrl() {
+  // 1) arg explícito
+  const arg = process.argv[2];
+  if (arg && arg.startsWith('ws://')) return arg;
+  if (arg) throw new Error('Uso: node scripts/e2e-smoke.js [ws://target]');
+  // 2) app ya corriendo en :9222
+  try {
+    const res = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`);
+    const list = await res.json();
+    const page = list.find(t => t.type === 'page');
+    if (page) return page.webSocketDebuggerUrl;
+  } catch {}
+  // 3) no hay app → lanzarla con CDP habilitado y esperar el target
+  if (!process.env.E2E_NO_LAUNCH) {
+    if (!require('fs').existsSync(EXE)) throw new Error(`Sin build: ${EXE} (corré npx tauri build --no-bundle)`);
+    spawn(EXE, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${DEBUG_PORT}` }, detached: true, stdio: 'ignore' }).unref();
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const res = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`);
+        const list = await res.json();
+        const page = list.find(t => t.type === 'page');
+        if (page) return page.webSocketDebuggerUrl;
+      } catch {}
+    }
+    throw new Error(`No apareció el target CDP en :${DEBUG_PORT} tras lanzar la app`);
+  }
+  throw new Error(`Sin target CDP en :${DEBUG_PORT}`);
+}
+
+// ── cliente WS minimalista ──────────────────────────────────────────────────
+function connect(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.onerror = e => reject(new Error('WS error: ' + (e.message || 'connect')));
+    ws.onopen = () => {
+      let id = 0;
+      const pending = new Map();
+      const logs = [];
+      ws.onmessage = (ev) => {
+        const m = JSON.parse(ev.data);
+        if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
+        else if (m.method === 'Runtime.exceptionThrown') {
+          logs.push({ type: 'exception', msg: (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text) });
+        } else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) {
+          logs.push({ type: 'console.' + m.params.type, msg: m.params.args.map(a => a.value !== undefined ? a.value : (a.description || '')).join(' ').slice(0, 300) });
+        }
+      };
+      const send = (method, params = {}) => new Promise(r => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+      resolve({ ws, send, logs });
+    };
+  });
+}
+
+// ── helper: evaluación con retorno by-value ─────────────────────────────────
+function rc(client, expression) {
+  return client.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }).then(r => r.result.value);
+}
+
+// ── click real en selector (mouse sintético, no JS) ─────────────────────────
+async function realClick(client, sel) {
+  const p = await rc(client, `(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return { ok: false }; const r = b.getBoundingClientRect(); return { ok: r.width > 0 && r.height > 0, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) }; })()`);
+  if (!p.ok) return { clicked: false, w: p.w, h: p.h };
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+  return { clicked: true, x: p.x, y: p.y, w: p.w, h: p.h };
+}
+
+const fail = bugs => { console.error('\n❌ E2E FAIL — ' + bugs.length + ' bug(s):'); bugs.forEach(b => console.error('  • ' + b)); process.exit(1); };
+
+async function main() {
+  const wsUrl = await discoverWsUrl();
+  const client = await connect(wsUrl);
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('Page.reload', { ignoreCache: true });
+  await new Promise(r => setTimeout(r, 6000));
+
+  const bugs = [];
+  const logSkips = [];
+
+  // 1) excepciones/errores al load
+  const consoleClean = !client.logs.some(l => l.type === 'exception' || l.type === 'console.error');
+  if (!consoleClean) bugs.push('excepciones/errores de consola al load: ' + JSON.stringify(client.logs.slice(0, 5)));
+
+  // 2) botones de navegación vivos + cambio de vista
+  const navStatus = {};
+  for (const view of ['catalogo', 'pedido', 'historial']) {
+    const before = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
+    const click = await realClick(client, `.nav-item[data-view="${view}"]`);
+    await new Promise(r => setTimeout(r, 350));
+    const after = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
+    navStatus[view] = { click, before, after };
+    if (!click.clicked) bugs.push(`nav "${view}": botón invisible (rect ${click.w || 0}x${click.h || 0})`);
+    else if (after === view) logSkips.push(`nav "${view}" ok`);
+    else bugs.push(`nav "${view}": click terminó en "${after}" (esperado "${view}")`);
+  }
+  await realClick(client, '.nav-item[data-view=catalogo]');
+  await new Promise(r => setTimeout(r, 400));
+
+  // 3) store real + roundtrip
+  const storeInfo = await rc(client, `(async () => {
+    const s = window.AppStorage ? (await window.AppStorage.init()) : null;
+    const inst = window.AppStorage ? window.AppStorage.storeInstance : null;
+    if (!inst || typeof inst.set !== 'function') return { storeNull: true };
+    try {
+      const k = '_e2e_probe_' + Date.now();
+      await inst.set(k, { ok: true });
+      const read = await inst.get(k);
+      await inst.save();
+      await inst.reload();
+      const read2 = await inst.get(k);
+      await inst.delete(k);
+      await inst.save();
+      return { storeNull: false, roundtrip: read && read.ok && read2 && read2.ok };
+    } catch (e) { return { storeNull: false, roundtrip: false, err: String(e) }; }
+  })()`);
+  if (storeInfo.storeNull) bugs.push('store: AppStorage.storeInstance es null (fallback silencioso a localStorage)');
+  else if (!storeInfo.roundtrip) bugs.push('store: roundtrip set/get/save/reload falló' + (storeInfo.err ? ': ' + storeInfo.err : ''));
+
+  // 4) catálogo carga filas
+  await rc(client, `(() => { try { typeof loadDemoCatalog === 'function' && loadDemoCatalog(); } catch(e){} })()`);
+  await new Promise(r => setTimeout(r, 1500));
+  const rows = await rc(client, `document.querySelectorAll('tbody tr').length`);
+  if (!rows) bugs.push('catálogo: 0 filas tras cargar demo');
+
+  // reporte
+  console.log('\n🔬 E2E SMOKE (Tauri/WebView2 vía CDP)');
+  console.log('  consola limpia al load ........ ' + (consoleClean ? '✅' : '❌'));
+  for (const v of Object.keys(navStatus)) {
+    const s = navStatus[v];
+    console.log(`  nav "${v}" ........................ ${s.click.clicked ? '✅' : '❌'} (${s.before}→${s.after})`);
+  }
+  console.log('  store real (no null) ........... ' + (storeInfo.storeNull ? '❌ null' : '✅'));
+  console.log('  store roundtrip persist ........ ' + (storeInfo.roundtrip ? '✅' : '❌'));
+  console.log('  catálogo carga filas ........... ' + (rows ? `✅ (${rows})` : '❌ 0'));
+  if (logSkips.length) console.log('  (detalle: ' + logSkips.join('; ') + ')');
+
+  if (bugs.length) fail(bugs);
+  console.log('\n✅ E2E PASS — 0 bugs de integración.');
+  process.exit(0);
+}
+
+main().catch(e => { console.error('💥 e2e-smoke crashed:', e.message); process.exit(2); });
