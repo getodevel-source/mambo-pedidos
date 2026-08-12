@@ -52,5 +52,5 @@ Chain strategy: pending
 
 ## Phase 5: Verification
 
-- [ ] 5.1 Run `npm test && npm run check:version` — all gates green.
-- [ ] 5.2 Confirm `mambo_historial_v2` untouched, `pdfParser.js`/table-parser files untouched (FASE 2 boundary).
+- [x] 5.1 Run `npm test && npm run check:version` — all gates green.
+- [x] 5.2 Confirm `mambo_historial_v2` untouched, `pdfParser.js`/table-parser files untouched (FASE 2 boundary).
