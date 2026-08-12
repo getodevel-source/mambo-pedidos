@@ -475,6 +475,214 @@ async function testAppStorage() {
 }
 
 // ============================================
+//  Import Storage — round-trip, empty state, reload survival, isolation
+// ============================================
+async function testImportStorage() {
+  section('Import Storage');
+
+  // Round-trip: save payload with records + counter, load back intact
+  const payload = {
+    records: [
+      { id: 'r1', number: 'IMP-0001', supplier: 'AliExpress', description: 'Teclado', status: 'ordered' },
+      { id: 'r2', number: 'IMP-0002', supplier: 'Amazon', description: 'Mouse', status: 'in_transit' }
+    ],
+    counter: 2
+  };
+  await AppStorage.saveImports(payload);
+  const loaded = await AppStorage.loadImports();
+  assert(loaded !== null && typeof loaded === 'object', 'saveImports/loadImports: loaded payload is an object');
+  assert(Array.isArray(loaded.records) && loaded.records.length === 2, 'saveImports/loadImports: 2 records loaded');
+  assert(loaded.records[0].number === 'IMP-0001' && loaded.records[0].supplier === 'AliExpress', 'saveImports/loadImports: record 1 fields intact');
+  assert(loaded.records[1].number === 'IMP-0002' && loaded.records[1].status === 'in_transit', 'saveImports/loadImports: record 2 fields intact');
+  assert(loaded.counter === 2, 'saveImports/loadImports: counter preserved');
+
+  // Empty state: load with no stored data returns default empty collection
+  await AppStorage.removeItem(AppStorage.KEYS.IMPORTS);
+  const empty = await AppStorage.loadImports();
+  assert(empty !== null && typeof empty === 'object', 'loadImports on empty: returns an object');
+  assert(Array.isArray(empty.records) && empty.records.length === 0, 'loadImports on empty: records is empty array');
+  assert(empty.counter === 0, 'loadImports on empty: counter is 0');
+
+  // Reload survival: save, then load again (simulating app restart)
+  await AppStorage.saveImports({
+    records: [{ id: 'r3', number: 'IMP-0003', supplier: 'MercadoLibre', description: 'Monitor', status: 'ordered' }],
+    counter: 3
+  });
+  const reloaded = await AppStorage.loadImports();
+  assert(reloaded.records.length === 1, 'reload survival: 1 record survives reload');
+  assert(reloaded.records[0].number === 'IMP-0003' && reloaded.records[0].supplier === 'MercadoLibre', 'reload survival: record fields survive reload');
+  assert(reloaded.counter === 3, 'reload survival: counter survives reload');
+
+  // Storage isolation: IMPORTS key does not pollute HISTORIAL
+  await AppStorage.saveImports({
+    records: [{ id: 'iso1', number: 'IMP-0004', supplier: 'eBay', description: 'Auriculares', status: 'ordered' }],
+    counter: 4
+  });
+  const hist = await AppStorage.loadHistorial();
+  const importsInHist = hist.some(h => h.number && h.number.startsWith('IMP-'));
+  assert(!importsInHist, 'storage isolation: no import record leaks into quote history');
+  const imports = await AppStorage.loadImports();
+  assert(imports.records.length === 1 && imports.records[0].number === 'IMP-0004', 'storage isolation: imports still loadable after checking history');
+  assert(imports.records[0].supplier === 'eBay', 'storage isolation: import record fields intact after cross-read');
+}
+
+// ============================================
+//  Import Tracker — numbering, status machine, profitability, rollups
+// ============================================
+function testImportTracker() {
+  section('Import Tracker');
+
+  const ImportsTracker = require('../../src/js/importsTracker.js');
+
+  // ── Record creation defaults ──
+  const r1 = ImportsTracker.createRecord({ counter: 0, records: [] }, {
+    supplier: 'AliExpress', description: 'Teclado mecánico', fobTotalUsd: 50
+  });
+  assert(r1.record.number === 'IMP-0001', 'createRecord: first record gets IMP-0001');
+  assert(r1.record.status === 'ordered', 'createRecord: default status is ordered');
+  assert(r1.record.supplier === 'AliExpress' && r1.record.description === 'Teclado mecánico', 'createRecord: supplier and description preserved');
+  assert(r1.record.fobTotalUsd === 50, 'createRecord: fobTotalUsd preserved');
+  assert(r1.payload.counter === 1, 'createRecord: counter incremented to 1');
+  assert(typeof r1.record.id === 'string' && r1.record.id.length > 0, 'createRecord: id is a non-empty string');
+  assert(r1.record.freightUsd === 0, 'createRecord: freightUsd defaults to 0');
+  assert(r1.record.insuranceUsd === 0, 'createRecord: insuranceUsd defaults to 0');
+  assert(r1.record.courier === '', 'createRecord: courier defaults to empty string');
+  assert(r1.record.finalLandedCostUsd === 0, 'createRecord: finalLandedCostUsd defaults to 0');
+  assert(r1.record.localPriceUsd === null, 'createRecord: localPriceUsd defaults to null');
+  assert(r1.record.tipoCambio === 0, 'createRecord: tipoCambio defaults to 0');
+  assert(r1.record.notes === '', 'createRecord: notes defaults to empty string');
+  assert(typeof r1.record.dates === 'object' && r1.record.dates.ordered !== null, 'createRecord: dates.ordered is set');
+
+  // ── Sequential numbering, no reuse after deletion ──
+  const s1 = ImportsTracker.createRecord({ counter: 0, records: [] }, { supplier: 'S1', description: 'Item 1', fobTotalUsd: 10 });
+  const s2 = ImportsTracker.createRecord(s1.payload, { supplier: 'S2', description: 'Item 2', fobTotalUsd: 20 });
+  assert(s1.record.number === 'IMP-0001', 'numbering: first is IMP-0001');
+  assert(s2.record.number === 'IMP-0002', 'numbering: second is IMP-0002');
+
+  // Delete IMP-0002 and create a new one — MUST be IMP-0003, not IMP-0002
+  const afterDelete = {
+    records: s2.payload.records.filter(r => r.number !== 'IMP-0002'),
+    counter: s2.payload.counter
+  };
+  const s3 = ImportsTracker.createRecord(afterDelete, { supplier: 'S3', description: 'Item 3', fobTotalUsd: 30 });
+  assert(s3.record.number === 'IMP-0003', 'numbering: after deletion, new record is IMP-0003 (no reuse)');
+  assert(s3.payload.counter === 3, 'numbering: counter is 3 after deletion + new');
+
+  // ── Status machine: valid transitions ──
+  let rec = { ...s1.record };
+  const advance = (to) => {
+    const result = ImportsTracker.advanceStatus(rec, to);
+    rec = result.record || rec;
+    return result;
+  };
+
+  // ordered → in_transit
+  const t1 = advance('in_transit');
+  assert(t1.ok === true, 'status: ordered → in_transit is valid');
+  assert(rec.status === 'in_transit', 'status: ordered → in_transit updated');
+  assert(rec.dates.in_transit !== null, 'status: ordered → in_transit date set');
+
+  // in_transit → in_customs
+  const t2 = advance('in_customs');
+  assert(t2.ok === true, 'status: in_transit → in_customs is valid');
+  assert(rec.status === 'in_customs', 'status: in_transit → in_customs updated');
+  assert(rec.dates.in_customs !== null, 'status: in_transit → in_customs date set');
+
+  // in_customs → cleared
+  const t3 = advance('cleared');
+  assert(t3.ok === true, 'status: in_customs → cleared is valid');
+  assert(rec.status === 'cleared', 'status: in_customs → cleared updated');
+  assert(rec.dates.cleared !== null, 'status: in_customs → cleared date set');
+
+  // cleared → delivered
+  const t4 = advance('delivered');
+  assert(t4.ok === true, 'status: cleared → delivered is valid');
+  assert(rec.status === 'delivered', 'status: cleared → delivered updated');
+  assert(rec.dates.delivered !== null, 'status: cleared → delivered date set');
+
+  // ── Status machine: cancelled from non-terminal status ──
+  let rec2 = { ...s1.record };
+  const cancelFromOrdered = ImportsTracker.advanceStatus(rec2, 'cancelled');
+  assert(cancelFromOrdered.ok === true, 'status: ordered → cancelled is valid');
+  assert(cancelFromOrdered.record.status === 'cancelled', 'status: ordered → cancelled updated');
+  rec2 = cancelFromOrdered.record;
+
+  // ── Status machine: invalid transitions rejected without mutation ──
+  let rec3 = { ...s1.record };
+  const snapshot = JSON.stringify(rec3);
+  const invalid1 = ImportsTracker.advanceStatus(rec3, 'delivered');
+  assert(invalid1.ok === false, 'status: ordered → delivered is invalid');
+  assert(rec3.status === 'ordered', 'status: invalid transition does not mutate status');
+  assert(JSON.stringify(rec3) === snapshot, 'status: invalid transition does not mutate record at all');
+
+  // ── Status machine: terminal states ──
+  let delivered = { ...s1.record, status: 'delivered' };
+  const fromDelivered = ImportsTracker.advanceStatus(delivered, 'in_transit');
+  assert(fromDelivered.ok === false, 'status: delivered is terminal — cannot transition');
+  assert(delivered.status === 'delivered', 'status: delivered unchanged after rejected transition');
+
+  let cancelled = { ...s1.record, status: 'cancelled' };
+  const fromCancelled = ImportsTracker.advanceStatus(cancelled, 'cleared');
+  assert(fromCancelled.ok === false, 'status: cancelled is terminal — cannot transition');
+  assert(cancelled.status === 'cancelled', 'status: cancelled unchanged after rejected transition');
+
+  // ── Profitability: per-record ──
+  const profitRec = {
+    finalLandedCostUsd: 100, localPriceUsd: 150, tipoCambio: 1000
+  };
+  const prof = ImportsTracker.computeProfitability(profitRec);
+  assert(prof.available === true, 'profitability: available when local price exists');
+  assert(prof.profitUsd === 50, 'profitability: profit = 150 - 100 = 50');
+  assert(Math.abs(prof.roiPct - 50) < 1e-9, 'profitability: ROI = 50/100 = 50%');
+  assert(prof.profitArs === 50000, 'profitability: profitArs = 50 * 1000');
+  assert(prof.landedCostUsd === 100, 'profitability: landedCostUsd preserved');
+  assert(prof.localPriceUsd === 150, 'profitability: localPriceUsd preserved');
+
+  // ── Profitability: break-even ──
+  const beRec = { finalLandedCostUsd: 100, localPriceUsd: 100, tipoCambio: 1400 };
+  const be = ImportsTracker.computeProfitability(beRec);
+  assert(be.available === true, 'profitability break-even: available');
+  assert(be.profitUsd === 0, 'profitability break-even: profit = 0');
+  assert(be.roiPct === 0, 'profitability break-even: ROI = 0%');
+
+  // ── Profitability: more expensive ──
+  const expRec = { finalLandedCostUsd: 200, localPriceUsd: 150, tipoCambio: 1000 };
+  const exp = ImportsTracker.computeProfitability(expRec);
+  assert(exp.available === true, 'profitability more expensive: available');
+  assert(exp.profitUsd === -50, 'profitability more expensive: profit = -50');
+  assert(Math.abs(exp.roiPct - (-25)) < 1e-9, 'profitability more expensive: ROI = -25%');
+
+  // ── Profitability: missing local price → {available:false}, never zero ──
+  const noLocal = { finalLandedCostUsd: 100, localPriceUsd: null, tipoCambio: 1000 };
+  const np = ImportsTracker.computeProfitability(noLocal);
+  assert(np.available === false, 'profitability missing local: available is false');
+  assert(np.profitUsd !== 0 || np.available === false, 'profitability missing local: never zero (available is false)');
+
+  // ── Rollups ──
+  const rollupRecords = [
+    { id: 'a', status: 'delivered', finalLandedCostUsd: 100, localPriceUsd: 150, tipoCambio: 1000 },
+    { id: 'b', status: 'in_transit', finalLandedCostUsd: 80, localPriceUsd: null, tipoCambio: 1000 },
+    { id: 'c', status: 'cancelled', finalLandedCostUsd: 50, localPriceUsd: 60, tipoCambio: 1000 }
+  ];
+  const rollups = ImportsTracker.computeRollups(rollupRecords);
+  assert(rollups.totalInvestedUsd === 230, 'rollups: total invested = 100 + 80 + 50 = 230');
+  assert(rollups.totalProfitUsd === 60, 'rollups: total profit = (150-100) + 0 + (60-50) = 60 (c has local price, b missing local)');
+  assert(rollups.activeCount === 1, 'rollups: active count = 1 (in_transit, not terminal)');
+  assert(rollups.byStatus.ordered === 0, 'rollups: byStatus.ordered = 0');
+  assert(rollups.byStatus.in_transit === 1, 'rollups: byStatus.in_transit = 1');
+  assert(rollups.byStatus.in_customs === 0, 'rollups: byStatus.in_customs = 0');
+  assert(rollups.byStatus.cleared === 0, 'rollups: byStatus.cleared = 0');
+  assert(rollups.byStatus.delivered === 1, 'rollups: byStatus.delivered = 1');
+  assert(rollups.byStatus.cancelled === 1, 'rollups: byStatus.cancelled = 1');
+
+  // ── Rollups: empty collection ──
+  const emptyRollups = ImportsTracker.computeRollups([]);
+  assert(emptyRollups.totalInvestedUsd === 0, 'rollups empty: total invested = 0');
+  assert(emptyRollups.totalProfitUsd === 0, 'rollups empty: total profit = 0');
+  assert(emptyRollups.activeCount === 0, 'rollups empty: active count = 0');
+}
+
+// ============================================
 //  Main
 // ============================================
 (async () => {
@@ -482,6 +690,8 @@ async function testAppStorage() {
   testQuoteGenerator();
   testSkuAllocator();
   await testAppStorage();
+  await testImportStorage();
+  testImportTracker();
 
   console.log(`\n📊 Resultado: ${passed}/${passed + failed} pruebas pasaron exitosamente.`);
   if (failed > 0) {
