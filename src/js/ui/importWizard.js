@@ -21,7 +21,12 @@ const ImportWizard = {
     depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
     recuperaCredito: true,
     iibbJurisdiccion: 'santa_fe', iibbPctCustom: 0.03,
-    ncmOverrides: {}
+    ncmOverrides: {},
+    // Slice C (landed-cost-verdict): precio local de referencia, percepción BP y
+    // seguro explícito en USD (override del %). Persisten en mamboImportWizardState.
+    precioLocalUsd: null,
+    bpPct: 0,
+    seguroUsdOverride: null
   },
   CACHE_KEY: 'mamboImportWizardState',
   PROJECT_KEY: 'mamboImportProyecto',
@@ -167,6 +172,11 @@ const ImportWizard = {
   // ---- flete + seguro ----
   _render_flete() {
     const s = ImportWizard.state;
+    const fobTotal = ImportWizard._currentFobTotal();
+    const sugerencia = ImportWizard.suggestedInsuranceUsd();
+    const sugeridoTxt = fobTotal > 0 && sugerencia > 0
+      ? '~$' + (Math.round(sugerencia * 100) / 100) + ' USD'
+      : '— (armá el pedido primero)';
     return `<div class="card" style="padding:18px;">
       <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 3 — Régimen, transporte y seguro (define tu valor CIF)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -189,12 +199,25 @@ const ImportWizard = {
             <option value="pct" ${s.fleteModo==='pct'?'selected':''}>% del FOB</option>
           </select></div>
         <div><label class="wz-lbl">Seguro (% del FOB)</label>
-          <input type="number" step="0.001" class="input" value="${s.seguro}" onchange="ImportWizard.state.seguro=Number(this.value)/100" oninput="ImportWizard.state.seguro=Number(this.value)/100"></div>
+          <input type="number" step="0.001" class="input" value="${s.seguro}" onchange="ImportWizard.state.seguro=Number(this.value)/100;ImportWizard.state.seguroUsdOverride=null;ImportWizard.render()" oninput="ImportWizard.state.seguro=Number(this.value)/100;ImportWizard.state.seguroUsdOverride=null"></div>
         ${s.fleteModo==='peso'
           ? `<div><label class="wz-lbl">Peso total (kg)</label><input type="number" class="input" value="${s.pesoKg}" onchange="ImportWizard.state.pesoKg=Number(this.value)" oninput="ImportWizard.state.pesoKg=Number(this.value)"></div>
              <div><label class="wz-lbl">Costo por kg (USD)</label><input type="number" class="input" value="${s.costoPorKg}" onchange="ImportWizard.state.costoPorKg=Number(this.value)" oninput="ImportWizard.state.costoPorKg=Number(this.value)"></div>`
           : `<div><label class="wz-lbl">Flete (% del FOB)</label><input type="number" step="0.01" class="input" value="${s.fletePct*100}" onchange="ImportWizard.state.fletePct=Number(this.value)/100" oninput="ImportWizard.state.fletePct=Number(this.value)/100"></div>
              <div></div>`}
+      </div>
+      <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Sugerencia de seguro: ~1.1% de FOB + flete</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:14px;font-weight:700;">${sugeridoTxt}</span>
+          <button class="btn btn-secondary btn-sm" onclick="ImportWizard.applyInsurancePreset()">Aplicar sugerencia</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+          <div><label class="wz-lbl">Seguro en USD (opcional — reemplaza el %)</label>
+            <input type="number" step="0.01" class="input" value="${s.seguroUsdOverride != null ? Math.round(s.seguroUsdOverride * 100) / 100 : ''}" oninput="ImportWizard._setSeguroUsd(this.value)" onchange="ImportWizard._setSeguroUsd(this.value);ImportWizard.render()"></div>
+          <div><label class="wz-lbl">Precio local de referencia (USD)</label>
+            <input type="number" step="0.01" class="input" value="${s.precioLocalUsd != null ? s.precioLocalUsd : ''}" oninput="ImportWizard.state.precioLocalUsd=this.value!==''?Number(this.value):null" onchange="ImportWizard.state.precioLocalUsd=this.value!==''?Number(this.value):null;ImportWizard.render()"></div>
+        </div>
       </div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:12px;">El seguro suele ser 1-2% del FOB. Si no declarás, Aduana aplica un porcentaje presunto.</p>
     </div>`;
@@ -234,6 +257,9 @@ const ImportWizard = {
         ${s.iibbJurisdiccion==='otra'
           ? `<div><label class="wz-lbl">IIBB %</label><input type="number" step="0.1" class="input" style="width:90px;" value="${Math.round((s.iibbPctCustom||0.025)*1000)/10}" onchange="ImportWizard.state.iibbPctCustom=Number(this.value)/100;ImportWizard.render()"></div>`
           : ''}
+        <div><label class="wz-lbl">Percepción Bienes Personales</label>
+          <input type="number" step="0.1" class="input" style="width:90px;" value="${Math.round((s.bpPct || 0) * 1000) / 10}" oninput="ImportWizard.state.bpPct=Number(this.value)/100" onchange="ImportWizard.state.bpPct=Number(this.value)/100;ImportWizard.render()">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">% — opcional, aditiva al total</div></div>
       </div>
       <div class="iw-search" style="display:flex;gap:10px;align-items:end;margin-bottom:10px;flex-wrap:wrap;">
         <div><label class="wz-lbl">Buscar NCM (base completa ARCA)</label>
@@ -293,19 +319,32 @@ const ImportWizard = {
       return `<div class="card" style="padding:18px;"><div style="font-weight:700;">No hay pedido.</div><p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Volvé al paso 2 y armá el pedido desde el catálogo.</p></div>`;
     }
     const fobTotal = items.reduce((a, i) => a + (i.fob || 0) * (i.qty || 0), 0);
-    const pesoKg = s.fleteModo === 'peso' ? s.pesoKg : 0;
-    const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
-    const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
-    const res = Calculator.calculateDoorToDoorExactCost(items, {
-      tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
-      regimen: s.regimen,
-      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
-      depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
-      simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
-    });
+    const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
     const sum = res.summary;
     const recupera = s.recuperaCredito;
     const neto = recupera ? sum.costoNetoRealUsd : sum.totalPuertaConIvaUsd;
+
+    // Slice C: desglose PAIS 0% (fuente única getPaisLine) + percepción BP + veredicto
+    const bpUsd = sum.bpUsd || 0;
+    const paisLine = (typeof Calculator !== 'undefined' && typeof Calculator.getPaisLine === 'function') ? Calculator.getPaisLine() : null;
+    const precioLocal = s.precioLocalUsd;
+    let verdictHtml = '';
+    if (precioLocal != null && precioLocal > 0 && typeof Calculator !== 'undefined' && typeof Calculator.compareVsLocal === 'function') {
+      const v = Calculator.compareVsLocal(sum.totalPuertaConIvaUsd, precioLocal, sum.tipoCambio);
+      if (v.available) {
+        const labels = {
+          cheaper: '✅ Comprar afuera es más barato',
+          more_expensive: '⚠️ Comprar local es más barato',
+          break_even: '⚖️ Empate — mismo costo'
+        };
+        const signTxt = v.verdict === 'cheaper' ? 'Ahorrás' : v.verdict === 'more_expensive' ? 'Pagás' : 'Diferencia';
+        verdictHtml = `<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);">
+          <div style="font-size:13px;font-weight:700;">${labels[v.verdict] || v.verdict}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${signTxt} $${Math.abs(v.diffUsd).toFixed(2)} USD (${v.diffPct >= 0 ? '+' : ''}${v.diffPct.toFixed(1)}% vs precio local)</div>
+          <div style="font-size:12px;color:var(--text-muted);">En pesos: $${Math.abs(v.diffArs).toFixed(2)} ARS</div>
+        </div>`;
+      }
+    }
 
     const rows = res.items.map(i => `<tr>
       <td style="padding:6px 8px;font-size:12px;">${ImportWizard._esc(i.modelo || i.sku)}</td>
@@ -332,8 +371,17 @@ const ImportWizard = {
         <div><div class="iw-kpi-lbl" style="color:var(--blue);">Crédito fiscal ${ImportWizard._tip('CRED')}</div><div class="iw-kpi" style="color:var(--blue);">$${Math.round(sum.totalRecuperableUsd).toLocaleString()}</div></div>
         <div><div class="iw-kpi-lbl">Multiplicador (caja/FOB)</div><div class="iw-kpi">${(sum.totalPuertaConIvaUsd / fobTotal).toFixed(2)}x</div></div>
       </div>
+      <div class="iw-kpi-lbl" style="margin-top:14px;">Desglose de tributos</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-muted);">
+        <span>Derechos + Tasa + Anticipos: $${Math.round(sum.totalTributosAduanaUsd).toLocaleString()}</span>
+        <span>IVA: $${Math.round(sum.totalIvaAduanaUsd).toLocaleString()}</span>
+        ${bpUsd > 0 ? `<span>Percepción BP: $${Math.round(bpUsd * 100) / 100}</span>` : ''}
+        ${paisLine ? `<span>${paisLine.label}: ${paisLine.ratePct}% — ${paisLine.status === 'eliminated' ? 'eliminado (no se paga)' : ''}</span>` : ''}
+      </div>
+      ${verdictHtml}
       <div class="table-scroll" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>NCM</th><th>Qty</th><th>Tributos</th><th>Costo unit+IVA</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div style="display:flex;gap:10px;margin-top:16px;">
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="ImportWizard.saveAsImport()">💾 Guardar como importación</button>
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportCsv()">⬇ Exportar resumen CSV</button>
         <button class="btn btn-secondary btn-sm" onclick="ImportWizard.saveProject()">💾 Guardar proyecto</button>
         <button class="btn btn-ghost btn-sm" onclick="ImportWizard.clearProject()">Descartar proyecto</button>
@@ -346,16 +394,7 @@ const ImportWizard = {
     const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
     if (!items.length) { if (typeof toast === 'function') toast('No hay pedido para exportar', 'error'); return; }
     const s = ImportWizard.state;
-    const pesoKg = s.fleteModo === 'peso' ? s.pesoKg : 0;
-    const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
-    const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
-    const res = Calculator.calculateDoorToDoorExactCost(items, {
-      tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
-      regimen: s.regimen,
-      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
-      depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
-      simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
-    });
+    const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
     const sum = res.summary;
     const sep = ',';
     const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
@@ -382,6 +421,125 @@ const ImportWizard = {
     a.click();
     URL.revokeObjectURL(a.href);
     if (typeof toast === 'function') toast('Resumen exportado a CSV', 'success');
+  },
+
+  // ---- Slice C: preset de seguro, veredicto y bridge al tracker ----
+
+  // Config del motor puerta a puerta con los inputs del asistente (incluye BP).
+  _doorConfig() {
+    const s = ImportWizard.state;
+    const pesoKg = s.fleteModo === 'peso' ? s.pesoKg : 0;
+    const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
+    const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
+    return {
+      tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      regimen: s.regimen, bpPct: s.bpPct,
+      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
+      depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
+      simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
+    };
+  },
+
+  _currentFobTotal() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    return items.reduce((a, i) => a + (i.fob || 0) * (i.qty || 0), 0);
+  },
+
+  // Mismo criterio que el motor: flete por peso (kg × USD/kg) o % del FOB.
+  _estimateFlete() {
+    const s = ImportWizard.state;
+    const fob = ImportWizard._currentFobTotal();
+    if (s.fleteModo === 'peso') return (s.pesoKg || 0) * (s.costoPorKg || 0);
+    return fob * (s.fletePct != null ? s.fletePct : 0.15);
+  },
+
+  suggestedInsuranceUsd() {
+    const fob = ImportWizard._currentFobTotal();
+    if (fob <= 0) return 0;
+    const flete = ImportWizard._estimateFlete();
+    return (typeof Calculator !== 'undefined' && typeof Calculator.suggestInsuranceUsd === 'function')
+      ? Calculator.suggestInsuranceUsd(fob, flete) : 0;
+  },
+
+  // Convierte un monto explícito de seguro al equivalente seguroPct = amount / fobTotal
+  // (el motor no cambia: sigue recibiendo la fracción del FOB). '' limpia el override.
+  _setSeguroUsd(raw) {
+    const s = ImportWizard.state;
+    if (raw === '' || raw === null || raw === undefined) {
+      s.seguroUsdOverride = null;
+      return;
+    }
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v < 0) return;
+    s.seguroUsdOverride = v;
+    const fob = ImportWizard._currentFobTotal();
+    if (fob > 0) s.seguro = v / fob;
+  },
+
+  applyInsurancePreset() {
+    const amt = Math.round(ImportWizard.suggestedInsuranceUsd() * 100) / 100;
+    if (amt <= 0) {
+      if (typeof toast === 'function') toast('Armá el pedido primero para estimar el seguro', 'error');
+      return;
+    }
+    ImportWizard._setSeguroUsd(String(amt));
+    ImportWizard.render();
+    if (typeof toast === 'function') toast(`Seguro sugerido: $${amt} USD aplicado`, 'success');
+  },
+
+  // Bridge "Guardar como importación" (spec import-tracker / Wizard Save Bridge):
+  // crea un registro IMP-xxxx en `ordered` con snapshot del costo final (caja).
+  // DECLINED → no crea registro, no muta estado ni flujo.
+  async saveAsImport() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    if (!items.length) {
+      if (typeof toast === 'function') toast('No hay pedido para guardar', 'error');
+      return;
+    }
+    const s = ImportWizard.state;
+    const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
+    const sum = res.summary;
+    let ok = true;
+    if (typeof confirm === 'function') {
+      ok = confirm(`¿Guardar esta importación en el tracker? Costo final (caja): $${Math.round(sum.totalPuertaConIvaUsd * 100) / 100} USD`);
+    }
+    if (!ok) {
+      if (typeof toast === 'function') toast('No se guardó la importación', 'info');
+      return;
+    }
+    let supplier = '';
+    if (typeof prompt === 'function') {
+      supplier = prompt('Proveedor de esta importación:', '');
+      if (supplier === null) return; // prompt cancelado → no guardar
+      supplier = supplier.trim();
+    }
+    if (typeof ImportsTracker === 'undefined') {
+      if (typeof toast === 'function') toast('Tracker no disponible', 'error');
+      return;
+    }
+    const payload = (typeof AppStorage !== 'undefined' && AppStorage.loadImports)
+      ? await AppStorage.loadImports()
+      : { records: [], counter: 0 };
+    const desc = items.map(i => i.modelo || i.sku).filter(Boolean).slice(0, 4).join(', ');
+    const result = ImportsTracker.createRecord(payload, {
+      supplier,
+      description: desc,
+      fobTotalUsd: sum.fobTotalUsd
+    });
+    // Snapshot de costo + inputs del asistente: createRecord deja los defaults en
+    // estos campos; el bridge los completa con la salida del motor (no toca Slice A).
+    const rec = result.record;
+    rec.freightUsd = sum.fleteTotalUsd;
+    rec.insuranceUsd = sum.seguroTotalUsd;
+    rec.courier = s.regimen === 'courier' ? 'Courier' : (s.transporte || '');
+    rec.finalLandedCostUsd = sum.totalPuertaConIvaUsd;
+    rec.localPriceUsd = (s.precioLocalUsd != null && s.precioLocalUsd > 0) ? s.precioLocalUsd : null;
+    rec.tipoCambio = sum.tipoCambio;
+    rec.notes = 'Creado desde el asistente de importación (paso 6)';
+    if (typeof AppStorage !== 'undefined' && AppStorage.saveImports) {
+      await AppStorage.saveImports(result.payload);
+    }
+    if (typeof toast === 'function') toast(`Importación ${rec.number} guardada`, 'success');
   },
 
   _finish() {

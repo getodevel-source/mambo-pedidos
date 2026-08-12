@@ -287,6 +287,9 @@ const Calculator = {
     const despachanteUsd = this.parseNum(doorConfig.despachanteUsd, 450);
     const simDigitalizacionUsd = this.parseNum(doorConfig.simDigitalizacionUsd, 40);
     const fleteInternoUsd = this.parseNum(doorConfig.fleteInternoUsd, 80);
+    // Slice C: Percepción Bienes Personales (BP) — aditiva sobre baseImp, default 0.
+    // 0 ⇒ salida byte-identical a la legada del motor auditado (regresión pinneada).
+    const bpPct = doorConfig.bpPct != null ? doorConfig.bpPct : 0;
 
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
@@ -326,6 +329,7 @@ const Calculator = {
           cifTotalUsd: cifTotal, totalTributosAduanaUsd: tributos, totalIvaAduanaUsd: ivaCourier,
           ivaUsd: ivaCourier, ivaArs: ivaCourier * tc, depositoFiscalUsd, despachanteUsd,
           simDigitalizacionUsd, fleteInternoUsd, totalCertsCostUsd: 0, totalGastosFijosDestinoUsd: totalGastos,
+          bpUsd: 0, // BP percepción: solo aplica en régimen importador
           totalPuertaUsd: caja - ivaCourier, totalPuertaConIvaUsd: caja, totalPuertaConIvaArs: caja * tc,
           totalPuertaArs: (caja - ivaCourier) * tc, totalRecuperableUsd: ivaCourier,
           totalAnticiposRecuperablesUsd: 0, costoNetoRealUsd: caja - ivaCourier,
@@ -390,7 +394,8 @@ const Calculator = {
       const ivaAddUsd = baseImp * ncmRule.ivaAdd;
       const percGanUsd = baseImp * ncmRule.percGan;
       const iibbUsd = baseImp * iibbPct;
-       const totalTributosItemUsd = derechosUsd + tasaUsd + ivaAddUsd + percGanUsd + iibbUsd;
+      const bpUsd = baseImp * bpPct; // Percepción Bienes Personales — aditiva, default 0
+       const totalTributosItemUsd = derechosUsd + tasaUsd + ivaAddUsd + percGanUsd + iibbUsd + bpUsd;
 
       return {
         ...item,
@@ -403,6 +408,7 @@ const Calculator = {
         ivaAddUsd,
         percGanUsd,
          iibbUsd,
+         bpUsd,
          totalTributosItemUsd,
          totalTributosItemConIvaUsd: totalTributosItemUsd + ivaUsd,
         // IT19 (crédito fiscal): IVA + IVA adicional + Ganancias + IIBB son
@@ -426,7 +432,8 @@ const Calculator = {
     });
 
     const totalGastosFijosDestinoUsd = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd + totalCertsCostUsd;
-    const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd, 0);
+    const totalBpUsd = itemCalculations.reduce((sum, i) => sum + (i.bpUsd || 0), 0);
+    const totalTributosAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd + (i.bpUsd || 0), 0);
     const totalIvaAduanaUsd = itemCalculations.reduce((sum, i) => sum + i.ivaUsd, 0);
     // IT19 (crédito fiscal): lo recuperable = IVA + anticipos (IVA add + Ganancias + IIBB).
     // Caja = todo lo que sale al despachar. Costo neto real = solo lo NO recuperable.
@@ -472,6 +479,7 @@ const Calculator = {
         fleteInternoUsd,
         totalCertsCostUsd,
         totalGastosFijosDestinoUsd,
+        bpUsd: totalBpUsd,
         totalPuertaUsd,
         totalPuertaConIvaUsd,
         totalPuertaConIvaArs: totalPuertaConIvaUsd * tc,
@@ -497,6 +505,47 @@ const Calculator = {
       ivaEstUsd: ivaEst,
       ivaEstArs: Math.round(ivaEst * tc)
     };
+  },
+
+  // Slice C (landed-cost-verdict): compara el costo puesto en puerta (salida del
+  // motor auditado) contra un precio local de referencia. Consume el summary del
+  // motor — NO recalcula impuestos por su cuenta (spec: reuse existing engine).
+  compareVsLocal(landedUsd, localPriceUsd, tipoCambio) {
+    if (localPriceUsd === null || localPriceUsd === undefined ||
+        typeof localPriceUsd !== 'number' || !Number.isFinite(localPriceUsd) || localPriceUsd <= 0) {
+      // Sin precio local: nunca asumir un precio, nunca lanzar.
+      return { available: false };
+    }
+    const landed = this.parseNum(landedUsd, 0);
+    const local = localPriceUsd;
+    const tc = this.parseNum(tipoCambio, 0);
+    const diffUsd = local - landed;
+    // Tolerancia float: |landed − local| < 1e-6 cuenta como empate exacto.
+    const verdict = Math.abs(diffUsd) < 1e-6 ? 'break_even' : (diffUsd > 0 ? 'cheaper' : 'more_expensive');
+    const cleanDiff = Math.abs(diffUsd) < 1e-6 ? 0 : diffUsd;
+    const diffPct = local !== 0 ? (cleanDiff / local) * 100 : 0;
+    return {
+      available: true,
+      verdict,
+      diffUsd: cleanDiff,
+      diffPct,
+      diffArs: cleanDiff * tc,
+      landedUsd: landed,
+      localPriceUsd: local,
+      tipoCambio: tc
+    };
+  },
+
+  // Slice C: línea informativa de Impuesto PAIS — 0% eliminado (matriz auditada
+  // 2026). Fuente única para el desglose del wizard; NUNCA omitir en silencio.
+  getPaisLine() {
+    return { label: 'Impuesto PAIS', ratePct: 0, amountUsd: 0, status: 'eliminated' };
+  },
+
+  // Slice C: preset de seguro sugerido ≈ 1.1% de (FOB + flete). El wizard convierte
+  // el monto al equivalente seguroPct = amount / fobTotal sin tocar el motor.
+  suggestInsuranceUsd(fob, freight) {
+    return (this.parseNum(fob, 0) + this.parseNum(freight, 0)) * 0.011;
   }
 };
 
