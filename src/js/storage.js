@@ -7,7 +7,8 @@ const AppStorage = {
   KEYS: {
     CATALOG: 'mambo_catalog_v2',
     HISTORIAL: 'mambo_historial_v2',
-    BRANDS: 'mambo_brands_v1'
+    BRANDS: 'mambo_brands_v1',
+    IMPORTS: 'mambo_imports_v1'
   },
   storeInstance: null,
 
@@ -223,6 +224,14 @@ const AppStorage = {
 
   async loadBrands() {
     return await this.getItem(this.KEYS.BRANDS, []);
+  },
+
+  async saveImports(payload) {
+    await this.setItem(this.KEYS.IMPORTS, payload);
+  },
+
+  async loadImports() {
+    return await this.getItem(this.KEYS.IMPORTS, { records: [], counter: 0 });
   },
 
   // ── Slice 5: Image Storage References ──
