@@ -46,10 +46,12 @@ const dom = new JSDOM(`<!DOCTYPE html><html><body>
     <div class="nav-item" data-view="catalogo">Catálogo <span id="navBadgeCat"></span></div>
     <div class="nav-item" data-view="pedido">Pedido <span id="navBadgePed"></span></div>
     <div class="nav-item" data-view="historial">Historial <span id="navBadgeHis"></span></div>
+    <div class="nav-item" data-view="importaciones">Importaciones <span id="navBadgeImp"></span></div>
   </nav>
   <div class="view" id="view-catalogo"></div>
   <div class="view" id="view-pedido"></div>
   <div class="view" id="view-historial"></div>
+  <div class="view" id="view-importaciones"><div id="importsSubtitle"></div><div id="importsList"></div></div>
 
   <!-- notifications (ui/notifications.js) -->
   <div id="toast"></div>
@@ -212,6 +214,7 @@ global.TextSanitizer = require(jsPath('textSanitizer.js'));
 global.CatalogValidator = require(jsPath('catalogValidator.js'));
 global.QuoteGenerator = require(jsPath('quoteGenerator.js'));
 global.FileImporter = require(jsPath('fileImporter.js'));
+global.ImportsTracker = require(jsPath('importsTracker.js'));
 global.DEMO_CATALOG = require(jsPath('demoCatalog.js'));
 
 // Stubs mínimos que pueden tocar fileImporter/etc. (mismo set que run-tests.js)
@@ -251,6 +254,7 @@ function loadBrowserScript(relPath) {
 
 loadBrowserScript('ui/notifications.js');
 loadBrowserScript('ui/historyView.js');
+loadBrowserScript('ui/importsView.js');
 loadBrowserScript('ui/modals.js');
 loadBrowserScript('ui/catalogView.js');
 loadBrowserScript('app.js');
@@ -262,6 +266,7 @@ const BRIDGE_GLOBALS = [
   'UINotifications', 'toast', 'showProgress', 'hideProgress', 'showDropOverlay', 'hideDropOverlay',
   'HistoryView', 'saveToHistorial', 'renderHistorial', 'loadFromHistorial', 'clonarPedido',
   'copiarResumenPedido', 'deleteFromHistorial',
+  'ImportsView', 'renderImportaciones', 'invalidateImportsBadge',
   'UIModals', 'zoomImage', 'zoomImageByUrl', 'closeImageZoomModal', 'triggerImageUpload',
   'openSupplierCompareModal', 'closeSupplierCompareModal', 'openSensitivitySimulatorModal',
   'closeSensitivitySimulatorModal', 'runSensitivitySimulation', 'openBreakEvenModal',
@@ -418,6 +423,33 @@ async function testSwitchView() {
   check('switchView(historial): view-historial activa + nav activo',
     $id('view-historial').classList.contains('active') && document.querySelector('.nav-item[data-view="historial"]').classList.contains('active'));
 
+  // importaciones: seed + render hook (renderImportaciones vía switchView)
+  await AppStorage.saveImports({
+    records: [
+      {
+        id: 'imp-a', number: 'IMP-0001', supplier: 'AliExpress', description: 'Teclado mecánico',
+        courier: 'DHL', status: 'in_transit',
+        dates: { ordered: '2026-08-01T00:00:00Z', in_transit: '2026-08-05T00:00:00Z', in_customs: null, cleared: null, delivered: null },
+        finalLandedCostUsd: 100, localPriceUsd: 150, tipoCambio: 1400
+      },
+      {
+        id: 'imp-b', number: 'IMP-0002', supplier: 'Amazon', description: 'Mouse G Pro',
+        courier: 'FedEx', status: 'delivered',
+        dates: { ordered: '2026-07-10T00:00:00Z', in_transit: null, in_customs: null, cleared: '2026-07-20T00:00:00Z', delivered: '2026-07-25T00:00:00Z' },
+        finalLandedCostUsd: 60, localPriceUsd: 90, tipoCambio: 1400
+      }
+    ],
+    counter: 2
+  });
+  global.switchView('importaciones');
+  await tick();
+  check('switchView(importaciones): renderImportaciones corrió (subtítulo "2 importaciones")',
+    $id('importsSubtitle').textContent.includes('2 importaciones'));
+  check('switchView(importaciones): view-importaciones activa + nav activo',
+    $id('view-importaciones').classList.contains('active') && document.querySelector('.nav-item[data-view="importaciones"]').classList.contains('active'));
+  check('switchView(importaciones): dashboard agrupa por estado (En tránsito / Entregado)',
+    $id('importsList').innerHTML.includes('En tránsito') && $id('importsList').innerHTML.includes('Entregado'));
+
   global.switchView('catalogo');
   check('switchView(catalogo): vuelve a catálogo', $id('view-catalogo').classList.contains('active'));
 }
@@ -459,6 +491,19 @@ async function testUpdateBadges() {
   global.invalidateHistorialBadge();
   await global.updateBadges();
   check('updateBadges: invalidateHistorialBadge fuerza re-lectura', $id('navBadgeHis').textContent === '2');
+
+  // Badge de importaciones: recuento de records + invalidación (patrón espejo del historial)
+  global.invalidateImportsBadge();
+  await AppStorage.saveImports({
+    records: [
+      { id: 'i1', number: 'IMP-0001', supplier: 'A', description: 'X', status: 'ordered', finalLandedCostUsd: 10, localPriceUsd: null, dates: { ordered: new Date().toISOString() } },
+      { id: 'i2', number: 'IMP-0002', supplier: 'B', description: 'Y', status: 'in_transit', finalLandedCostUsd: 20, localPriceUsd: null, dates: { ordered: new Date().toISOString(), in_transit: new Date().toISOString() } },
+      { id: 'i3', number: 'IMP-0003', supplier: 'C', description: 'Z', status: 'delivered', finalLandedCostUsd: 30, localPriceUsd: null, dates: { ordered: new Date().toISOString(), delivered: new Date().toISOString() } }
+    ],
+    counter: 3
+  });
+  await global.updateBadges();
+  check('updateBadges: navBadgeImp = 3 importaciones guardadas', $id('navBadgeImp').textContent === '3');
 }
 
 // ============================================
@@ -731,11 +776,18 @@ async function testKeydownHandlers() {
   dispatchKey('1', { ctrlKey: true });
   check('keydown Ctrl+1: cambia a vista catálogo', $id('view-catalogo').classList.contains('active'));
 
+  // Ctrl+4 -> switchView('importaciones')
+  global.switchView('pedido');
+  dispatchKey('4', { ctrlKey: true });
+  await tick();
+  check('keydown Ctrl+4: cambia a vista importaciones', $id('view-importaciones').classList.contains('active'));
+
   // Ctrl+F -> foco en catSearch
   dispatchKey('f', { ctrlKey: true });
   check('keydown Ctrl+F: enfoca catSearch', document.activeElement === $id('catSearch'));
 
   // Ctrl+Enter sobre catálogo sin selección -> validarYOarmarPedido (toast error, sin crash)
+  global.switchView('catalogo');   // el bloque Ctrl+4 pudo dejar otra vista activa
   ctx('selection = {}');
   dispatchKey('Enter', { ctrlKey: true });
   await tick();
@@ -757,6 +809,21 @@ function testValidationPanelDirect() {
   check('showValidationPanel: panel visible', panel.style.display === 'block');
   global.hideValidationPanel();
   check('hideValidationPanel: oculta el panel', $id('validationPanel').style.display === 'none');
+}
+
+// ============================================
+//  18) index.html — shell de importaciones (nav-item + badge + view + script tag)
+// ============================================
+function testIndexHtmlImportsShell() {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'index.html'), 'utf8');
+  check('index.html: nav-item data-view="importaciones" presente',
+    html.includes('data-view="importaciones"'));
+  check('index.html: badge #navBadgeImp presente',
+    html.includes('id="navBadgeImp"'));
+  check('index.html: contenedor #view-importaciones presente',
+    html.includes('id="view-importaciones"'));
+  check('index.html: script src="js/ui/importsView.js" presente (script-integrity)',
+    html.includes('src="js/ui/importsView.js"'));
 }
 
 // ============================================
@@ -784,6 +851,7 @@ function testValidationPanelDirect() {
   try { testUpdateProductImage(); } catch (e) { failSection('updateProductImage', e); }
   try { await testKeydownHandlers(); } catch (e) { failSection('keydown handlers', e); }
   try { testValidationPanelDirect(); } catch (e) { failSection('showValidationPanel/hideValidationPanel', e); }
+  try { testIndexHtmlImportsShell(); } catch (e) { failSection('index.html shell importaciones', e); }
 
   const total = results.pass + results.fail;
   console.log('');

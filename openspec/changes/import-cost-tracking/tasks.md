@@ -38,10 +38,10 @@ Chain strategy: pending
 
 ## Phase 3: Tracker UI (Slice B)
 
-- [ ] 3.1 Add 4th nav-item `importaciones` + badge, `view-importaciones` container, two script tags in `src/index.html` (script-integrity gate).
-- [ ] 3.2 Create `src/js/ui/importsView.js` — dashboard grouped by status: dates, courier, final cost, ROI, empty state (follow `historyView.js` render pattern).
-- [ ] 3.3 Wire `switchView` render hook + `navBadgeImp` in `updateBadges` + keyboard '4' in `src/js/app.js`.
-- [ ] 3.4 Verify: `npm test` script-integrity + ui-smoke pass; manual open → dashboard renders.
+- [x] 3.1 Add 4th nav-item `importaciones` + badge, `view-importaciones` container, two script tags in `src/index.html` (script-integrity gate).
+- [x] 3.2 Create `src/js/ui/importsView.js` — dashboard grouped by status: dates, courier, final cost, ROI, empty state (follow `historyView.js` render pattern).
+- [x] 3.3 Wire `switchView` render hook + `navBadgeImp` in `updateBadges` + keyboard '4' in `src/js/app.js`.
+- [x] 3.4 Verify: `npm test` script-integrity + ui-smoke pass; manual open → dashboard renders.
 
 ## Phase 4: Verdict Layer (Slice C)
 

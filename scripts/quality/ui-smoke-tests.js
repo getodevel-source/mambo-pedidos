@@ -89,6 +89,10 @@ const dom = new JSDOM(`<!DOCTYPE html><html><body>
   <!-- historyView -->
   <div id="historialSubtitle"></div>
   <div id="historialList"></div>
+
+  <!-- importsView -->
+  <div id="importsSubtitle"></div>
+  <div id="importsList"></div>
 </body></html>`, { url: 'http://localhost/' });
 
 global.window = dom.window;
@@ -148,6 +152,7 @@ global.Validations = require(jsPath('validations.js'));
 global.SkuAllocator = require(jsPath('skuAllocator.js'));
 global.TextSanitizer = require(jsPath('textSanitizer.js'));
 global.CatalogValidator = require(jsPath('catalogValidator.js'));
+global.ImportsTracker = require(jsPath('importsTracker.js'));
 
 // Backends pesados / en edicion paralela (pdfParser.js NO se toca y NO se carga):
 // se stubean para aislar el smoke test en la capa de UI.
@@ -160,8 +165,9 @@ global.PdfParser = { processPdfFile: async () => ({ products: [] }) };
 global.pdfjsLib = dom.window.pdfjsLib = { GlobalWorkerOptions: {} };
 global.XLSX = dom.window.XLSX = {};
 let _historial = [];
+let _imports = { records: [], counter: 0 };
 global.AppStorage = {
-  KEYS: { CATALOG: 'mambo_catalog_v2', BRANDS: 'mambo_brands_v1' },
+  KEYS: { CATALOG: 'mambo_catalog_v2', BRANDS: 'mambo_brands_v1', IMPORTS: 'mambo_imports_v1' },
   loadBrands: async () => [],
   saveCatalog: async () => {},
   saveBrands: async () => {},
@@ -169,7 +175,9 @@ global.AppStorage = {
   setItem: async () => {},
   removeItem: async () => {},
   loadHistorial: async () => _historial,
-  saveHistorial: async (list) => { _historial = list; }
+  saveHistorial: async (list) => { _historial = list; },
+  loadImports: async () => _imports,
+  saveImports: async (payload) => { _imports = payload; }
 };
 
 // Modulos UI (solo lectura)
@@ -423,6 +431,69 @@ async function testHistoryView() {
 }
 
 // ============================================
+//  5b) ImportsView — dashboard agrupado por estado (import-tracker Slice B)
+// ============================================
+async function testImportsView() {
+  const ImportsView = require(jsPath('ui/importsView.js'));
+
+  // Empty state (precondición: sin registros)
+  _imports = { records: [], counter: 0 };
+  await ImportsView.render();
+  check('importsView.render: empty state "Sin importaciones registradas"',
+    document.getElementById('importsList').innerHTML.includes('Sin importaciones registradas'));
+  check('importsView.render: subtítulo "0 importaciones"',
+    document.getElementById('importsSubtitle').textContent.includes('0 importaciones'));
+
+  // Status board poblado: in_transit + delivered, XSS, ROI "—", rollups
+  _imports = {
+    records: [
+      {
+        id: 'r1', number: 'IMP-0001', supplier: 'AliExpress', description: 'Teclado <script>XSS</script>',
+        courier: 'DHL', status: 'in_transit',
+        dates: { ordered: '2026-08-01T00:00:00Z', in_transit: '2026-08-05T00:00:00Z', in_customs: null, cleared: null, delivered: null },
+        finalLandedCostUsd: 100, localPriceUsd: null, tipoCambio: 1400
+      },
+      {
+        id: 'r2', number: 'IMP-0002', supplier: 'Amazon', description: 'Mouse G Pro',
+        courier: 'FedEx', status: 'delivered',
+        dates: { ordered: '2026-07-10T00:00:00Z', in_transit: null, in_customs: null, cleared: '2026-07-20T00:00:00Z', delivered: '2026-07-25T00:00:00Z' },
+        finalLandedCostUsd: 60, localPriceUsd: 90, tipoCambio: 1400
+      }
+    ],
+    counter: 2
+  };
+  await ImportsView.render();
+  const html = document.getElementById('importsList').innerHTML;
+  check('importsView.render: subtítulo "2 importaciones"',
+    document.getElementById('importsSubtitle').textContent.includes('2 importaciones'));
+  check('importsView.render: agrupa por estado — header "En tránsito"',
+    html.includes('En tránsito'));
+  check('importsView.render: agrupa por estado — header "Entregado"',
+    html.includes('Entregado'));
+  check('importsView.render: IMP-0001 renderizado bajo su grupo',
+    html.includes('IMP-0001'));
+  check('importsView.render: IMP-0002 renderizado bajo su grupo',
+    html.includes('IMP-0002'));
+  check('importsView.render: costo final del registro 1 ($100 USD)',
+    html.includes('$100 USD'));
+  check('importsView.render: ROI "—" cuando no hay precio local',
+    html.includes('>—<'));
+  check('importsView.render: ROI 50% con precio local (60 → 90)',
+    html.includes('50%'));
+  check('importsView.render: couriers renderizados (DHL / FedEx)',
+    html.includes('DHL') && html.includes('FedEx'));
+  const expectedDate = new Date('2026-08-05T00:00:00Z').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  check('importsView.render: fecha del estado renderizada (' + expectedDate + ')',
+    html.includes(expectedDate));
+  check('importsView.render: XSS escapado (script no crudo en el HTML)',
+    !html.includes('<script>') && html.includes('&lt;script&gt;'));
+  check('importsView.render: rollups — total invertido $160 USD',
+    html.includes('$160 USD'));
+  check('importsView.render: rollups — ganancia $30 USD (solo registros con precio local)',
+    html.includes('$30 USD'));
+}
+
+// ============================================
 //  6) Lazy Loaders (P17 opción 2) — pdf.js / xlsx bajo demanda
 // ============================================
 function testLazyLoaders() {
@@ -472,6 +543,7 @@ function testLazyLoaders() {
   try { testModals(); } catch (e) { failSection('UIModals', e); }
   try { await testImportFlow(); } catch (e) { failSection('ImportFlow', e); }
   try { await testHistoryView(); } catch (e) { failSection('HistoryView', e); }
+  try { await testImportsView(); } catch (e) { failSection('ImportsView', e); }
   try { await testLazyLoaders(); } catch (e) { failSection('LazyLoaders', e); }
 
   const total = results.pass + results.fail;
