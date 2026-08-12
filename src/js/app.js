@@ -57,6 +57,7 @@ function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
   if (name === 'historial') renderHistorial();
+  if (name === 'importaciones') renderImportaciones();
   updateBadges();
 }
 
@@ -67,10 +68,17 @@ const HISTORIAL_BADGE_TTL = 10 * 1000;
 /* exported invalidateHistorialBadge */
 function invalidateHistorialBadge() { _historialBadgeCache = null; }
 
+let _importsBadgeCache = null;
+let _importsBadgeCachedAt = 0;
+
+/* exported invalidateImportsBadge */
+function invalidateImportsBadge() { _importsBadgeCache = null; }
+
 async function updateBadges() {
   const catBadge = document.getElementById('navBadgeCat');
   const pedBadge = document.getElementById('navBadgePed');
   const hisBadge = document.getElementById('navBadgeHis');
+  const impBadge = document.getElementById('navBadgeImp');
 
   if (catBadge) catBadge.textContent = catalog.length;
   const selQty = Object.values(selection).reduce((s, v) => s + v, 0);
@@ -87,6 +95,18 @@ async function updateBadges() {
     }
   }
   if (hisBadge) hisBadge.textContent = _historialBadgeCache;
+
+  // Badge de importaciones: mismo patrón TTL que el historial (KEYS.IMPORTS)
+  if (_importsBadgeCache === null || (Date.now() - _importsBadgeCachedAt) > HISTORIAL_BADGE_TTL) {
+    try {
+      const importsPayload = await AppStorage.loadImports();
+      _importsBadgeCache = importsPayload && Array.isArray(importsPayload.records) ? importsPayload.records.length : 0;
+      _importsBadgeCachedAt = Date.now();
+    } catch {
+      _importsBadgeCache = _importsBadgeCache || 0;
+    }
+  }
+  if (impBadge) impBadge.textContent = _importsBadgeCache;
 }
 
 // showCatalogContent, populateCatalogFilters, prevPage, nextPage, adjustQty,
@@ -845,9 +865,9 @@ window.addEventListener('keydown', (e) => {
         const search = document.getElementById('catSearch');
         if (search) { e.preventDefault(); search.focus(); search.select(); return; }
       }
-      if (['1', '2', '3'].includes(key)) {
+      if (['1', '2', '3', '4'].includes(key)) {
         e.preventDefault();
-        switchView({ '1': 'catalogo', '2': 'pedido', '3': 'historial' }[key]);
+        switchView({ '1': 'catalogo', '2': 'pedido', '3': 'historial', '4': 'importaciones' }[key]);
         return;
       }
       if (e.key === 'Enter' && document.getElementById('view-catalogo')?.classList.contains('active')) {

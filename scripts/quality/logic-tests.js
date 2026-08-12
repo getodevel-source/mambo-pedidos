@@ -683,6 +683,89 @@ function testImportTracker() {
 }
 
 // ============================================
+//  Verdict Layer (Slice C) — compareVsLocal, PAIS 0%, insurance preset, BP
+// ============================================
+function testVerdictLayer() {
+  section('Verdict Layer');
+
+  // ── compareVsLocal: 3 verdicts + missing → {available:false} ──
+  const vCheap = Calculator.compareVsLocal(100, 150, 1000);
+  assert(vCheap.available === true, 'verdict: available cuando hay precio local');
+  assert(vCheap.verdict === 'cheaper', 'verdict: landed 100 vs local 150 → cheaper');
+  assert(vCheap.diffUsd === 50, 'verdict: diff absoluto 50 USD (local − landed)');
+  assert(Math.abs(vCheap.diffPct - 33.3333333333) < 1e-6, 'verdict: diff 33.3% vs precio local');
+  assert(vCheap.diffArs === 50000, 'verdict: diffArs = 50 × TC 1000 = 50000 (reportado en ARS)');
+  assert(vCheap.landedUsd === 100 && vCheap.localPriceUsd === 150 && vCheap.tipoCambio === 1000, 'verdict: landed/local/TC preservados');
+
+  const vExp = Calculator.compareVsLocal(200, 150, 1000);
+  assert(vExp.available === true && vExp.verdict === 'more_expensive', 'verdict: landed 200 vs local 150 → more_expensive');
+  assert(Math.abs(vExp.diffUsd) === 50, 'verdict: more_expensive diff absoluto 50 USD');
+  assert(Math.abs(vExp.diffPct + 33.3333333333) < 1e-6, 'verdict: more_expensive diffPct −33.3%');
+  assert(vExp.diffArs === -50000, 'verdict: more_expensive diffArs −50000 (TC 1000)');
+
+  const vBe = Calculator.compareVsLocal(100, 100, 1400);
+  assert(vBe.available === true && vBe.verdict === 'break_even', 'verdict: landed == local → break_even');
+  assert(vBe.diffUsd === 0 && vBe.diffPct === 0 && vBe.diffArs === 0, 'verdict: break-even diferencias en cero');
+
+  // ── Float tolerance: epsilon 1e-6 para break-even ──
+  const vTol = Calculator.compareVsLocal(100 + 1e-9, 100, 1400);
+  assert(vTol.verdict === 'break_even', 'verdict: |landed − local| < 1e-6 → break_even (tolerancia float)');
+  assert(vTol.diffUsd === 0 && vTol.diffArs === 0, 'verdict: tolerancia float → diferencias en cero (no −1e-9)');
+
+  // ── Missing local price → {available:false}, nunca asume, nunca lanza ──
+  const vMiss1 = Calculator.compareVsLocal(100, null, 1000);
+  assert(vMiss1.available === false && vMiss1.verdict === undefined, 'verdict: local null → available false sin verdict');
+  const vMiss2 = Calculator.compareVsLocal(100, undefined, 1000);
+  assert(vMiss2.available === false, 'verdict: local undefined → available false');
+  const vMiss3 = Calculator.compareVsLocal(100, 'abc', 1000);
+  assert(vMiss3.available === false, 'verdict: local no numérico → available false');
+  const vMiss4 = Calculator.compareVsLocal(100, 0, 1000);
+  assert(vMiss4.available === false, 'verdict: local 0 (sin referencia real) → available false');
+
+  // ── getPaisLine: línea explícita 0% eliminado (nunca omitir) ──
+  const pais = Calculator.getPaisLine();
+  assert(pais.label === 'Impuesto PAIS', 'PAIS: label "Impuesto PAIS"');
+  assert(pais.ratePct === 0 && pais.amountUsd === 0, 'PAIS: tasa 0% y monto 0');
+  assert(pais.status === 'eliminated', 'PAIS: estado "eliminated" (línea informativa explícita)');
+
+  // ── suggestInsuranceUsd: ~1.1% de FOB + flete ──
+  assert(Math.abs(Calculator.suggestInsuranceUsd(1000, 200) - 13.2) < 1e-9, 'insur: 1.1% de (1000 + 200) = 13.2');
+  assert(Math.abs(Calculator.suggestInsuranceUsd(500, 0) - 5.5) < 1e-9, 'insur: 1.1% de 500 sin flete = 5.5');
+  assert(Calculator.suggestInsuranceUsd(0, 0) === 0, 'insur: sin FOB ni flete → 0');
+
+  // ── BP regresión: bpPct=0 (default) NO altera totales (byte-identical) ──
+  const teclado = [{ sku: 'BP-1', fob: 100, qty: 1, cat: 'TECLADO', modelo: 'K552', variante: 'Black' }];
+  const baseCfg = { tipoCambio: 1000, pesoKg: 0, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 };
+  const bp0 = Calculator.calculateDoorToDoorExactCost(teclado, Object.assign({}, baseCfg, { bpPct: 0 }));
+  const bpOm = Calculator.calculateDoorToDoorExactCost(teclado, baseCfg);
+  assert(Math.abs(bp0.summary.totalPuertaUsd - 149.7025) < 1e-9, 'BP regresión: bpPct=0 → totalPuerta 149.7025 (pin legacy)');
+  assert(Math.abs(bp0.summary.totalPuertaConIvaUsd - 174.1675) < 1e-9, 'BP regresión: bpPct=0 → totalConIva 174.1675 (pin legacy)');
+  assert(JSON.stringify(bp0.summary) === JSON.stringify(bpOm.summary), 'BP regresión: summary byte-identical bpPct=0 vs omitido');
+  assert(bp0.summary.bpUsd === 0, 'BP regresión: bpUsd 0 con bpPct=0');
+
+  // ── BP: no-zero (1%) sube el total exactamente en baseImp × bpPct ──
+  const bp1 = Calculator.calculateDoorToDoorExactCost(teclado, Object.assign({}, baseCfg, { bpPct: 0.01 }));
+  assert(Math.abs(bp1.summary.bpUsd - 1.165) < 1e-9, 'BP 1%: bpUsd = 1.165 (1% de baseImp 116.5)');
+  assert(Math.abs(bp1.summary.totalPuertaUsd - 150.8675) < 1e-9, 'BP 1%: totalPuerta sube a 150.8675 (149.7025 + 1.165)');
+  assert(Math.abs(bp1.summary.totalPuertaConIvaUsd - 175.3325) < 1e-9, 'BP 1%: caja sube a 175.3325 (174.1675 + 1.165)');
+  assert(Math.abs(bp1.items[0].totalTributosItemUsd - 34.3675) < 1e-9, 'BP 1%: tributos del ítem incluyen BP (33.2025 + 1.165)');
+  assert(Math.abs(bp1.summary.costoNetoRealUsd - 117.665) < 1e-9, 'BP 1%: costo neto real sube a 117.665 (BP no recuperable)');
+
+  // ── BP: régimen courier ignora bpPct (importador branch only) ──
+  const courierCfg = { tipoCambio: 1000, pesoKg: 0, fletePct: 0.10, seguroPct: 0.01, regimen: 'courier', depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 };
+  const courierBp = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'C-BP', fob: 1000, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],
+    Object.assign({}, courierCfg, { bpPct: 0.05 })
+  );
+  const courierNoBp = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'C-BP', fob: 1000, qty: 1, cat: 'MOUSE', modelo: 'X', variante: '' }],
+    courierCfg
+  );
+  assert(courierBp.summary.bpUsd === 0, 'BP courier: bpPct ignorado en régimen courier');
+  assert(JSON.stringify(courierBp.summary) === JSON.stringify(courierNoBp.summary), 'BP courier: summary byte-identical con bpPct ignorado');
+}
+
+// ============================================
 //  Main
 // ============================================
 (async () => {
@@ -692,6 +775,7 @@ function testImportTracker() {
   await testAppStorage();
   await testImportStorage();
   testImportTracker();
+  testVerdictLayer();
 
   console.log(`\n📊 Resultado: ${passed}/${passed + failed} pruebas pasaron exitosamente.`);
   if (failed > 0) {

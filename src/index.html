@@ -45,6 +45,12 @@
       </span> Historial
       <span class="badge" id="navBadgeHis">0</span>
     </button>
+    <button class="nav-item" data-view="importaciones" onclick="switchView('importaciones')">
+      <span class="ico">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></svg>
+      </span> Importaciones
+      <span class="badge" id="navBadgeImp">0</span>
+    </button>
   </div>
 
   <div class="sidebar-section">
@@ -567,6 +573,18 @@
     <div id="historialList"></div>
   </div>
 
+  <!-- ====== VIEW: IMPORTACIONES ====== -->
+  <div class="view" id="view-importaciones">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Importaciones</div>
+        <div class="page-sub" id="importsSubtitle">Seguimiento de tus importaciones</div>
+      </div>
+    </div>
+
+    <div id="importsList"></div>
+  </div>
+
 </main>
 
 <div class="toast" id="toast"></div>
@@ -965,6 +983,7 @@
     <script src="js/importsTracker.js"></script>
 <script src="js/ui/notifications.js"></script>
 <script src="js/ui/historyView.js"></script>
+<script src="js/ui/importsView.js"></script>
 <script src="js/ui/modals.js"></script>
 <script src="js/ui/catalogView.js"></script>
 <script src="js/ui/importFlow.js"></script>

@@ -38,19 +38,19 @@ Chain strategy: pending
 
 ## Phase 3: Tracker UI (Slice B)
 
-- [ ] 3.1 Add 4th nav-item `importaciones` + badge, `view-importaciones` container, two script tags in `src/index.html` (script-integrity gate).
-- [ ] 3.2 Create `src/js/ui/importsView.js` — dashboard grouped by status: dates, courier, final cost, ROI, empty state (follow `historyView.js` render pattern).
-- [ ] 3.3 Wire `switchView` render hook + `navBadgeImp` in `updateBadges` + keyboard '4' in `src/js/app.js`.
-- [ ] 3.4 Verify: `npm test` script-integrity + ui-smoke pass; manual open → dashboard renders.
+- [x] 3.1 Add 4th nav-item `importaciones` + badge, `view-importaciones` container, two script tags in `src/index.html` (script-integrity gate).
+- [x] 3.2 Create `src/js/ui/importsView.js` — dashboard grouped by status: dates, courier, final cost, ROI, empty state (follow `historyView.js` render pattern).
+- [x] 3.3 Wire `switchView` render hook + `navBadgeImp` in `updateBadges` + keyboard '4' in `src/js/app.js`.
+- [x] 3.4 Verify: `npm test` script-integrity + ui-smoke pass; manual open → dashboard renders.
 
 ## Phase 4: Verdict Layer (Slice C)
 
-- [ ] 4.1 RED: tests for `compareVsLocal` (3 verdicts + missing → `{available:false}`), float tolerance for break-even (epsilon 1e-6), `getPaisLine` (0% eliminated), `suggestInsuranceUsd` (~1.1% of FOB+freight), BP `bpPct=0` byte-identical totals regression, BP non-zero raises total.
-- [ ] 4.2 GREEN: add `compareVsLocal`, `getPaisLine`, `suggestInsuranceUsd`, additive `bpPct` param (default 0) to `src/js/calculator.js`; `NCM_MATRIX` untouched.
-- [ ] 4.3 Add wizard step 3 (insurance preset + local price), step 4 (BP input), step 6 (PAIS line, verdict panel, save-as-import bridge) to `src/js/ui/importWizard.js`; bridge snapshot `finalLandedCostUsd = summary.totalPuertaConIvaUsd`; declined → no behavior change.
-- [ ] 4.4 Verify: `npm test` full suite green; wizard flow intact; bridge declined leaves flow unchanged.
+- [x] 4.1 RED: tests for `compareVsLocal` (3 verdicts + missing → `{available:false}`), float tolerance for break-even (epsilon 1e-6), `getPaisLine` (0% eliminated), `suggestInsuranceUsd` (~1.1% of FOB+freight), BP `bpPct=0` byte-identical totals regression, BP non-zero raises total.
+- [x] 4.2 GREEN: add `compareVsLocal`, `getPaisLine`, `suggestInsuranceUsd`, additive `bpPct` param (default 0) to `src/js/calculator.js`; `NCM_MATRIX` untouched.
+- [x] 4.3 Add wizard step 3 (insurance preset + local price), step 4 (BP input), step 6 (PAIS line, verdict panel, save-as-import bridge) to `src/js/ui/importWizard.js`; bridge snapshot `finalLandedCostUsd = summary.totalPuertaConIvaUsd`; declined → no behavior change.
+- [x] 4.4 Verify: `npm test` full suite green; wizard flow intact; bridge declined leaves flow unchanged.
 
 ## Phase 5: Verification
 
-- [ ] 5.1 Run `npm test && npm run check:version` — all gates green.
-- [ ] 5.2 Confirm `mambo_historial_v2` untouched, `pdfParser.js`/table-parser files untouched (FASE 2 boundary).
+- [x] 5.1 Run `npm test && npm run check:version` — all gates green.
+- [x] 5.2 Confirm `mambo_historial_v2` untouched, `pdfParser.js`/table-parser files untouched (FASE 2 boundary).

@@ -89,6 +89,20 @@ const dom = new JSDOM(`<!DOCTYPE html><html><body>
   <!-- historyView -->
   <div id="historialSubtitle"></div>
   <div id="historialList"></div>
+
+  <!-- importsView -->
+  <div id="importsSubtitle"></div>
+  <div id="importsList"></div>
+
+  <!-- importWizard -->
+  <div id="importWizardModal">
+    <div id="iwSteps"></div>
+    <div id="importWizardBody"></div>
+    <button id="iwPrevBtn"></button>
+    <button id="iwNextBtn"></button>
+    <div id="iwProgress"></div>
+  </div>
+  <div id="faqModal"><div id="faqBody"></div></div>
 </body></html>`, { url: 'http://localhost/' });
 
 global.window = dom.window;
@@ -148,6 +162,8 @@ global.Validations = require(jsPath('validations.js'));
 global.SkuAllocator = require(jsPath('skuAllocator.js'));
 global.TextSanitizer = require(jsPath('textSanitizer.js'));
 global.CatalogValidator = require(jsPath('catalogValidator.js'));
+global.ImportsTracker = require(jsPath('importsTracker.js'));
+global.Calculator = require(jsPath('calculator.js')); // wizard de importación (paso 6) lo usa real
 
 // Backends pesados / en edicion paralela (pdfParser.js NO se toca y NO se carga):
 // se stubean para aislar el smoke test en la capa de UI.
@@ -160,8 +176,9 @@ global.PdfParser = { processPdfFile: async () => ({ products: [] }) };
 global.pdfjsLib = dom.window.pdfjsLib = { GlobalWorkerOptions: {} };
 global.XLSX = dom.window.XLSX = {};
 let _historial = [];
+let _imports = { records: [], counter: 0 };
 global.AppStorage = {
-  KEYS: { CATALOG: 'mambo_catalog_v2', BRANDS: 'mambo_brands_v1' },
+  KEYS: { CATALOG: 'mambo_catalog_v2', BRANDS: 'mambo_brands_v1', IMPORTS: 'mambo_imports_v1' },
   loadBrands: async () => [],
   saveCatalog: async () => {},
   saveBrands: async () => {},
@@ -169,7 +186,9 @@ global.AppStorage = {
   setItem: async () => {},
   removeItem: async () => {},
   loadHistorial: async () => _historial,
-  saveHistorial: async (list) => { _historial = list; }
+  saveHistorial: async (list) => { _historial = list; },
+  loadImports: async () => _imports,
+  saveImports: async (payload) => { _imports = payload; }
 };
 
 // Modulos UI (solo lectura)
@@ -423,6 +442,195 @@ async function testHistoryView() {
 }
 
 // ============================================
+//  5b) ImportsView — dashboard agrupado por estado (import-tracker Slice B)
+// ============================================
+async function testImportsView() {
+  const ImportsView = require(jsPath('ui/importsView.js'));
+
+  // Empty state (precondición: sin registros)
+  _imports = { records: [], counter: 0 };
+  await ImportsView.render();
+  check('importsView.render: empty state "Sin importaciones registradas"',
+    document.getElementById('importsList').innerHTML.includes('Sin importaciones registradas'));
+  check('importsView.render: subtítulo "0 importaciones"',
+    document.getElementById('importsSubtitle').textContent.includes('0 importaciones'));
+
+  // Status board poblado: in_transit + delivered, XSS, ROI "—", rollups
+  _imports = {
+    records: [
+      {
+        id: 'r1', number: 'IMP-0001', supplier: 'AliExpress', description: 'Teclado <script>XSS</script>',
+        courier: 'DHL', status: 'in_transit',
+        dates: { ordered: '2026-08-01T00:00:00Z', in_transit: '2026-08-05T00:00:00Z', in_customs: null, cleared: null, delivered: null },
+        finalLandedCostUsd: 100, localPriceUsd: null, tipoCambio: 1400
+      },
+      {
+        id: 'r2', number: 'IMP-0002', supplier: 'Amazon', description: 'Mouse G Pro',
+        courier: 'FedEx', status: 'delivered',
+        dates: { ordered: '2026-07-10T00:00:00Z', in_transit: null, in_customs: null, cleared: '2026-07-20T00:00:00Z', delivered: '2026-07-25T00:00:00Z' },
+        finalLandedCostUsd: 60, localPriceUsd: 90, tipoCambio: 1400
+      }
+    ],
+    counter: 2
+  };
+  await ImportsView.render();
+  const html = document.getElementById('importsList').innerHTML;
+  check('importsView.render: subtítulo "2 importaciones"',
+    document.getElementById('importsSubtitle').textContent.includes('2 importaciones'));
+  check('importsView.render: agrupa por estado — header "En tránsito"',
+    html.includes('En tránsito'));
+  check('importsView.render: agrupa por estado — header "Entregado"',
+    html.includes('Entregado'));
+  check('importsView.render: IMP-0001 renderizado bajo su grupo',
+    html.includes('IMP-0001'));
+  check('importsView.render: IMP-0002 renderizado bajo su grupo',
+    html.includes('IMP-0002'));
+  check('importsView.render: costo final del registro 1 ($100 USD)',
+    html.includes('$100 USD'));
+  check('importsView.render: ROI "—" cuando no hay precio local',
+    html.includes('>—<'));
+  check('importsView.render: ROI 50% con precio local (60 → 90)',
+    html.includes('50%'));
+  check('importsView.render: couriers renderizados (DHL / FedEx)',
+    html.includes('DHL') && html.includes('FedEx'));
+  const expectedDate = new Date('2026-08-05T00:00:00Z').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  check('importsView.render: fecha del estado renderizada (' + expectedDate + ')',
+    html.includes(expectedDate));
+  check('importsView.render: XSS escapado (script no crudo en el HTML)',
+    !html.includes('<script>') && html.includes('&lt;script&gt;'));
+  check('importsView.render: rollups — total invertido $160 USD',
+    html.includes('$160 USD'));
+  check('importsView.render: rollups — ganancia $30 USD (solo registros con precio local)',
+    html.includes('$30 USD'));
+}
+
+// ============================================
+//  5c) ImportWizard — Slice C: preset seguro, BP, PAIS 0%, veredicto, bridge
+// ============================================
+async function testImportWizard() {
+  require(jsPath('ui/importWizard.js')); // bridge: define window.ImportWizard (sin module.exports)
+  const ImportWizard = global.ImportWizard = dom.window.ImportWizard;
+
+  // Estado pristino del wizard (los tests mutan el singleton — restaurar entre checks)
+  const pristineState = JSON.parse(JSON.stringify(ImportWizard.state));
+  const resetWizardState = () => { ImportWizard.state = JSON.parse(JSON.stringify(pristineState)); };
+
+  // Pedido fixture: teclado 2× 89.5 = FOB 179 · fleteModo peso 15kg × $12 = flete 180
+  const tecladoItem = { sku: 'KBD-001', marca: 'Logitech', modelo: 'G Pro X Keyboard', variante: 'Negro', cat: 'TECLADO', fob: 89.5, qty: 2 };
+  global.currentPedido = { items: [tecladoItem] };
+  resetWizardState();
+
+  // ── Flujo intacto: render() no lanza, 6 pasos con su botón ──
+  check('wizard: 6 pasos definidos', ImportWizard.steps.length === 6);
+  ImportWizard.goTo(0);
+  check('wizard: render() pinta los 6 botones de paso', document.getElementById('iwSteps').querySelectorAll('.iw-step').length === 6);
+
+  // ── Paso 3: sugerencia de seguro + precio local ──
+  ImportWizard.goTo(2);
+  const html3 = document.getElementById('importWizardBody').innerHTML;
+  check('wizard paso 3: bloque "Sugerencia de seguro" presente', html3.includes('Sugerencia de seguro'));
+  check('wizard paso 3: sugerencia = 1.1% de (FOB 179 + flete 180) = ~3.95 USD', html3.includes('3.95'));
+  check('wizard paso 3: botón "Aplicar sugerencia"', html3.includes('Aplicar sugerencia'));
+  check('wizard paso 3: input "Seguro en USD" (override explícito)', html3.includes('Seguro en USD'));
+  check('wizard paso 3: input "Precio local de referencia"', html3.includes('Precio local de referencia'));
+
+  // ── Preset aplicado: amount → equivalente seguroPct = amount / fobTotal ──
+  ImportWizard.applyInsurancePreset();
+  check('wizard preset: seguroUsdOverride = 3.95 (redondeado)', ImportWizard.state.seguroUsdOverride === 3.95);
+  check('wizard preset: seguro convertido a fracción del FOB (3.95 / 179)',
+    Math.abs(ImportWizard.state.seguro - 3.95 / 179) < 1e-9);
+  // El motor recibe la fracción: CIF con seguro 3.95 USD = FOB 179 + flete 180 + 3.95
+  const presetCalc = Calculator.calculateDoorToDoorExactCost(global.currentPedido.items, {
+    tipoCambio: 1400, pesoKg: 15, costoPorKg: 12, fletePct: 0.15, seguroPct: ImportWizard.state.seguro,
+    regimen: 'importador', iibbPct: 0.025, ncmOverrides: {}, depositoFiscalUsd: 150,
+    despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80
+  });
+  check('wizard preset: motor ve el seguro de 3.95 USD (seguroTotalUsd)',
+    Math.abs(presetCalc.summary.seguroTotalUsd - 3.95) < 1e-6);
+
+  // ── Paso 4: input de Percepción BP ──
+  resetWizardState();
+  ImportWizard.state.bpPct = 0.01;
+  const html4 = ImportWizard._render_impuestos();
+  check('wizard paso 4: input "Percepción Bienes Personales" presente', html4.includes('Bienes Personales'));
+  check('wizard paso 4: valor BP 1% renderizado en el input', html4.includes('value="1"'));
+
+  // ── Paso 6: veredicto con precio local (importar sale más caro) ──
+  resetWizardState();
+  ImportWizard.state.precioLocalUsd = 200;
+  const html6 = ImportWizard._render_resumen();
+  // Veredicto esperado derivado del motor (IIBB Santa Fe 3% + gastos destino 720
+  // = defaults del wizard): caja 1262.5275 → diff vs local 200 = −1062.53 USD.
+  const expRes = Calculator.calculateDoorToDoorExactCost(global.currentPedido.items, ImportWizard._doorConfig());
+  const expV = Calculator.compareVsLocal(expRes.summary.totalPuertaConIvaUsd, 200, expRes.summary.tipoCambio);
+  check('wizard paso 6: panel de veredicto "Pagás" presente', html6.includes('Pagás'));
+  check('wizard paso 6: diff USD 1062.53 renderizada (pin hardcode)',
+    html6.includes(Math.abs(expV.diffUsd).toFixed(2)) && html6.includes('1062.53'));
+  check('wizard paso 6: diferencia reportada en ARS (× TC 1400)',
+    html6.includes(Math.abs(expV.diffArs).toFixed(2)));
+  check('wizard paso 6: línea PAIS explícita 0% eliminado', 
+    html6.includes('Impuesto PAIS') && html6.includes('0%') && html6.includes('eliminado'));
+  check('wizard paso 6: botón "Guardar como importación"', html6.includes('Guardar como importación'));
+
+  // ── Paso 6: BP no cero aparece en el desglose ──
+  resetWizardState();
+  ImportWizard.state.bpPct = 0.01;
+  const htmlBp = ImportWizard._render_resumen();
+  check('wizard paso 6: línea Percepción BP con monto (1% de baseImp 361.685 = 3.62)',
+    htmlBp.includes('Percepción BP') && htmlBp.includes('3.62'));
+
+  // ── Paso 6: SIN precio local → sin veredicto, sin error, PAIS sigue ──
+  resetWizardState();
+  ImportWizard.state.precioLocalUsd = null;
+  const htmlNoLocal = ImportWizard._render_resumen();
+  check('wizard paso 6: sin precio local NO hay veredicto',
+    !htmlNoLocal.includes('Pagás') && !htmlNoLocal.includes('Ahorrás'));
+  check('wizard paso 6: sin precio local NO hay error',
+    !htmlNoLocal.includes('rror'));
+  check('wizard paso 6: línea PAIS presente sin precio local', htmlNoLocal.includes('Impuesto PAIS'));
+
+  // ── Bridge: confirmar guarda el registro con snapshot de costo ──
+  resetWizardState();
+  ImportWizard.state.precioLocalUsd = 200;
+  global.confirm = () => true;
+  global.prompt = () => 'AliExpress';
+  _imports = { records: [], counter: 0 };
+  await ImportWizard.saveAsImport();
+  check('bridge: registro creado (records 1, counter 1)', _imports.records.length === 1 && _imports.counter === 1);
+  const rec = _imports.records[0];
+  check('bridge: IMP-0001 en status ordered', rec.number === 'IMP-0001' && rec.status === 'ordered');
+  check('bridge: supplier tomado del prompt', rec.supplier === 'AliExpress');
+  check('bridge: snapshot finalLandedCostUsd = caja del motor (1262.5275 con IIBB SF 3% + gastos 720)',
+    Math.abs(rec.finalLandedCostUsd - expRes.summary.totalPuertaConIvaUsd) < 1e-6 &&
+    Math.abs(rec.finalLandedCostUsd - 1262.5275) < 1e-6);
+  check('bridge: snapshot freight 180 / insurance 2.685',
+    Math.abs(rec.freightUsd - 180) < 1e-9 && Math.abs(rec.insuranceUsd - 2.685) < 1e-9);
+  check('bridge: localPriceUsd 200 y tipoCambio 1400 del motor',
+    rec.localPriceUsd === 200 && rec.tipoCambio === 1400);
+
+  // ── Bridge DECLINED: sin registro, sin mutar estado ni paso ──
+  resetWizardState();
+  ImportWizard.state.precioLocalUsd = 200;
+  global.confirm = () => false;
+  _imports = { records: [], counter: 0 };
+  const stateBefore = JSON.stringify(ImportWizard.state);
+  const stepBefore = ImportWizard.step;
+  await ImportWizard.saveAsImport();
+  check('bridge declined: NO se creó registro', _imports.records.length === 0 && _imports.counter === 0);
+  check('bridge declined: estado del wizard sin mutar', JSON.stringify(ImportWizard.state) === stateBefore);
+  check('bridge declined: paso del wizard sin mutar', ImportWizard.step === stepBefore);
+
+  // ── Estado guardado viejo (sin campos nuevos) → defaults preservados ──
+  resetWizardState();
+  localStorage.setItem(ImportWizard.CACHE_KEY, JSON.stringify({ regimen: 'courier', seguro: 0.02 }));
+  ImportWizard.open();
+  check('wizard: estado viejo sin campos nuevos mantiene defaults (precioLocalUsd null, bpPct 0)',
+    ImportWizard.state.precioLocalUsd === null && ImportWizard.state.bpPct === 0 && ImportWizard.state.seguroUsdOverride === null);
+  check('wizard: merge conserva campos del estado viejo (seguro 0.02)',
+    Math.abs(ImportWizard.state.seguro - 0.02) < 1e-9 && ImportWizard.state.regimen === 'courier');
+}
+
+// ============================================
 //  6) Lazy Loaders (P17 opción 2) — pdf.js / xlsx bajo demanda
 // ============================================
 function testLazyLoaders() {
@@ -472,6 +680,8 @@ function testLazyLoaders() {
   try { testModals(); } catch (e) { failSection('UIModals', e); }
   try { await testImportFlow(); } catch (e) { failSection('ImportFlow', e); }
   try { await testHistoryView(); } catch (e) { failSection('HistoryView', e); }
+  try { await testImportsView(); } catch (e) { failSection('ImportsView', e); }
+  try { await testImportWizard(); } catch (e) { failSection('ImportWizard', e); }
   try { await testLazyLoaders(); } catch (e) { failSection('LazyLoaders', e); }
 
   const total = results.pass + results.fail;

@@ -80,6 +80,9 @@ module.exports = [
         ImportFlow: 'writable',
         HistoryView: 'writable',
         Reliability: 'writable',
+        // import-tracker (Slice A/B) + verdict layer (Slice C) browser globals
+        ImportsTracker: 'writable',
+        ImportWizard: 'writable',
         // UI module bridge functions
         renderCatalog: 'readonly',
         showCatalogContent: 'readonly',
@@ -87,6 +90,7 @@ module.exports = [
         debouncedRenderCatalog: 'readonly',
         processFiles: 'readonly',
         renderHistorial: 'readonly',
+        renderImportaciones: 'readonly',
         showProgress: 'readonly',
         hideProgress: 'readonly',
         showDropOverlay: 'readonly',
