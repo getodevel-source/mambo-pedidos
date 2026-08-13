@@ -21,126 +21,126 @@
 // Vocabulary derived from CatalogValidator.COLOR_AUDIT_RE plus the
 // switch-adjacent colors the spec adds (transparent, smoke, mint, navy, beige).
 const COLOR_KEEP_WORDS = [
-  'black',
-  'white',
-  'pink',
-  'blue',
-  'red',
-  'green',
-  'purple',
-  'grey',
-  'gray',
-  'silver',
-  'gold',
-  'orange',
-  'brown',
-  'cyan',
-  'magenta',
-  'yellow',
-  'coffee',
-  'periwinkle',
-  'lavender',
-  'cream',
-  'obsidian',
-  'sakura',
-  'phantom',
-  'gunmetal',
-  'blackberry',
-  'neon',
-  'arctic',
-  'translucent',
-  'matte',
-  'glossy',
-  'negro',
-  'blanco',
-  'rosa',
-  'azul',
-  'rojo',
-  'verde',
-  'violeta',
-  'gris',
-  'plateado',
-  'dorado',
-  'naranja',
-  'marron',
-  'amarillo',
-  'transparent',
-  'smoke',
-  'mint',
-  'navy',
-  'beige',
+  "black",
+  "white",
+  "pink",
+  "blue",
+  "red",
+  "green",
+  "purple",
+  "grey",
+  "gray",
+  "silver",
+  "gold",
+  "orange",
+  "brown",
+  "cyan",
+  "magenta",
+  "yellow",
+  "coffee",
+  "periwinkle",
+  "lavender",
+  "cream",
+  "obsidian",
+  "sakura",
+  "phantom",
+  "gunmetal",
+  "blackberry",
+  "neon",
+  "arctic",
+  "translucent",
+  "matte",
+  "glossy",
+  "negro",
+  "blanco",
+  "rosa",
+  "azul",
+  "rojo",
+  "verde",
+  "violeta",
+  "gris",
+  "plateado",
+  "dorado",
+  "naranja",
+  "marron",
+  "amarillo",
+  "transparent",
+  "smoke",
+  "mint",
+  "navy",
+  "beige",
 ];
 const COLOR_KEEP_RE = new RegExp(
-  "\\b(" + COLOR_KEEP_WORDS.join('|') + ")\\b",
-  'i',
+  "\\b(" + COLOR_KEEP_WORDS.join("|") + ")\\b",
+  "i",
 );
 
 // Declared word → classifier family (classifyColorName vocabulary). Finishes
 // (matte/glossy/neon/...) map to no family and skip the color check.
 const COLOR_FAMILY = {
-  black: 'BLACK',
-  negro: 'BLACK',
-  obsidian: 'BLACK',
-  blackberry: 'BLACK',
-  gunmetal: 'BLACK',
-  phantom: 'BLACK',
-  white: 'WHITE',
-  blanco: 'WHITE',
-  cream: 'WHITE',
-  transparent: 'WHITE',
-  translucent: 'WHITE',
-  grey: 'GRAY',
-  gray: 'GRAY',
-  gris: 'GRAY',
-  silver: 'SILVER',
-  plateado: 'SILVER',
-  smoke: 'SILVER',
-  blue: 'BLUE',
-  azul: 'BLUE',
-  navy: 'BLUE',
-  periwinkle: 'BLUE',
-  cyan: 'CYAN',
-  mint: 'CYAN',
-  purple: 'PURPLE',
-  violet: 'PURPLE',
-  violeta: 'PURPLE',
-  lavender: 'PURPLE',
-  pink: 'PINK',
-  rosa: 'PINK',
-  sakura: 'PINK',
-  magenta: 'PINK',
-  red: 'RED',
-  rojo: 'RED',
-  green: 'GREEN',
-  verde: 'GREEN',
-  gold: 'GOLD',
-  dorado: 'GOLD',
-  orange: 'ORANGE',
-  naranja: 'ORANGE',
-  brown: 'ORANGE',
-  marron: 'ORANGE',
-  coffee: 'ORANGE',
-  yellow: 'YELLOW',
-  amarillo: 'YELLOW',
+  black: "BLACK",
+  negro: "BLACK",
+  obsidian: "BLACK",
+  blackberry: "BLACK",
+  gunmetal: "BLACK",
+  phantom: "BLACK",
+  white: "WHITE",
+  blanco: "WHITE",
+  cream: "WHITE",
+  transparent: "WHITE",
+  translucent: "WHITE",
+  grey: "GRAY",
+  gray: "GRAY",
+  gris: "GRAY",
+  silver: "SILVER",
+  plateado: "SILVER",
+  smoke: "SILVER",
+  blue: "BLUE",
+  azul: "BLUE",
+  navy: "BLUE",
+  periwinkle: "BLUE",
+  cyan: "CYAN",
+  mint: "CYAN",
+  purple: "PURPLE",
+  violet: "PURPLE",
+  violeta: "PURPLE",
+  lavender: "PURPLE",
+  pink: "PINK",
+  rosa: "PINK",
+  sakura: "PINK",
+  magenta: "PINK",
+  red: "RED",
+  rojo: "RED",
+  green: "GREEN",
+  verde: "GREEN",
+  gold: "GOLD",
+  dorado: "GOLD",
+  orange: "ORANGE",
+  naranja: "ORANGE",
+  brown: "ORANGE",
+  marron: "ORANGE",
+  coffee: "ORANGE",
+  yellow: "YELLOW",
+  amarillo: "YELLOW",
 };
 
 // Compatibility groups (spec): GRAY↔SILVER↔WHITE, PURPLE↔BLUE↔PINK,
 // CYAN↔BLUE↔GREEN, GOLD↔ORANGE. Exact match is always compatible.
 const COLOR_COMPATIBLE = {
-  GRAY: ['GRAY', 'SILVER', 'WHITE'],
-  SILVER: ['GRAY', 'SILVER', 'WHITE'],
-  WHITE: ['GRAY', 'SILVER', 'WHITE'],
-  PURPLE: ['PURPLE', 'BLUE', 'PINK'],
-  BLUE: ['PURPLE', 'BLUE', 'PINK'],
-  PINK: ['PURPLE', 'BLUE', 'PINK'],
-  CYAN: ['CYAN', 'BLUE', 'GREEN'],
-  GREEN: ['CYAN', 'BLUE', 'GREEN'],
-  GOLD: ['GOLD', 'ORANGE'],
-  ORANGE: ['GOLD', 'ORANGE'],
+  GRAY: ["GRAY", "SILVER", "WHITE"],
+  SILVER: ["GRAY", "SILVER", "WHITE"],
+  WHITE: ["GRAY", "SILVER", "WHITE"],
+  PURPLE: ["PURPLE", "BLUE", "PINK"],
+  BLUE: ["PURPLE", "BLUE", "PINK"],
+  PINK: ["PURPLE", "BLUE", "PINK"],
+  CYAN: ["CYAN", "BLUE", "GREEN"],
+  GREEN: ["CYAN", "BLUE", "GREEN"],
+  GOLD: ["GOLD", "ORANGE"],
+  ORANGE: ["GOLD", "ORANGE"],
 };
 
-const COMPACT_CATS = ['MOUSE', 'HEADSET', 'AURICULAR', 'CONTROLLER', 'SWITCH'];
-const WIDE_CATS = ['TECLADO', 'MOUSEPAD'];
+const COMPACT_CATS = ["MOUSE", "HEADSET", "AURICULAR", "CONTROLLER", "SWITCH"];
+const WIDE_CATS = ["TECLADO", "MOUSEPAD"];
 
 const ImageTextGates = {
   COLOR_KEEP_WORDS,
@@ -160,25 +160,25 @@ const ImageTextGates = {
     const saturation = max > 0 ? (max - min) / max : 0;
     const brightness = max / 255;
 
-    if (brightness < 0.22) return 'BLACK';
-    if (saturation < 0.12 && brightness > 0.85) return 'WHITE';
-    if (saturation < 0.12) return brightness > 0.55 ? 'SILVER' : 'GRAY';
+    if (brightness < 0.22) return "BLACK";
+    if (saturation < 0.12 && brightness > 0.85) return "WHITE";
+    if (saturation < 0.12) return brightness > 0.55 ? "SILVER" : "GRAY";
 
     if (r > g + 40 && r > b + 40) {
-      if (g > 100 && b < 80) return 'GOLD';
-      if (g < 80) return 'RED';
-      return 'ORANGE';
+      if (g > 100 && b < 80) return "GOLD";
+      if (g < 80) return "RED";
+      return "ORANGE";
     }
-    if (g > r + 25 && g > b + 25) return 'GREEN';
+    if (g > r + 25 && g > b + 25) return "GREEN";
     if (b > r + 30 && b > g + 15) {
-      if (r > 80 && g < 100) return 'PURPLE';
-      if (g > 150) return 'CYAN';
-      return 'BLUE';
+      if (r > 80 && g < 100) return "PURPLE";
+      if (g > 150) return "CYAN";
+      return "BLUE";
     }
-    if (r > 140 && g < 130 && b > 120) return 'PINK';
-    if (r > 120 && g > 100 && b < 80) return 'GOLD';
+    if (r > 140 && g < 130 && b > 120) return "PINK";
+    if (r > 120 && g > 100 && b < 80) return "GOLD";
 
-    return 'MULTICOLOR';
+    return "MULTICOLOR";
   },
 
   /**
@@ -204,7 +204,7 @@ const ImageTextGates = {
   sampleInteriorColor(pixels, width, height, ratio = 0.6) {
     try {
       if (!pixels || !width || !height || pixels.length < width * height * 4) {
-        return { name: 'UNKNOWN', confidence: 0, occupancy: 0 };
+        return { name: "UNKNOWN", confidence: 0, occupancy: 0, topColors: [] };
       }
       const x0 = Math.floor((width * (1 - ratio)) / 2);
       const y0 = Math.floor((height * (1 - ratio)) / 2);
@@ -234,7 +234,8 @@ const ImageTextGates = {
         bb += pixels[i + 2];
         cn++;
       }
-      if (cn === 0) return { name: 'UNKNOWN', confidence: 0, occupancy: 0 };
+      if (cn === 0)
+        return { name: "UNKNOWN", confidence: 0, occupancy: 0, topColors: [] };
       br = br / cn;
       bg = bg / cn;
       bb = bb / cn;
@@ -267,7 +268,12 @@ const ImageTextGates = {
       //    for color verification — WATCH, do not degrade.
       const occupancy = total > 0 ? Math.round((content / total) * 100) : 0;
       if (content < 5 || occupancy < 35) {
-        return { name: 'UNKNOWN', confidence: occupancy, occupancy };
+        return {
+          name: "UNKNOWN",
+          confidence: occupancy,
+          occupancy,
+          topColors: [],
+        };
       }
       let bestName = null;
       let bestCount = -1;
@@ -278,9 +284,19 @@ const ImageTextGates = {
         }
       }
       const confidence = Math.round((bestCount / content) * 100);
-      return { name: bestName, confidence, occupancy };
+      // Slice 1 (gate-calibration): topColors aditivo — top 3 buckets reales
+      // (sin MULTICOLOR/UNKNOWN) para la resolución de ambigüedad de color.
+      const topColors = Object.entries(buckets)
+        .filter(([name]) => name !== "MULTICOLOR" && name !== "UNKNOWN")
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name, count]) => ({
+          name,
+          pct: Math.round((count / content) * 100),
+        }));
+      return { name: bestName, confidence, occupancy, topColors };
     } catch {
-      return { name: 'UNKNOWN', confidence: 0, occupancy: 0 };
+      return { name: "UNKNOWN", confidence: 0, occupancy: 0, topColors: [] };
     }
   },
 
@@ -292,18 +308,18 @@ const ImageTextGates = {
    */
   interiorColorFor(img) {
     try {
-      if (!img || typeof img.dataUrl !== 'string') return null;
+      if (!img || typeof img.dataUrl !== "string") return null;
       const dataUrl = img.dataUrl;
       const { decodeCanvas } =
-        typeof document !== 'undefined' && document.createElement
+        typeof document !== "undefined" && document.createElement
           ? (() => {
-              const c = document.createElement('canvas');
+              const c = document.createElement("canvas");
               return { decodeCanvas: c };
             })()
           : {};
       const canvas = decodeCanvas || null;
-      if (!canvas || typeof canvas.getContext !== 'function') return null;
-      const ctx = canvas.getContext('2d');
+      if (!canvas || typeof canvas.getContext !== "function") return null;
+      const ctx = canvas.getContext("2d");
       if (!ctx) return null;
       const imageObj = new Image();
       imageObj.src = dataUrl;
@@ -325,7 +341,7 @@ const ImageTextGates = {
 
   /**
    * Finds ALL declared color words on the product (color → variante → modelo).
-   * Multi-color variants ('Purple White Blue RGB') declare several colors but
+   * Multi-color variants ("Purple White Blue RGB") declare several colors but
    * the catalog photo shows ONE — the check must not degrade those (structural
    * false positive). Returns an array of {word, color} matches.
    * @returns {Array<{word:string, color:string}>}
@@ -339,8 +355,8 @@ const ImageTextGates = {
     ];
     const seen = new Set();
     for (const field of fields) {
-      if (typeof field !== 'string' || !field.trim()) continue;
-      const re = new RegExp(COLOR_KEEP_RE.source, 'gi');
+      if (typeof field !== "string" || !field.trim()) continue;
+      const re = new RegExp(COLOR_KEEP_RE.source, "gi");
       let m;
       while ((m = re.exec(field)) !== null) {
         const key = m[0].toLowerCase();
@@ -358,11 +374,36 @@ const ImageTextGates = {
    * (exact match or same compatibility group).
    */
   colorCompatibility(declared, actual) {
-    const d = String(declared || '').toUpperCase();
-    const a = String(actual || '').toUpperCase();
+    const d = String(declared || "").toUpperCase();
+    const a = String(actual || "").toUpperCase();
     if (d === a) return true;
     const group = COLOR_COMPATIBLE[d];
     return Array.isArray(group) && group.includes(a);
+  },
+
+  /**
+   * Calibración de ambigüedad de color (Slice 1, gate-calibration): TODAS las
+   * familias declaradas (variante/color/modelo) deben ser compatibles con
+   * ALGUNO de los top colors reales de la foto → el multi-color es un DISEÑO
+   * INTENCIONAL del producto (ej. variante 'Pink/White' con foto PINK+WHITE),
+   * no una incertidumbre. Familias contradictorias → false (WATCH se mantiene).
+   * @param {string[]} declaredFamilies - familias declaradas (COLOR_FAMILY)
+   * @param {{topColors?:Array<{name:string,pct:number}>}} interior - muestreo
+   * @returns {boolean}
+   */
+  colorAmbiguityResolved(declaredFamilies, interior) {
+    const families = (
+      Array.isArray(declaredFamilies) ? declaredFamilies : []
+    ).filter(Boolean);
+    const tops = (
+      interior && Array.isArray(interior.topColors) ? interior.topColors : []
+    )
+      .map((t) => t && t.name)
+      .filter(Boolean);
+    if (!families.length || !tops.length) return false;
+    return families.every((fam) =>
+      tops.some((top) => this.colorCompatibility(fam, top)),
+    );
   },
 
   /**
@@ -370,13 +411,13 @@ const ImageTextGates = {
    * narrow photos. Returns { violation, expectedFamily }.
    */
   categoryAspectViolation(cat, aspect) {
-    const c = String(cat || '').toUpperCase();
+    const c = String(cat || "").toUpperCase();
     const a = Number(aspect);
     if (!Number.isFinite(a)) return { violation: false, expectedFamily: null };
     if (COMPACT_CATS.includes(c) && a > 1.9)
-      return { violation: true, expectedFamily: 'COMPACT' };
+      return { violation: true, expectedFamily: "COMPACT" };
     if (WIDE_CATS.includes(c) && a < 0.65)
-      return { violation: true, expectedFamily: 'WIDE' };
+      return { violation: true, expectedFamily: "WIDE" };
     return { violation: false, expectedFamily: null };
   },
 
@@ -411,36 +452,55 @@ const ImageTextGates = {
           ),
         ];
         const unreadable =
-          interior.name === 'UNKNOWN' ||
+          interior.name === "UNKNOWN" ||
           interior.confidence < 65 ||
-          interior.name === 'MULTICOLOR';
-        if (!families.length || unreadable || families.length > 1) {
+          interior.name === "MULTICOLOR";
+        // Slice 1 (gate-calibration, config-gated colorAmbiguityResolution):
+        // familias multi-color declaradas que casan con los top colors de la
+        // foto → diseño intencional, el warning ambiguo se SUPRIME (benigno);
+        // familias contradictorias o foto ilegible → WATCH se mantiene.
+        const resolved =
+          IMAGE_TEXT_CALIBRATION.colorAmbiguityResolution &&
+          families.length > 1 &&
+          this.colorAmbiguityResolved(families, interior);
+        const watchAmbiguous =
+          !families.length ||
+          (!resolved && (unreadable || families.length > 1));
+        if (watchAmbiguous) {
           // WATCH only — no status change (no declared color, multi-color
-          // variant like 'Purple White Blue RGB' where the photo shows ONE
+          // variant like "Purple White Blue RGB" where the photo shows ONE
           // color, low single-color occupancy, or product too small to read).
           const warn = `Color de imagen ambiguo (multi-color, ocupación ${interior.confidence}%)`;
           p._imgTextWarnings.push({
-            type: 'color-ambiguous',
+            type: "color-ambiguous",
             ambiguous: true,
             occupancy: interior.confidence,
             declaredColors: families,
           });
           if (!p.warnings.includes(warn)) p.warnings.push(warn);
+        } else if (resolved) {
+          // Diseño multi-color intencional verificado contra los top colors
+          // de la foto → evidencia etiquetada, sin warning, sin cambio de
+          // status (benigno).
+          p._colorAmbiguityResolved = {
+            declaredColors: families,
+            topColors: interior.topColors || [],
+          };
         } else if (!this.colorCompatibility(families[0], interior.name)) {
           const declared = declaredColors.find(
             (d) => COLOR_FAMILY[d.word.toLowerCase()] === families[0],
           );
           const warn = `Color de imagen (${interior.name}) no coincide con el producto (${declared.word})`;
           p._imgTextWarnings.push({
-            type: 'color-mismatch',
+            type: "color-mismatch",
             declared: families[0],
             actual: interior.name,
-            sampleRegion: 'center-60%',
+            sampleRegion: "center-60%",
             occupancy: interior.confidence,
             reason: warn,
           });
           if (!p.warnings.includes(warn)) p.warnings.push(warn);
-          if (p.status === 'GREEN') p.status = 'YELLOW';
+          if (p.status === "GREEN") p.status = "YELLOW";
         }
       }
 
@@ -449,9 +509,9 @@ const ImageTextGates = {
       // imgAspect (shape público del export); aceptamos ambos para que el gate
       // degrade igual en el pipeline de import y en el export batch.
       const aspectNum =
-        typeof p._imgAspect === 'number'
+        typeof p._imgAspect === "number"
           ? p._imgAspect
-          : typeof p.imgAspect === 'number'
+          : typeof p.imgAspect === "number"
             ? p.imgAspect
             : null;
       if (aspectNum !== null && Number.isFinite(aspectNum)) {
@@ -460,14 +520,14 @@ const ImageTextGates = {
         if (vio.violation) {
           const warn = `Imagen ${aspect > 1.9 ? "ancha" : "angosta"} (ratio ${aspect.toFixed(2)}) incompatible con ${(p.cat || "").toUpperCase()}`;
           p._imgTextWarnings.push({
-            type: 'category-aspect',
-            cat: (p.cat || '').toUpperCase(),
+            type: "category-aspect",
+            cat: (p.cat || "").toUpperCase(),
             aspect,
             expectedFamily: vio.expectedFamily,
             reason: warn,
           });
           if (!p.warnings.includes(warn)) p.warnings.push(warn);
-          if (p.status === 'GREEN') p.status = 'YELLOW';
+          if (p.status === "GREEN") p.status = "YELLOW";
         }
       }
     }
@@ -477,7 +537,7 @@ const ImageTextGates = {
       if (p._imgTextWarnings.length) {
         changes.push({
           sku: p.sku,
-          type: 'image-text',
+          type: "image-text",
           detail: p._imgTextWarnings[0].type,
         });
       }
@@ -486,5 +546,24 @@ const ImageTextGates = {
   },
 };
 
-if (typeof window !== 'undefined') window.ImageTextGates = ImageTextGates;
-if (typeof module !== 'undefined') module.exports = ImageTextGates;
+if (typeof window !== "undefined") window.ImageTextGates = ImageTextGates;
+if (typeof module !== "undefined") module.exports = ImageTextGates;
+
+// Slice 1 (gate-calibration): flag de calibración de ambigüedad de color
+// (default ON; Slice 2 lo consolida en remediationConfig.js). Apagarlo
+// restaura el comportamiento pre-calibración (todo multi-color no declarado
+// o ilegible queda WATCH con warning).
+const IMAGE_TEXT_CALIBRATION = { colorAmbiguityResolution: true };
+ImageTextGates.setCalibrationFlags = function setCalibrationFlags(flags) {
+  if (flags && typeof flags === "object") {
+    for (const key of Object.keys(IMAGE_TEXT_CALIBRATION)) {
+      if (typeof flags[key] === "boolean")
+        IMAGE_TEXT_CALIBRATION[key] = flags[key];
+    }
+  }
+  return { ...IMAGE_TEXT_CALIBRATION };
+};
+ImageTextGates.colorAmbiguityResolutionEnabled =
+  function colorAmbiguityResolutionEnabled() {
+    return IMAGE_TEXT_CALIBRATION.colorAmbiguityResolution;
+  };

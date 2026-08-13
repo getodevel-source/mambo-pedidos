@@ -29,6 +29,8 @@ module.exports = [
         ImageQuality: 'writable',
         ImageTextGates: 'writable',
         ImportGates: 'writable',
+        Remediation: 'writable',
+        RemediationConfig: 'writable',
         NcmDatabase: 'writable',
         PdfParser: 'writable',
         PdfParserClassifier: 'writable',

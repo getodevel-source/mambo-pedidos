@@ -76,3 +76,5 @@ scripts/_t1.js
 
 # Session exports (nunca versionar)
 session-export-*.md
+remediation-ledger.json
+human-review-report.json

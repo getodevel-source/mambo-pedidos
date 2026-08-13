@@ -1172,6 +1172,13 @@ pageProducts.push({
         isGroundedPrice: grounding.grounded,
         groundingReason: grounding.reason,
         groundingEvidence: grounding.evidence,
+      _rowEvidence: this._buildRowEvidence(
+        pageNum,
+        this.medianY(cellTextItems),
+        cellTextItems,
+        priceAnchors,
+        grounding.evidence,
+      ),
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -1651,6 +1658,13 @@ if (!rawModelo) continue;
         isGroundedPrice: grounding.grounded,
         groundingReason: grounding.reason,
         groundingEvidence: grounding.evidence,
+      _rowEvidence: this._buildRowEvidence(
+        pageNum,
+        this.medianY(cellItems),
+        cellItems,
+        priceAnchors,
+        grounding.evidence,
+      ),
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -2278,6 +2292,13 @@ if (!rawModelo) continue;
          isGroundedPrice: grounding.grounded,
          groundingReason: grounding.reason,
          groundingEvidence: grounding.evidence,
+      _rowEvidence: this._buildRowEvidence(
+        rows[i].pageNum,
+        rows[i].y || null,
+        Array.isArray(rows[i].tokens) ? rows[i].tokens : Array.isArray(rows[i].text) ? rows[i].text : (rows[i].text ? [{ x: rows[i].x || 0, y: rows[i].y || 0, text: rows[i].text }] : []),
+        [],
+        grounding.evidence,
+      ),
         rawText: ctx.rawText,
         pageNum: rows[i].pageNum,
         x: rows[i].x || 0,
@@ -2890,6 +2911,30 @@ if (!rawModelo) continue;
    * Median Y of a row's text tokens - the row baseline used by grounding
    * verification (Slice 2). Returns null when no numeric y is available.
    */
+  _buildRowEvidence(page, rowTextY, textItems, anchors, alignment) {
+    return {
+      page,
+      rowTextY: typeof rowTextY === 'number' ? rowTextY : null,
+      textItems: (Array.isArray(textItems) ? textItems : []).map((t) => ({
+        str: t && typeof t.str === 'string' ? t.str : String((t && t.text) || ''),
+        x: t && typeof t.x === 'number' ? t.x : 0,
+        y: t && typeof t.y === 'number' ? t.y : 0,
+        width: t && typeof t.width === 'number' ? t.width : 0,
+        height: t && typeof t.height === 'number' ? t.height : 0,
+        page,
+      })),
+      anchors: (Array.isArray(anchors) ? anchors : []).map((a) => ({
+        x: a && typeof a.x === 'number' ? a.x : 0,
+        y: a && typeof a.y === 'number' ? a.y : 0,
+        str: a && typeof a.rawLine === 'string' ? a.rawLine : a && typeof a.str === 'string' ? a.str : '',
+      })),
+      alignment: {
+        dx: alignment && typeof alignment.dx === 'number' ? alignment.dx : 0,
+        dy: alignment && typeof alignment.dy === 'number' ? alignment.dy : null,
+      },
+    };
+  },
+
   medianY(items) {
     if (!Array.isArray(items) || !items.length) return null;
     const ys = items.map(it => (it && typeof it.y === 'number' ? it.y : null))

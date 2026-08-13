@@ -279,6 +279,7 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
         _interiorColor: p._interiorColor || undefined,
         imageEvidence: p.imageEvidence || undefined,
         groundingEvidence: p.groundingEvidence || undefined,
+        _rowEvidence: p._rowEvidence || undefined,
       }));
       allExported.push(...exported);
       perFile.push({ file: fileName, brand, count: exported.length, placeholders: exported.filter(p => p.img === '-').length });
