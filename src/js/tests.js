@@ -30,6 +30,7 @@ const Tests = {
     this.testWeightBasedFreight();
     this.testCourierWarnings();
     this.testTextSanitizer();
+    this.testColorFieldSanitization();
     this.testQuoteGeneratorHtml();
     this.testImageSpatialMatching();
     this.testImageShapeGate();
@@ -88,6 +89,12 @@ const Tests = {
     await this.testCellStructuredLlmPipeline();
     this.testAppUpdaterModule();
     this.testCatalogAssignmentGates();
+    this.testImageTextGates();
+    this.testImageTextCategoryAspect();
+    this.testAssignmentSharedEvidence();
+    this.testImageTextExportPreview();
+    this.testGroundingGeometry();
+    this.testCatalogStatsOutliers();
     this.testUpdaterConfigValidation();
     this.testInfraImprovements();
     this.testReliabilityLayers();
@@ -278,7 +285,19 @@ const Tests = {
     g('NJ07 Ultra NACODEX', 'INF: NJ07 Ultra (1 marketing + código) → GREEN');
     g('Flagship PRO 68 Keys', 'INF: Flagship PRO 68 (1 marketing + dígitos) → GREEN');
     // code+type (IT17) sigue en la cola humana, NO se marca
-    g('M720 Wireless Mouse', 'INF: M720 (código+tipo, cola humana) → GREEN');
+    // code+type (IT17) - SLICE 3 cierra esta clase con el discriminador
+    // conexión+categoría (design §IT17 resolution, rule 1): M720 Wireless
+    // Mouse (código real + conexión + categoría) ahora es YELLOW. "F75 Gasket
+    // Keyboard" sigue GREEN (Gasket es material, no conexión).
+    y('M720 Wireless Mouse', 'SLICE3: M720 (conexión+categoría) → YELLOW');
+    // SLICE 3 (tasks 3.3/3.5): the measured false negatives (design §IT17
+    // resolution rules 1-3) + clean guard that must NOT be flagged.
+    y('G502 Wired Mouse', 'SLICE3: G502 (conexión+categoría con código real) → YELLOW');
+    y('68 Keys Esport', 'SLICE3: 68 Keys Esport (spec sin código real) → YELLOW');
+    y('0500 Backpack Tactical 15.6"', 'SLICE3: 0500 Backpack (categoría/spec sin código real) → YELLOW');
+    y('Mount Tai GT powder', 'SLICE3: Mount Tai GT powder (material sin código real) → YELLOW');
+    y('Hall Effect Ace 68 Air', 'SLICE3: Hall Effect Ace 68 Air (hall effect sin código real) → YELLOW');
+    g('F75 Glacier', 'SLICE3: F75 Glacier (descriptivo legítimo con código) → GREEN');
   },
 
   testWeightBasedFreight() {
@@ -2543,6 +2562,659 @@ const Tests = {
       this.assert(m.placeholder === 1 && m.placeholderRate === 1, 'Métrica de placeholder correcta');
       this.assert(m.status.YELLOW === 1, 'Métrica de status correcta');
     }
+  },
+
+  testColorFieldSanitization() {
+    // SLICE 3 (PR 3, task 3.1 RED): pure color-field sanitizer — the color
+    // field must hold ONLY color words (spec 'Color holds a color').
+    // sanitizeColorField does not exist yet → the null guard makes the RED
+    // assertions fail cleanly without crashing the harness.
+    const sf =
+      typeof TextSanitizer.sanitizeColorField === 'function'
+        ? TextSanitizer.sanitizeColorField
+        : null;
+    const r1 = sf ? sf('Black Mouse Wireless') : null;
+    this.assert(
+      r1 !== null && r1.color === 'Black',
+      'SLICE3: "Black Mouse Wireless" → color="Black"',
+    );
+    this.assert(
+      r1 !== null &&
+        Array.isArray(r1.moved) &&
+        r1.moved.includes('Mouse') &&
+        r1.moved.includes('Wireless'),
+      'SLICE3: moved contiene Mouse y Wireless (conexión/categoría removidas)',
+    );
+    const r2 = sf ? sf('Magnetic Switch White') : null;
+    this.assert(
+      r2 !== null && r2.color === 'White',
+      'SLICE3: "Magnetic Switch White" → color="White"',
+    );
+    this.assert(
+      r2 !== null &&
+        Array.isArray(r2.moved) &&
+        r2.moved.includes('Magnetic') &&
+        r2.moved.includes('Switch'),
+      'SLICE3: moved contiene Magnetic y Switch',
+    );
+    // TRIANGULATE: category-only word, multi-token, pure-connection, empty input
+    const r3 = sf ? sf('Black Webcam') : null;
+    this.assert(
+      r3 !== null && r3.color === 'Black' && r3.moved.includes('Webcam'),
+      'SLICE3: "Black Webcam" → Black + Webcam movido',
+    );
+    const r4 = sf ? sf('Black Keyboard Wireless') : null;
+    this.assert(
+      r4 !== null &&
+        r4.color === 'Black' &&
+        r4.moved.includes('Keyboard') &&
+        r4.moved.includes('Wireless'),
+      'SLICE3: "Black Keyboard Wireless" → Black + Keyboard/Wireless',
+    );
+    const r5 = sf ? sf('Wireless') : null;
+    this.assert(
+      r5 !== null && r5.color === '' && r5.moved.includes('Wireless'),
+      'SLICE3: "Wireless" → color vacío + moved',
+    );
+    const r6 = sf ? sf('') : null;
+    this.assert(
+      r6 !== null && r6.color === '' && r6.moved.length === 0,
+      'SLICE3: vacío → {color:"", moved:[]}',
+    );
+    // TRIANGULATE: fixItemsInPlace wiring — moved tokens go to variante when it
+    // was EMPTY; dropped when variante already has content (spec scenario).
+    const items = [
+      {
+        modelo: 'X1',
+        marca: 'OTRO',
+        cat: 'OTRO',
+        variante: '',
+        color: 'Black Mouse Wireless',
+        fob: 10,
+      },
+      {
+        modelo: 'X2',
+        marca: 'OTRO',
+        cat: 'OTRO',
+        variante: 'Pro',
+        color: 'Black Mouse Wireless',
+        fob: 10,
+      },
+    ];
+    const fixedCount = TextSanitizer.fixItemsInPlace(items);
+    this.assert(
+      fixedCount === 2,
+      'SLICE3: fixItemsInPlace modificó ambos items (color limpiado)',
+    );
+    this.assert(
+      items[0].color === 'Black' && items[0].variante === 'Mouse Wireless',
+      'SLICE3: variante vacía → color="Black", conexión/categoría van a variante',
+    );
+    this.assert(
+      items[1].color === 'Black' && items[1].variante === 'Pro',
+      'SLICE3: variante con contenido → moved DROPPED, color="Black"',
+    );
+  },
+
+  testImageTextGates() {
+    const G = ImageTextGates;
+
+    // Fixture 100x100 RGBA: exterior = BLACK (page background); interior crop
+    // (x,y ∈ [20,80)) = WHITE photo background (corners) with a BLACK product
+    // block in the center. Full-canvas dominant would be BLACK (page); the
+    // interior sampler must exclude the photo background (corners of the crop)
+    // and return the product color BLACK with high occupancy.
+    const w = 100,
+      h = 100;
+    const pixels = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const inside = x >= 20 && x < 80 && y >= 20 && y < 80;
+        const productBlock = x >= 30 && x < 70 && y >= 30 && y < 70;
+        if (productBlock) {
+          pixels[i] = 10;
+          pixels[i + 1] = 10;
+          pixels[i + 2] = 10;
+        } else if (inside) {
+          pixels[i] = 255;
+          pixels[i + 1] = 255;
+          pixels[i + 2] = 255;
+        } else {
+          pixels[i] = 0;
+          pixels[i + 1] = 0;
+          pixels[i + 2] = 0;
+        }
+        pixels[i + 3] = 255;
+      }
+    }
+    const sample = G.sampleInteriorColor(pixels, w, h);
+    this.assert(
+      sample.name === 'BLACK',
+      `Producto negro sobre fondo blanco de foto -> BLACK (got ${sample.name})`,
+    );
+    this.assert(
+      sample.confidence >= 60,
+      `Ocupación del producto alta (got ${sample.confidence})`,
+    );
+
+    // Declared 'Black' vs interior BLACK -> GREEN (photo background excluded,
+    // the old 91%-false-positive case is now a match, not a mismatch).
+    const product = {
+      sku: 'IT-01',
+      marca: 'Aula',
+      modelo: 'F75',
+      variante: 'Black',
+      color: 'Black',
+      cat: 'TECLADO',
+      fob: 35,
+      img: 'data:image/png;base64,AAAA',
+      grounded: true,
+      status: 'GREEN',
+      warnings: [],
+      _interiorColor: { name: 'BLACK', confidence: 80, occupancy: 80 },
+      _imgAspect: 1.0,
+    };
+    const res = G.runAll([product]);
+    const out = res.products[0];
+    this.assert(
+      out.status === 'GREEN',
+      'Black declarado vs interior BLACK (fondo excluido) -> GREEN',
+    );
+
+    // Declared 'White' vs interior BLACK with high occupancy -> YELLOW + evidence
+    const mismatchProduct = {
+      ...product,
+      sku: 'IT-01B',
+      variante: 'White',
+      color: 'White',
+    };
+    const resB = G.runAll([mismatchProduct]);
+    const outB = resB.products[0];
+    this.assert(
+      outB.status === 'YELLOW',
+      'Color declarado WHITE vs imagen interior BLACK -> YELLOW',
+    );
+    const mismatch = outB._imgTextWarnings.find(
+      (x) => x.type === 'color-mismatch',
+    );
+    this.assert(
+      mismatch && mismatch.declared === 'WHITE' && mismatch.actual === 'BLACK',
+      'Evidencia color-mismatch con declared/actual',
+    );
+    this.assert(
+      mismatch &&
+        mismatch.sampleRegion === 'center-60%' &&
+        mismatch.occupancy === 80,
+      'Evidencia color-mismatch con región de muestreo y ocupación',
+    );
+    this.assert(
+      outB.warnings.some((x) => x.includes('no coincide con el producto')),
+      'Warning visible de color no coincide (pv-reason path)',
+    );
+
+    // Product too small in frame (occupancy < 35%) -> WATCH: no status change
+    const ambiguous = {
+      ...product,
+      sku: 'IT-02',
+      _interiorColor: { name: 'UNKNOWN', confidence: 20, occupancy: 20 },
+    };
+    const res2 = G.runAll([ambiguous]);
+    const out2 = res2.products[0];
+    this.assert(
+      out2.status === 'GREEN',
+      'Producto chico en frame (ocupación 20%) -> WATCH, sin cambio de status',
+    );
+    this.assert(
+      out2._imgTextWarnings.some((x) => x.type === 'color-ambiguous'),
+      'WATCH registra evidencia color-ambiguous',
+    );
+
+    // TRIANGULATE: interior mostly BLACK (product) with white spill -> BLACK
+    // dominant even when the photo background is light gray.
+    const pixels2 = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const inside = x >= 20 && x < 80 && y >= 20 && y < 80;
+        const productBlock = x >= 30 && x < 70 && y >= 30 && y < 70;
+        if (productBlock && (x + y) % 3 !== 0) {
+          pixels2[i] = 10;
+          pixels2[i + 1] = 10;
+          pixels2[i + 2] = 10;
+        } else if (productBlock) {
+          pixels2[i] = 255;
+          pixels2[i + 1] = 255;
+          pixels2[i + 2] = 255;
+        } else if (inside) {
+          pixels2[i] = 200;
+          pixels2[i + 1] = 200;
+          pixels2[i + 2] = 200;
+        } else {
+          pixels2[i] = 0;
+          pixels2[i + 1] = 0;
+          pixels2[i + 2] = 0;
+        }
+        pixels2[i + 3] = 255;
+      }
+    }
+    const s2 = G.sampleInteriorColor(pixels2, w, h);
+    this.assert(
+      s2.name === 'BLACK' && s2.confidence >= 60,
+      `Interior con mayoría negro -> BLACK (got ${s2.name} ${s2.confidence}%)`,
+    );
+
+    // TRIANGULATE: declared SILVER vs actual WHITE -> compatible (GRAY/SILVER/WHITE)
+    const silver = {
+      ...product,
+      sku: 'IT-03',
+      variante: 'Silver',
+      color: 'Silver',
+      _interiorColor: { name: 'WHITE', confidence: 90, occupancy: 90 },
+    };
+    const res3 = G.runAll([silver]);
+    this.assert(
+      res3.products[0].status === 'GREEN',
+      'Silver declarado vs WHITE actual -> compatible (grupo GRAY/SILVER/WHITE)',
+    );
+  },
+
+  testImageTextCategoryAspect() {
+    const G = ImageTextGates;
+    const base = {
+      sku: 'ASP-01',
+      marca: 'Aula',
+      modelo: 'F75',
+      variante: 'Black',
+      cat: 'MOUSE',
+      fob: 35,
+      img: 'data:image/png;base64,AAAA',
+      grounded: true,
+      status: 'GREEN',
+      warnings: [],
+    };
+
+    // MOUSE (compact) with a wide keyboard-like photo (aspect 2.3) → YELLOW
+    const mouse = { ...base, sku: 'ASP-01', _imgAspect: 2.3 };
+    const r1 = G.runAll([mouse]).products[0];
+    this.assert(
+      r1.status === 'YELLOW',
+      'MOUSE con imagen ancha (aspect 2.3) -> YELLOW',
+    );
+    const ev1 = r1._imgTextWarnings.find((x) => x.type === 'category-aspect');
+    this.assert(
+      ev1 &&
+        ev1.cat === 'MOUSE' &&
+        ev1.aspect === 2.3 &&
+        ev1.expectedFamily === 'COMPACT',
+      'Evidencia category-aspect con expectedFamily COMPACT',
+    );
+    this.assert(
+      r1.warnings.some((x) => /Imagen ancha/.test(x) && x.includes('MOUSE')),
+      'Warning "Imagen ancha (ratio 2.30) incompatible con MOUSE"',
+    );
+
+    // TECLADO (wide) with a wide photo → GREEN, no warning
+    const kb = { ...base, sku: 'ASP-02', cat: 'TECLADO', _imgAspect: 2.3 };
+    const r2 = G.runAll([kb]).products[0];
+    this.assert(
+      r2.status === 'GREEN' && r2._imgTextWarnings.length === 0,
+      'TECLADO con imagen ancha (aspect 2.3) -> GREEN',
+    );
+
+    // TECLADO with a tall/narrow photo (aspect 0.5) → YELLOW
+    const tall = { ...base, sku: 'ASP-03', cat: 'TECLADO', _imgAspect: 0.5 };
+    const r3 = G.runAll([tall]).products[0];
+    this.assert(
+      r3.status === 'YELLOW',
+      'TECLADO con imagen angosta (aspect 0.5) -> YELLOW',
+    );
+
+    // Relaxed backfill acceptance must NOT clear the gate (post-matching gate)
+    const backfill = {
+      ...base,
+      sku: 'ASP-04',
+      _imgAspect: 2.3,
+      imgWarnings: ['⚠️ Imagen ancha (ratio 2.30) — aceptada en backfill'],
+    };
+    const r4 = G.runAll([backfill]).products[0];
+    this.assert(
+      r4.status === 'YELLOW' &&
+        r4._imgTextWarnings.some((x) => x.type === 'category-aspect'),
+      'Backfill relajado del matcher no limpia la gate de aspecto',
+    );
+  },
+
+  testAssignmentSharedEvidence() {
+    const PNG = 'data:image/png;base64,AAAA';
+    const base = {
+      marca: 'Atk',
+      modelo: 'X1',
+      fob: 10,
+      img: PNG,
+      status: 'GREEN',
+      warnings: [],
+      grounded: true,
+    };
+
+    // cross-category: both products YELLOW + shared evidence
+    const a = { ...base, sku: 'SH-01', cat: 'TECLADO' };
+    const b = { ...base, sku: 'SH-02', cat: 'MOUSE' };
+    const { products } = CatalogAssignmentGates.applyImageIntegrityGates([
+      a,
+      b,
+    ]);
+    const pa = products.find((p) => p.sku === 'SH-01');
+    const pb = products.find((p) => p.sku === 'SH-02');
+    this.assert(
+      pa.status === 'YELLOW' && pb.status === 'YELLOW',
+      'Imagen cross-categoría: ambos productos YELLOW',
+    );
+    const ev = (pb._imgTextWarnings || []).find(
+      (x) => x.type === 'cross-category',
+    );
+    this.assert(
+      ev && ev.sharedBy.includes('SH-01') && ev.sharedBy.includes('SH-02'),
+      'Evidencia cross-category con sharedBy (todos los SKUs)',
+    );
+    this.assert(
+      ev &&
+        ev.categories.includes('TECLADO') &&
+        ev.categories.includes('MOUSE'),
+      'Evidencia cross-category con categories',
+    );
+    this.assert(pb.img === '-', 'Secundario cross-categoría desasignado');
+    this.assert(
+      pb.warnings.some((x) => x.includes('categor')),
+      'Warning de cross-categoría presente (string sin cambios)',
+    );
+
+    // verified rebrand (Irok/Mars, same model+cat) keeps image + GREEN
+    const c = {
+      ...base,
+      sku: 'SH-03',
+      marca: 'Irok',
+      modelo: 'Mer68 Max',
+      cat: 'TECLADO',
+    };
+    const d = {
+      ...base,
+      sku: 'SH-04',
+      marca: 'Mars',
+      modelo: 'Mer68 Max',
+      cat: 'TECLADO',
+    };
+    const { products: rebranded } =
+      CatalogAssignmentGates.applyImageIntegrityGates([c, d]);
+    this.assert(
+      rebranded.every((p) => p.img === PNG && p.status === 'GREEN'),
+      'Rebrand verificado (marca+modelo+cat) conserva GREEN y foto',
+    );
+  },
+
+  testImageTextExportPreview() {
+    // gate warning surfaces in warnings[0] for a previously-clean product
+    const product = {
+      sku: 'XP-01',
+      marca: 'Aula',
+      modelo: 'F75',
+      variante: 'Black',
+      cat: 'MOUSE',
+      fob: 35,
+      img: 'data:image/png;base64,AAAA',
+      grounded: true,
+      status: 'GREEN',
+      warnings: [],
+      _imgAspect: 2.3,
+    };
+    const { products } = ImageTextGates.runAll([product]);
+    const out = products[0];
+    this.assert(
+      Array.isArray(out._imgTextWarnings) && out._imgTextWarnings.length > 0,
+      'Export incluye imgTextWarnings',
+    );
+    this.assert(
+      out.warnings.some((x) => x.includes('Imagen ancha')),
+      'Gate warning visible en warnings (pv-reason muestra warnings[0])',
+    );
+
+    // composed pipeline: split recomputed AFTER gates
+    const fresh = {
+      sku: 'XP-02',
+      marca: 'Aula',
+      modelo: 'F75',
+      variante: 'Black',
+      cat: 'MOUSE',
+      fob: 35,
+      img: 'data:image/png;base64,AAAA',
+      grounded: true,
+      status: 'GREEN',
+      warnings: [],
+      _imgAspect: 2.3,
+    };
+    const ver = ImportGates.runImportVerification([fresh]);
+    this.assert(
+      ver.products.length === 1 &&
+        ver.review.length === 1 &&
+        ver.stats.yellow === 1,
+      'Split recomputado tras gates: producto gate-flaggeado en review',
+    );
+    this.assert(
+      ver.accepted.length === 0 && ver.stats.green === 0,
+      'Ningún producto gate-flaggeado queda en accepted',
+    );
+
+    // isPhotoOnly (IT16 extension, Decision 6): gate-flagged items are NOT
+    // photo-only → land in dataReviewCount, unselected by default.
+    const isPhotoOnly = (it) =>
+      it.status === 'YELLOW' &&
+      !/^data:image\/(?:png|jpe?g|webp|gif);/i.test(it.img || '') &&
+      !(Array.isArray(it._imgTextWarnings) && it._imgTextWarnings.length) &&
+      (!it.warnings ||
+        it.warnings.length === 0 ||
+        it.warnings.every((x) => /imagen|foto/i.test(x)));
+    const gateFlagged = {
+      status: 'YELLOW',
+      img: '-',
+      warnings: ['Imagen compartida entre categorías (asignación inválida)'],
+      _imgTextWarnings: [{ type: 'cross-category' }],
+    };
+    this.assert(
+      isPhotoOnly(gateFlagged) === false,
+      'isPhotoOnly excluye ítems flagueados por gates de imagen',
+    );
+    const plainPhoto = {
+      status: 'YELLOW',
+      img: '-',
+      warnings: ['Sin foto de previsualización (datos OK)'],
+      _imgTextWarnings: [],
+    };
+    this.assert(
+      isPhotoOnly(plainPhoto) === true,
+      'isPhotoOnly mantiene YELLOW de solo foto',
+    );
+  },
+
+  testGroundingGeometry() {
+    const P = PdfParser;
+    const A = (x, y, price) => ({
+      x,
+      y,
+      price,
+      rawLine: '$' + price,
+      pageNum: 1,
+    });
+
+    // Aligned anchor: same column band, nearest to its row text baseline
+    const anchors = [A(100, 300, 24.04), A(100, 340, 29.57)];
+    const ok = P.verifyGrounding({
+      anchor: anchors[0],
+      rowTextY: 300,
+      pageNum: 1,
+      pageAnchors: anchors,
+    });
+    this.assert(
+      ok.grounded === true,
+      'Ancla alineada a su fila -> grounded:true',
+    );
+    this.assert(
+      ok.reason === 'FOB verificado por geometría de fila',
+      'Razón de grounding verificado por geometría',
+    );
+    this.assert(
+      ok.evidence.groundingMode === 'geometric' &&
+        ok.evidence.page === 1 &&
+        ok.evidence.price === 24.04,
+      'Evidencia {groundingMode, page, price} para ancla verificada',
+    );
+
+    // Fused cell: the NEAREST same-column anchor belongs to the neighbor row
+    const fusedAnchors = [A(100, 300, 24.04), A(100, 308, 29.57)];
+    const fused = P.verifyGrounding({
+      anchor: fusedAnchors[0],
+      rowTextY: 310,
+      pageNum: 1,
+      pageAnchors: fusedAnchors,
+    });
+    this.assert(
+      fused.grounded === false && fused.reason === 'ancla de fila vecina',
+      'Celda fusionada: ancla de fila vecina -> grounded:false',
+    );
+    this.assert(
+      fused.evidence.dy === 2,
+      'Evidencia fused-cell con dy = distancia mínima a la fila',
+    );
+
+    // Misaligned: anchor further than rowTolerance (30) from the text baseline
+    const off = P.verifyGrounding({
+      anchor: A(100, 340, 29.57),
+      rowTextY: 300,
+      pageNum: 1,
+      pageAnchors: [A(100, 340, 29.57)],
+    });
+    this.assert(
+      off.grounded === false && off.reason === 'ancla no alineada',
+      'Ancla no alineada (dy 40 > 30) -> grounded:false',
+    );
+
+    // Absent anchor (matrix/fallback path) -> "FOB sin ancla literal verificada"
+    const absent = P.verifyGrounding({
+      anchor: null,
+      rowTextY: 200,
+      pageNum: 3,
+      pageAnchors: [],
+    });
+    this.assert(
+      absent.grounded === false &&
+        absent.reason === 'FOB sin ancla literal verificada',
+      'Ancla ausente -> "FOB sin ancla literal verificada"',
+    );
+    this.assert(
+      absent.evidence.anchorX === null && absent.evidence.page === 3,
+      'Evidencia con anchorX null y page para ancla ausente',
+    );
+
+    // R10 contract: false grounding → YELLOW/IMPORTABLE (never RED), and R10
+    // consumes groundingEvidence without breaking the R1-R10 shape.
+    const item = {
+      sku: 'GRD-2',
+      marca: 'Aula',
+      modelo: 'F75',
+      variante: 'Black',
+      cat: 'TECLADO',
+      fob: 29.57,
+      img: 'data:image/png;base64,AAAA',
+      grounded: false,
+      groundingReason: 'ancla de fila vecina',
+      groundingEvidence: fused.evidence,
+    };
+    const evals = CatalogValidator.evaluateItem(item);
+    const r10 = evals.find((e) => e.code === 'R10');
+    this.assert(
+      r10.status === 'YELLOW' && r10.importability === 'IMPORTABLE',
+      'Grounding falso -> R10 YELLOW/IMPORTABLE (nunca RED)',
+    );
+    this.assert(
+      r10.evidence.groundingMode === 'geometric' &&
+        r10.evidence.page === 1 &&
+        r10.evidence.dy === 2,
+      'R10 consume groundingEvidence {groundingMode, page, dy} sin romper el contrato',
+    );
+    this.assert(
+      evals.length === 10,
+      'R1-R10 contract intacto (10 evaluaciones)',
+    );
+  },
+
+  testCatalogStatsOutliers() {
+    const base = (sku, fob) => ({
+      sku,
+      cat: 'ACCESORIO',
+      fob,
+      status: 'GREEN',
+      warnings: [],
+      img: 'data:image/png;base64,AAAA',
+      grounded: true,
+      modelo: 'X' + sku,
+      marca: 'Aula',
+      variante: 'Black',
+    });
+
+    // prices 10..16 → q1=12, q3=16, iqr=4, high3=28; 500 is a 5× outlier
+    const extremeSet = [
+      base('O-01', 10),
+      base('O-02', 11),
+      base('O-03', 12),
+      base('O-04', 13),
+      base('O-05', 14),
+      base('O-06', 15),
+      base('O-07', 16),
+      base('O-08', 500),
+    ];
+    const out = CatalogValidator.validateCatalogStats(extremeSet);
+    const extreme = out.find((p) => p.sku === 'O-08');
+    this.assert(
+      extreme.status === 'YELLOW',
+      'Outlier extremo (IQR×3) degrada a YELLOW',
+    );
+    this.assert(
+      extreme._outlierEvidence &&
+        extreme._outlierEvidence.price === 500 &&
+        extreme._outlierEvidence.cat === 'ACCESORIO',
+      'Evidencia _outlierEvidence {price, cat}',
+    );
+    this.assert(
+      extreme._outlierEvidence.iqr === 4 && extreme._outlierEvidence.factor > 3,
+      'Evidencia con iqr y factor > 3',
+    );
+    this.assert(
+      extreme.warnings.some((w) => w.includes('Outlier de precio')),
+      'Warning "Outlier de precio" presente',
+    );
+
+    // prices 10..14 + 22 → q1=11, q3=14, iqr=3, high=18.5, high3=23 → 22 is
+    // a MILD outlier (1.5× band): advisory only.
+    const mildSet = [
+      base('M-01', 10),
+      base('M-02', 11),
+      base('M-03', 12),
+      base('M-04', 13),
+      base('M-05', 14),
+      base('M-06', 22),
+    ];
+    const mild = CatalogValidator.validateCatalogStats(mildSet).find(
+      (p) => p.sku === 'M-06',
+    );
+    this.assert(
+      mild.status === 'GREEN' &&
+        mild._statFlag &&
+        mild._statFlag.includes('Outlier'),
+      'Outlier leve (1.5×) se mantiene advisory (sin YELLOW)',
+    );
+    this.assert(
+      !mild._outlierEvidence,
+      'Outlier leve NO lleva _outlierEvidence',
+    );
   },
 };
 

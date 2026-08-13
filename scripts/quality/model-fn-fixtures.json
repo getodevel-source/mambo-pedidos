@@ -1,0 +1,15 @@
+{
+  "description": "Sanitized model-quality FN fixtures (SLICE 3, design §IT17 resolution). The six measured false negatives closed by assessModelQuality rules 1-3 (connection+category, spec/category fragment without code, hall-effect), plus clean guards that must NOT be flagged. Contract-fixtures style: no secrets, model strings only.",
+  "fixtures": [
+    { "id": "FN-01", "modelo": "M720 Wireless Mouse", "variante": "Black", "cat": "MOUSE", "expectedLevel": "YELLOW", "rule": "1-connection-category" },
+    { "id": "FN-02", "modelo": "G502 Wired Mouse", "variante": "Black", "cat": "MOUSE", "expectedLevel": "YELLOW", "rule": "1-connection-category" },
+    { "id": "FN-03", "modelo": "68 Keys Esport", "variante": "Magnetic Switch Silver White", "cat": "MOUSE", "expectedLevel": "YELLOW", "rule": "2-spec-fragment" },
+    { "id": "FN-04", "modelo": "0500 Backpack Tactical 15.6\"", "variante": "V2", "cat": "ACCESORIO", "expectedLevel": "YELLOW", "rule": "2-category-spec" },
+    { "id": "FN-05", "modelo": "Mount Tai GT powder", "variante": "Translucent Magnetic Switch Pink", "cat": "TECLADO", "expectedLevel": "YELLOW", "rule": "2-material-word" },
+    { "id": "FN-06", "modelo": "Hall Effect Ace 68 Air", "variante": "Switch White", "cat": "TECLADO", "expectedLevel": "YELLOW", "rule": "3-hall-effect" },
+    { "id": "FN-CLEAN-01", "modelo": "F75 Glacier", "variante": "", "cat": "TECLADO", "expectedLevel": "GREEN", "rule": "clean-guard" },
+    { "id": "FN-CLEAN-02", "modelo": "F75 Gasket Keyboard", "variante": "Sea Salt", "cat": "TECLADO", "expectedLevel": "GREEN", "rule": "clean-guard" },
+    { "id": "FN-CLEAN-03", "modelo": "AJ139 Pro", "variante": "White", "cat": "MOUSE", "expectedLevel": "GREEN", "rule": "clean-guard" },
+    { "id": "FN-CLEAN-04", "modelo": "NJ07 Ultra NACODEX", "variante": "White Tri mode", "cat": "MOUSE", "expectedLevel": "GREEN", "rule": "clean-guard" }
+  ]
+}

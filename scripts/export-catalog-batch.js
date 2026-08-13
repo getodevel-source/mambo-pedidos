@@ -197,6 +197,10 @@ global.SkuAllocator = null; // will be set after require
 require('pdfjs-dist/legacy/build/pdf.js');
 require('../src/js/textSanitizer.js');
 require('../src/js/skuAllocator.js');
+require('../src/js/imageTextGates.js');
+require('../src/js/catalogAssignmentGates.js');
+const ImportGates = require('../src/js/importGates.js');
+global.ImportGates = ImportGates;
 const CatalogValidator = require('../src/js/catalogValidator.js');
 global.CatalogValidator = CatalogValidator;
 const PdfParser = require('../src/js/pdfParser.js');
@@ -262,6 +266,19 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
         pageNum: p.pageNum, x: p.x, y: p.y,
         imgWarnings: Array.isArray(p.imgWarnings) ? p.imgWarnings : undefined,
         sourceStatus: p.sourceStatus,
+        // Gates (catalog-reliability-verification) - aditivo, los measure
+        // scripts existentes siguen consumiendo el mismo shape.
+        imgTextWarnings: Array.isArray(p._imgTextWarnings) ? p._imgTextWarnings : undefined,
+        imgAspect: typeof p._imgAspect === 'number' && Number.isFinite(p._imgAspect) ? p._imgAspect : undefined,
+        // Campos internos preservados para los gates post-mapeo (los gates
+        // corren sobre la forma exportada): ImageTextGates lee _imgAspect /
+        // _interiorColor, no los nombres publicos. Sin esto, el gate de aspect
+        // y el de color NO degradan en el export (bug medido: MOUSE anchos
+        // quedaban GREEN).
+        _imgAspect: typeof p._imgAspect === 'number' && Number.isFinite(p._imgAspect) ? p._imgAspect : undefined,
+        _interiorColor: p._interiorColor || undefined,
+        imageEvidence: p.imageEvidence || undefined,
+        groundingEvidence: p.groundingEvidence || undefined,
       }));
       allExported.push(...exported);
       perFile.push({ file: fileName, brand, count: exported.length, placeholders: exported.filter(p => p.img === '-').length });
@@ -271,7 +288,16 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
     }
   }
 
-  fs.writeFileSync(OUTPUT, JSON.stringify(allExported, null, 2), 'utf-8');
+  // Gates post-procesamiento (misma composicion que el import del browser:
+  // runFullValidation -> ImageTextGates -> CatalogAssignmentGates). El split se
+  // recalcula DESPUES de las gates - GREEN = reliable tambien en el export.
+  const gated = ImportGates.runImportVerification(allExported);
+  const finalExported = gated.products;
+  const beforeGreen = allExported.filter(p => p.status === 'GREEN').length;
+  console.log(`
+🛡️ Gates: ${beforeGreen} GREEN → ${gated.stats.green} GREEN / ${gated.stats.yellow} YELLOW / ${gated.stats.red} RED (${gated.stats.total} productos)`);
+
+  fs.writeFileSync(OUTPUT, JSON.stringify(finalExported, null, 2), 'utf-8');
   const diagFile = OUTPUT.replace(/\.json$/i, '-diag.json');
   fs.writeFileSync(diagFile, JSON.stringify({ pageStats, imageStats }, null, 2), 'utf-8');
   console.log(`\n✅ Export: ${allExported.length} productos → ${OUTPUT}`);

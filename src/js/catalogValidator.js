@@ -209,18 +209,36 @@ const CatalogValidator = {
       outlierBounds[cat] = {
         low: q1 - 1.5 * iqr,
         high: q3 + 1.5 * iqr,
-        median: prices[Math.floor(prices.length * 0.5)]
+        low3: q1 - 3 * iqr,
+        high3: q3 + 3 * iqr,
+        median: prices[Math.floor(prices.length * 0.5)],
+        iqr
       };
     }
 
-    // Flaggear outliers (advisory only — does not block GREEN)
+    // Flaggear outliers. La banda 1.5x sigue advisory (_statFlag, sin cambio
+    // de status); la banda de alta confianza IQRx3 degrada a YELLOW con
+    // evidencia (spec: fob-grounding-integrity). Nunca degrada RED -> YELLOW.
     for (const p of products) {
       const cat = p.cat || 'OTRO';
       const bounds = outlierBounds[cat];
       const fob = parseFloat(p.fob) || 0;
       if (bounds && fob > 0) {
-        if (fob < bounds.low || fob > bounds.high) {
-          p._statFlag = `Outlier de precio: $${fob} (mediana ${cat}: $${bounds.median.toFixed(2)})`;
+        if (fob < bounds.low3 || fob > bounds.high3) {
+          const factor = (fob - bounds.median) / Math.max(1e-9, bounds.iqr || 1);
+          p._outlierEvidence = {
+            price: fob,
+            median: bounds.median,
+            iqr: bounds.iqr,
+            cat,
+            factor: Math.round(factor * 100) / 100
+          };
+          const warn = 'Outlier de precio: $' + fob + ' (mediana $' + bounds.median.toFixed(2) + ')';
+          if (!p.warnings) p.warnings = [];
+          if (!p.warnings.includes(warn)) p.warnings.push(warn);
+          p.status = this.maxStatus(p.status, 'YELLOW');
+        } else if (fob < bounds.low || fob > bounds.high) {
+          p._statFlag = 'Outlier de precio: $' + fob + ' (mediana ' + cat + ': $' + bounds.median.toFixed(2) + ')';
           if (!p.warnings) p.warnings = [];
           p.warnings.push(p._statFlag);
           // Advisory only: do NOT change status from GREEN to YELLOW
@@ -474,7 +492,10 @@ const CatalogValidator = {
     }
     evals.push(this._makeEval('R10', r10Sev, r10Sta, r10Imp,
       { observed: grounded === true ? 'verificado' : (grounded === false ? 'no verificado' : 'ausente'),
-        expected: 'presencia literal en fuente', source: item.groundingReason || 'grounding' },
+        expected: 'presencia literal en fuente', source: item.groundingReason || 'grounding',
+            ...(item.groundingEvidence && typeof item.groundingEvidence === 'object'
+              ? item.groundingEvidence
+              : {}) },
       r10Reason
     ));
 

@@ -55,6 +55,9 @@ npm-debug.log
 
 # Generated quality/audit reports (run scripts to regenerate)
 quality-report.json
+quality-iterate-report.json
+catalog-export.json
+catalog-export-diag.json
 extraction-audit-report.json
 audit-app-report.json
 

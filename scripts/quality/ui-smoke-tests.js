@@ -162,6 +162,9 @@ global.Validations = require(jsPath('validations.js'));
 global.SkuAllocator = require(jsPath('skuAllocator.js'));
 global.TextSanitizer = require(jsPath('textSanitizer.js'));
 global.CatalogValidator = require(jsPath('catalogValidator.js'));
+global.ImageTextGates = require(jsPath('imageTextGates.js'));
+global.CatalogAssignmentGates = require(jsPath('catalogAssignmentGates.js'));
+global.ImportGates = require(jsPath('importGates.js'));
 global.ImportsTracker = require(jsPath('importsTracker.js'));
 global.Calculator = require(jsPath('calculator.js')); // wizard de importación (paso 6) lo usa real
 

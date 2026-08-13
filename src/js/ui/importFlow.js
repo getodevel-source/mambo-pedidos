@@ -72,7 +72,9 @@ const ImportFlow = {
     if (ImportFlow.pendingPreviewItems.length > 0) {
       if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(ImportFlow.pendingPreviewItems, catalog);
       // Capa 1+3+4: Validación cruzada + semáforo + estadística
-      const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+      const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+      ImportFlow.pendingPreviewItems = validation.products;
 
       // RED → deseleccionados por defecto (no se importan)
             for (const p of validation.rejected) {
@@ -83,6 +85,7 @@ const ImportFlow = {
             // importar (nada con dato dudoso entra en silencio). Los de SOLO foto
             // (datos OK) quedan seleccionados.
             ImportFlow.isPhotoOnlyItem = (it) =>
+              (!Array.isArray(it._imgTextWarnings) || it._imgTextWarnings.length === 0) &&
               it.status === 'YELLOW' &&
               !hasCatalogImage(it.img) &&
               (!it.warnings || it.warnings.length === 0 || it.warnings.every(w => /imagen|foto/i.test(w)));
@@ -140,6 +143,7 @@ const ImportFlow = {
     // datos verificados) vs "en revisión" (modelo/grounding/duplicado). El usuario
     // necesita saber que un YELLOW de foto NO es un error de datos.
     const isPhotoOnly = (it) =>
+      (!Array.isArray(it._imgTextWarnings) || it._imgTextWarnings.length === 0) &&
       it.status === 'YELLOW' &&
       !hasCatalogImage(it.img) &&
       (!it.warnings || it.warnings.length === 0 || it.warnings.every(w => /imagen|foto/i.test(w)));
@@ -273,7 +277,9 @@ const ImportFlow = {
     item[field] = field === 'fob'
       ? (parseFloat(String(value).replace(',', '.')) || 0)
       : String(value || '').trim();
-    const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+    const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+    ImportFlow.pendingPreviewItems = validation.products;
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
 
@@ -316,7 +322,9 @@ const ImportFlow = {
         count++;
       }
     });
-    const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+    const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+    ImportFlow.pendingPreviewItems = validation.products;
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
     ImportFlow.renderImportPreviewModal(validation);
@@ -333,7 +341,9 @@ const ImportFlow = {
         count++;
       }
     });
-    const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+    const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+    ImportFlow.pendingPreviewItems = validation.products;
     validation.rejected.forEach(p => { p._selected = false; });
     window._previewValidation = validation;
     ImportFlow.renderImportPreviewModal(validation);
@@ -348,7 +358,9 @@ const ImportFlow = {
         // Use shared fix logic (single source of truth)
         TextSanitizer.fixItemsInPlace(ImportFlow.pendingPreviewItems, customBrandsList);
       }
-      const validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+      const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+      ImportFlow.pendingPreviewItems = validation.products;
       validation.rejected.forEach(p => { p._selected = false; });
       window._previewValidation = validation;
       ImportFlow.renderImportPreviewModal(validation);
@@ -375,7 +387,9 @@ const ImportFlow = {
   },
 
   async confirmImportPreview() {
-    const _validation = CatalogValidator.runFullValidation(ImportFlow.pendingPreviewItems);
+    const _validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+
+    ImportFlow.pendingPreviewItems = _validation.products;
     if (typeof SkuAllocator !== 'undefined') SkuAllocator.allocateBatch(ImportFlow.pendingPreviewItems, catalog);
     const selectedItems = ImportFlow.pendingPreviewItems.filter(i => i._selected && i.status !== 'RED' && i.importable !== false);
     if (!selectedItems.length) {

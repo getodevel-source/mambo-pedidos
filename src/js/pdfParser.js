@@ -306,13 +306,15 @@ const PdfParser = {
 
             if (this.isValidImageDataUrl(finalDataUrl)) {
               const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              const interiorColor = this.extractInteriorColor(colorCtx, outW, outH);
               pageImages.push({
                 pageNum, y, x,
                 width: outW, height: outH,
                 pdfWidth: drawW, pdfHeight: drawH,
                 centerY: y + (outH / 2),
                 dataUrl: finalDataUrl,
-                dominantColor
+                dominantColor,
+                interiorColor
               });
             }
           } else {
@@ -424,13 +426,15 @@ const PdfParser = {
 
             if (this.isValidImageDataUrl(finalDataUrl)) {
               const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              const interiorColor = this.extractInteriorColor(colorCtx, outW, outH);
               pageImages.push({
                 pageNum, y, x,
                 width: outW, height: outH,
                 pdfWidth: imgW, pdfHeight: imgH,
                 centerY: y + (outH / 2),
                 dataUrl: finalDataUrl,
-                dominantColor
+                dominantColor,
+                interiorColor
               });
             }
           }
@@ -527,13 +531,15 @@ const PdfParser = {
 
           if (this.isValidImageDataUrl(finalDataUrl)) {
             const dominantColor = this.extractDominantColor(colorCtx, outW, outH);
+              const interiorColor = this.extractInteriorColor(colorCtx, outW, outH);
             pageImages.push({
               pageNum, y, x,
               width: outW, height: outH,
               pdfWidth: imgW, pdfHeight: imgH,
               centerY: y + (outH / 2),
               dataUrl: finalDataUrl,
-              dominantColor
+              dominantColor,
+              interiorColor
             });
           }
         }
@@ -665,6 +671,24 @@ const PdfParser = {
       return { ...best, confidence: Math.round((best.count / totalVisible) * 100) };
     } catch {
       return { name: 'UNKNOWN', r: 128, g: 128, b: 128, confidence: 0 };
+    }
+  },
+
+  /**
+   * Interior-dominant color over the CENTER-60% crop, background-excluded.
+   * Delegates to ImageTextGates.sampleInteriorColor (Slice 1): the page
+   * background and the photo's own background (corners of the crop) are
+   * excluded, so the result is the PRODUCT color, not the backdrop. Returns
+   * null when the sampler is unavailable.
+   */
+  extractInteriorColor(ctx, width, height) {
+    try {
+      if (!ctx || !width || !height) return null;
+      if (typeof ImageTextGates === 'undefined' || !ImageTextGates.sampleInteriorColor) return null;
+      const imgData = ctx.getImageData(0, 0, width, height);
+      return ImageTextGates.sampleInteriorColor(imgData.data, width, height, 0.6);
+    } catch {
+      return null;
     }
   },
 
@@ -1059,6 +1083,8 @@ const PdfParser = {
 
       // Búsqueda de Imagen STRICTLY dentro del Bounding Box de la Celda
       let matchedImg = '-';
+      let matchedInterior = null;
+      let matchedAspect = null;
       if (pageImages && pageImages.length) {
         const candidateImgs = pageImages.filter(img => {
           if (img.pageNum !== pageNum) return false;
@@ -1090,6 +1116,10 @@ const PdfParser = {
                 }).filter(Boolean).sort((a, b) => a.score - b.score);
                 if (scored[0]) {
                   matchedImg = scored[0].img.dataUrl;
+                  matchedInterior = scored[0].img.interiorColor || null;
+                  matchedAspect = scored[0].img.width && scored[0].img.height
+                    ? scored[0].img.width / scored[0].img.height
+                    : null;
                 }
               }
             }
@@ -1120,6 +1150,13 @@ const PdfParser = {
       }
 
       
+        const grounding = this.verifyGrounding({
+          anchor,
+          rowTextY: this.medianY(cellTextItems),
+          pageNum,
+          pageAnchors: priceAnchors,
+        });
+
 pageProducts.push({
         sku: '',
         cat,
@@ -1128,10 +1165,13 @@ pageProducts.push({
         variante: sanitized.variante,
         fob: anchor.price,
         img: matchedImg,
-        grounded: true,
-        groundedFob: true,
-        isGroundedPrice: true,
-        groundingReason: 'FOB extraído de un ancla literal del texto de la página',
+        _interiorColor: matchedInterior,
+        _imgAspect: matchedAspect,
+        grounded: grounding.grounded,
+        groundedFob: grounding.grounded,
+        isGroundedPrice: grounding.grounded,
+        groundingReason: grounding.reason,
+        groundingEvidence: grounding.evidence,
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -1520,6 +1560,8 @@ if (!rawModelo) continue;
       // Image bounds are wider than text bounds (+25px padding) to catch images
       // positioned slightly outside the midpoint boundaries
       let matchedImg = '-';
+      let matchedInterior = null;
+      let matchedAspect = null;
       if (pageImages && pageImages.length) {
         const imgTopBound = topBound - 25;
         const imgBottomBound = bottomBound + 25;
@@ -1579,9 +1621,20 @@ if (!rawModelo) continue;
           // rechazó todas las fotos, aceptar la mejor con penalty.
           const bestImg = pickBest(false) || pickBest(true);if (bestImg) {
             matchedImg = this.isValidImageDataUrl(bestImg.dataUrl) ? bestImg.dataUrl : '-';
+            matchedInterior = bestImg.interiorColor || null;
+            matchedAspect = bestImg.width && bestImg.height
+              ? bestImg.width / bestImg.height
+              : null;
           }
         }
       }
+
+      const grounding = this.verifyGrounding({
+        anchor,
+        rowTextY: this.medianY(cellItems),
+        pageNum,
+        pageAnchors: priceAnchors,
+      });
 
       pageProducts.push({
         sku: productCode,
@@ -1591,10 +1644,13 @@ if (!rawModelo) continue;
         variante: sanitized.variante,
         fob: anchor.price,
         img: matchedImg,
-        grounded: true,
-        groundedFob: true,
-        isGroundedPrice: true,
-        groundingReason: 'FOB extraído de un ancla literal del texto de la tabla',
+        _interiorColor: matchedInterior,
+        _imgAspect: matchedAspect,
+        grounded: grounding.grounded,
+        groundedFob: grounding.grounded,
+        isGroundedPrice: grounding.grounded,
+        groundingReason: grounding.reason,
+        groundingEvidence: grounding.evidence,
         rawText: rawCombined,
         cellRawText: rawCombined,
         pageNum,
@@ -2200,7 +2256,16 @@ if (!rawModelo) continue;
       const brandCode = detectedBrand.substring(0, 3).toUpperCase();
       const sku = `${brandCode}-${catCode}-${String(baseLength + products.length + 1).padStart(4, '0')}`;
 
-      products.push({
+                // Slice 2: matrix path has NO literal anchor - derive grounded:false
+          // with evidence (YELLOW via R10, never RED) instead of hardcoded true.
+          const grounding = this.verifyGrounding({
+            anchor: null,
+            rowTextY: rows[i].y || null,
+            pageNum: rows[i].pageNum,
+            pageAnchors: [],
+          });
+
+        products.push({
         sku,
         cat,
         marca: detectedBrand,
@@ -2208,10 +2273,11 @@ if (!rawModelo) continue;
         variante: finalVariant,
         fob: usdPrice,
          img: '-',
-         grounded: true,
-         groundedFob: true,
-         isGroundedPrice: true,
-         groundingReason: 'FOB extraído de un ancla literal del texto',
+         grounded: grounding.grounded,
+         groundedFob: grounding.grounded,
+         isGroundedPrice: grounding.grounded,
+         groundingReason: grounding.reason,
+         groundingEvidence: grounding.evidence,
         rawText: ctx.rawText,
         pageNum: rows[i].pageNum,
         x: rows[i].x || 0,
@@ -2807,6 +2873,92 @@ if (!rawModelo) continue;
         }
       }
     }
+  },
+
+  /**
+   * Slice 1: attach interior color + aspect meta to a product that just
+   * received an image (used by the global matcher paths). ImageTextGates
+   * consumes _interiorColor/_imgAspect on the final product.
+   */
+  _attachImageMeta(product, img) {
+    if (!product || !img) return;
+    product._interiorColor = img.interiorColor || null;
+    product._imgAspect = img.width && img.height ? img.width / img.height : null;
+  },
+
+  /**
+   * Median Y of a row's text tokens - the row baseline used by grounding
+   * verification (Slice 2). Returns null when no numeric y is available.
+   */
+  medianY(items) {
+    if (!Array.isArray(items) || !items.length) return null;
+    const ys = items.map(it => (it && typeof it.y === 'number' ? it.y : null))
+      .filter(y => y !== null).sort((a, b) => a - b);
+    if (!ys.length) return null;
+    const mid = Math.floor(ys.length / 2);
+    return ys.length % 2 ? ys[mid] : (ys[mid - 1] + ys[mid]) / 2;
+  },
+
+  /**
+   * Slice 2 (fob-grounding-integrity): DERIVES `grounded` from anchor-to-row
+   * geometry instead of trusting the literal-anchor presence. The FOB anchor
+   * must be on the same page, horizontally aligned with the row's text
+   * baseline (same column band), and the NEAREST candidate anchor to that
+   * row - otherwise the price probably belongs to a neighbor (fused cell /
+   * shifted column). Unverifiable anchors degrade to YELLOW (never RED); RED
+   * stays reserved for missing/invalid FOB.
+   *
+   * @param {Object} opts
+   * @param {Object|null} opts.anchor - The price anchor used for this product
+   * @param {number|null} opts.rowTextY - Median Y of the row's text tokens
+   * @param {number} opts.pageNum
+   * @param {Array} opts.pageAnchors - All price anchors of the page
+   * @param {number} [opts.columnTolerance=40] - grid engine column epsilon
+   * @param {number} [opts.rowTolerance=30] - engine same-row epsilon
+   * @returns {{grounded:boolean, reason:string, evidence:Object}}
+   */
+  verifyGrounding({ anchor, rowTextY, pageNum, pageAnchors, columnTolerance = 40, rowTolerance = 30 }) {
+    const page = pageNum;
+    const price = anchor ? anchor.price : null;
+
+    // 1. Absent anchor (matrix/fallback path): nothing to verify.
+    if (!anchor || typeof anchor.x !== 'number' || typeof anchor.y !== 'number') {
+      return { grounded: false, reason: 'FOB sin ancla literal verificada',
+        evidence: { groundingMode: 'geometric', page, anchorX: null, rowX: null, dx: null, dy: null, price } };
+    }
+
+    // 2. Same-column band (the grid engine's column tolerance).
+    const band = (pageAnchors || []).filter(a => a && typeof a.x === 'number' && Math.abs(a.x - anchor.x) <= columnTolerance);
+
+    // 3. Nearest anchor to the row text baseline (the anchor itself included).
+    const rowY = typeof rowTextY === 'number' && Number.isFinite(rowTextY) ? rowTextY : null;
+    if (rowY === null) {
+      return { grounded: false, reason: 'ancla no alineada',
+        evidence: { groundingMode: 'geometric', page, anchorX: anchor.x, rowX: anchor.x, dx: 0, dy: null, price } };
+    }
+    let nearest = anchor;
+    let minDist = Math.abs(anchor.y - rowY);
+    for (const a of band) {
+      const d = Math.abs(a.y - rowY);
+      if (d < minDist) { minDist = d; nearest = a; }
+    }
+
+    // 4. Fused cell / shifted column: a neighbor anchor is closer to this row.
+    if (nearest !== anchor) {
+      return { grounded: false, reason: 'ancla de fila vecina',
+        evidence: { groundingMode: 'geometric', page, anchorX: anchor.x, rowX: nearest.x, dx: nearest.x - anchor.x, dy: minDist, price } };
+    }
+
+    // 5. Vertical alignment: the anchor must be within the row tolerance.
+    const dy = anchor.y - rowY;
+    if (Math.abs(dy) > rowTolerance) {
+      return { grounded: false, reason: 'ancla no alineada',
+        evidence: { groundingMode: 'geometric', page, anchorX: anchor.x, rowX: anchor.x, dx: 0, dy, price } };
+    }
+
+    // 6. Verified: anchor belongs to this row.
+    return { grounded: true, reason: 'FOB verificado por geometría de fila',
+      evidence: { groundingMode: 'geometric', page, anchorX: anchor.x, rowX: anchor.x, dx: 0, dy, price } };
   },
 
   /**

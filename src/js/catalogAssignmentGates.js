@@ -181,6 +181,16 @@ const CatalogAssignmentGates = {
       // first in order and detach the rest. Without pixel evidence we cannot
       // score deeper — every detach is surfaced in the audit.
       const [keeper, ...others] = group;
+      // Slice 1 evidence: EVERY sharing product degrades to YELLOW with the
+      // shared image identity (spec: both products YELLOW with evidence). The
+      // keeper keeps its image; the others are detached below (R9 policy).
+      const sharedBy = group.map(p => p.sku);
+      const categories = [...cats];
+      for (const p of group) {
+        if (!Array.isArray(p._imgTextWarnings)) p._imgTextWarnings = [];
+        p._imgTextWarnings.push({ type: 'cross-category', sharedBy, categories });
+        if (p.status === 'GREEN') p.status = 'YELLOW';
+      }
       for (const p of others) {
         p.img = PLACEHOLDER_IMAGE;
         if (!p.warnings.includes('Imagen compartida entre categorías (asignación inválida)')) {
@@ -229,6 +239,9 @@ const CatalogAssignmentGates = {
           if (!p.warnings.includes('Imagen compartida entre marcas sin identidad de modelo (asignación inválida)')) {
             p.warnings.push('Imagen compartida entre marcas sin identidad de modelo (asignación inválida)');
           }
+          // Slice 1 evidence: cross-brand detach carries shared-by facts.
+          if (!Array.isArray(p._imgTextWarnings)) p._imgTextWarnings = [];
+          p._imgTextWarnings.push({ type: 'cross-brand', sharedBy: group.map(q => q.sku) });
           changes.push({ sku: p.sku, type: 'cross-brand-image', detail: `marca ${p.marca} comparte img con otra marca sin mismo modelo` });
         }
       }

@@ -479,6 +479,18 @@ const TextSanitizer = {
         marca = audited.marca;
       }
 
+      // 1b. Color-field sanitization (SLICE 3): the color field must hold ONLY
+      // color words (spec "Color holds a color"). Connection/category words are
+      // collected and moved to variante when the item had none, else dropped.
+      let saniColor = null;
+      if (item.color && typeof this.sanitizeColorField === 'function') {
+        const sani = this.sanitizeColorField(item.color);
+        saniColor = sani.color;
+        if (sani.moved.length && !(item.variante || '').trim()) {
+          variante = sani.moved.join(' ');
+        }
+      }
+
       // 2. Re-detect brand if OTRO
       if ((!marca || marca === 'OTRO')) {
         const upper = (modelo + ' ' + variante).toUpperCase();
@@ -516,10 +528,12 @@ const TextSanitizer = {
         marca = marca.charAt(0).toUpperCase() + marca.slice(1).toLowerCase();
       }
 
-      if (modelo !== orig.modelo || variante !== orig.variante || marca !== orig.marca) {
+      const colorChanged =
+        saniColor !== null && saniColor !== String(item.color || '');
+      if (modelo !== orig.modelo || variante !== orig.variante || marca !== orig.marca || colorChanged) {
         item.modelo = modelo;
         item.variante = variante;
-        item.color = variante;
+        item.color = saniColor !== null ? saniColor : variante;
         item.marca = marca || 'OTRO';
         item.cat = newCat || 'OTRO';
         fixed++;
@@ -549,7 +563,11 @@ const TextSanitizer = {
 
     // YELLOW: switch/axis name glued to the model code (identifiable but dirty).
     // e.g. "S98 Glacier Axis Universe", "R98 Kaihua Speed Axis", "Plum axis Pro".
-    if (/\baxis\b/i.test(m) || /\bswitch\b/i.test(m)) {
+    // SLICE 3 (design §IT17, rule 3): hall\s*effect extends the rule - but a
+    // BARE "Hall Effect" (the whole model is the phrase) is a class the ground
+    // truth keeps GREEN, so it is excluded (FP guard, task 3.6 - 0 new FPs).
+    const isBareHallEffect = /^hall\s*effect$/i.test(m.trim());
+    if (/\baxis\b/i.test(m) || /\bswitch\b/i.test(m) || (/\bhall\s*effect\b/i.test(m) && !isBareHallEffect)) {
       reasons.push('El modelo incluye el tipo de switch/axis (debería ir aparte)');
     }
     // YELLOW: truncated model with an unclosed bracket.
@@ -595,9 +613,99 @@ const TextSanitizer = {
       reasons.push('El modelo tiene palabras de marketing sin un identificador real de producto — requiere revisión');
     }
 
+    // ---- SLICE 3 (design §IT17 resolution, rules 1-2): close the measured
+    // false negatives without breaking the FP ceiling (task 3.6 - 2/25 = 8%,
+    // zero new FPs allowed on the 65-case ground truth). ----
+    // Rule 1 - connection + category co-occurrence WITH a real product code.
+    // Vocabulary NARROWED to the measured FN class (category = mouse): a bare
+    // CONNECTION_AUDIT_RE+CATEGORY_AUDIT_RE rule would flag clean "Cobra Wired
+    // Mouse", "Mars68 SE wired keyboard", "Ultimate 2C Wired Controller",
+    // "Opus Quartz Wireless Headset" (2/25 -> 6/25 = 24% FP). M720/G502 carry a
+    // real code (mHasCode) - the class IT17 called structurally indistinguishable
+    // is separated by the color-spec's own variante policy (connection words
+    // belong in variante, not in the model).
+    const CONN_AUDIT_WORD_RE = /\b(wired|wireless|bluetooth|2\.4g|tri[\s-]?mode|usb[\s-]?c|rgb)\b/i;
+    if (mHasCode && CONN_AUDIT_WORD_RE.test(m) && /\bmouse\b/i.test(m)) {
+      reasons.push('tipo de conexión y categoría dentro del modelo');
+    }
+    // Rule 2 - category/spec fragment without a real product code. Category
+    // vocabulary restricted to the measured words {keycaps, backpack} ("keys"
+    // is covered by the anchored bare-count below; a bare "keys" word would
+    // flag clean "Flagship PRO 68 Keys"). Spec fragments: size pattern, the
+    // material word "powder", and a bare "N Keys" count at the model start.
+    if (!mHasCode) {
+      const SPEC_FRAGMENT_RE = /\d+(\.\d+)?\s*("|inch|pulg)/i;
+      const BARE_COUNT_START_RE = /^\d+\s*Keys\b/i;
+      const CATEGORY_FRAGMENT_RE = /\b(keycaps|backpack)\b/i;
+      if (CATEGORY_FRAGMENT_RE.test(m) || SPEC_FRAGMENT_RE.test(m) || /\bpowder\b/i.test(m) || BARE_COUNT_START_RE.test(m)) {
+        reasons.push('categoría/fragmento de especificación sin código real');
+      }
+    }
+
     return { level: reasons.length ? 'YELLOW' : 'GREEN', reasons };
   }
 };
 
 if (typeof window !== 'undefined') window.TextSanitizer = TextSanitizer;
 if (typeof module !== 'undefined') module.exports = TextSanitizer;
+
+// ---- Color-field sanitization vocabulary (SLICE 3, design §Decision 10) ----
+// Keep vocabulary derived from CatalogValidator.COLOR_AUDIT_RE plus the
+// switch-adjacent colors the spec adds (transparent, smoke, mint, navy,
+// beige). Kept in sync with ImageTextGates.COLOR_KEEP_WORDS (slice 1).
+const COLOR_KEEP_WORDS = [
+  'black', 'white', 'pink', 'blue', 'red', 'green', 'purple',
+  'grey', 'gray', 'silver', 'gold', 'orange', 'brown', 'cyan',
+  'magenta', 'yellow', 'coffee', 'periwinkle', 'lavender', 'cream',
+  'obsidian', 'sakura', 'phantom', 'gunmetal', 'blackberry', 'neon',
+  'arctic', 'translucent', 'matte', 'glossy', 'negro', 'blanco',
+  'rosa', 'azul', 'rojo', 'verde', 'violeta', 'gris', 'plateado',
+  'dorado', 'naranja', 'marron', 'amarillo', 'transparent', 'smoke',
+  'mint', 'navy', 'beige',
+];
+TextSanitizer.COLOR_KEEP_WORDS = COLOR_KEEP_WORDS;
+TextSanitizer.COLOR_KEEP_RE = new RegExp('\\b(' + COLOR_KEEP_WORDS.join('|') + ')\\b', 'gi');
+
+// Removal vocabulary = CatalogValidator.CONNECTION_AUDIT_RE + CATEGORY_AUDIT_RE
+// + switch/magnetic/hall effect (design §Decision 10). The regex is assembled
+// lazily inside sanitizeColorField to keep this module dependency-free.
+TextSanitizer.COLOR_REMOVAL_WORDS = [
+  // CONNECTION_AUDIT_RE
+  'wired', 'wireless', 'bluetooth', '2.4g(hz)?', 'tri[\\s-]?mode', 'usb[\\s-]?c', 'rgb',
+  // CATEGORY_AUDIT_RE
+  'mouse', 'raton', 'keyboard', 'teclado', 'headset', 'auricular', 'earphone',
+  'earbuds', 'controller', 'gamepad', 'joystick', 'mousepad', 'switch', 'webcam',
+  'camera', 'camara', 'numpad', 'chair', 'silla', 'monitor', 'speaker',
+  'parlante', 'microphone', 'microfono',
+  // spec switch-adjacent
+  'magnetic', 'hall\\s*effect',
+];
+
+/**
+ * Pure color-field sanitizer (spec "Color holds a color"). Keeps ONLY
+ * COLOR_KEEP vocabulary words in `color`; connection/category words are
+ * collected into `moved` in text order. Tokens that are neither a color word
+ * nor a removal word are dropped (noise). Deduplicates both outputs.
+ * @returns {{color: string, moved: string[]}}
+ */
+TextSanitizer.sanitizeColorField = function sanitizeColorField(colorText) {
+  const text = (colorText || '').toString().trim();
+  if (!text) return { color: '', moved: [] };
+  const removalRe = new RegExp('\\b(?:' + TextSanitizer.COLOR_REMOVAL_WORDS.join('|') + ')\\b', 'gi');
+  const moved = [];
+  const remaining = text.replace(removalRe, (tok) => {
+    moved.push(tok.trim());
+    return ' ';
+  });
+  const kept = remaining.match(TextSanitizer.COLOR_KEEP_RE) || [];
+  const seen = new Set();
+  const color = kept
+    .filter((w) => {
+      const k = w.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .join(' ');
+  return { color, moved };
+};
