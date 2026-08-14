@@ -333,6 +333,7 @@ const Tests = {
 			this.testPromotionEvidenceContract();
 			this.testReasonLabelResolution();
 			this.testLegacyOnlyCleanStrategy();
+			this.testCategoryCorrectionStrategy();
 		}
 		// 3. isSpecOnlyModel discrimina specs de modelos legítimos sin dígitos.
 		this.assert(
@@ -7311,7 +7312,10 @@ const Tests = {
 		// evidence, no unclosed bracket) promotes to GREEN with honest evidence.
 		const R = typeof window !== "undefined" ? window.Remediation || null : null;
 		if (!R || typeof R.legacyOnlyClean !== "function") {
-			this.assert(false, "RED 2.x: Remediation.legacyOnlyClean no implementado");
+			this.assert(
+				false,
+				"RED 2.x: Remediation.legacyOnlyClean no implementado",
+			);
 			return;
 		}
 		const stale = {
@@ -7350,6 +7354,45 @@ const Tests = {
 		this.assert(
 			R.legacyOnlyClean(withEvidence, {}, { siblings: [] }) === null,
 			"legacy-only-clean: evidencia estructurada real NO aplica",
+		);
+	},
+	testCategoryCorrectionStrategy() {
+		// Red-e: vision-confirmed category correction re-assigns only when the
+		// corrected category is consistent with the image aspect (fail closed).
+		const R = typeof window !== "undefined" ? window.Remediation || null : null;
+		if (!R || typeof R.categoryCorrection !== "function") {
+			this.assert(false, "RED: Remediation.categoryCorrection no implementado");
+			return;
+		}
+		// MOUSE-labeled item with wide keyboard image + vision correction to TECLADO.
+		const wide = {
+			sku: "C-01",
+			status: "YELLOW",
+			cat: "MOUSE",
+			_imgAspect: 2.3,
+			_categoryCorrection: "TECLADO",
+		};
+		const res = R.categoryCorrection({ ...wide }, {}, { siblings: [] });
+		this.assert(!!res, "category-correction: aplica con corrección consistente");
+		this.assert(
+			res && res.item.cat === "TECLADO" && res.evidence.remediated === "category-correction",
+			"category-correction: re-asigna a TECLADO con evidencia",
+		);
+		// Inconsistent correction (corrected cat violates the aspect) must fail closed.
+		const inconsistent = { ...wide, _categoryCorrection: "MOUSE" };
+		// MOUSE is compact; aspect 2.3 wide violates compact -> should NOT re-assign to MOUSE.
+		const bad = R.categoryCorrection({ ...wide, cat: "TECLADO", _categoryCorrection: "MOUSE" }, {}, { siblings: [] });
+		this.assert(
+			!bad || bad.evidence.remediated !== "category-correction",
+			"category-correction: corrección inconsistente con aspect NO aplica",
+		);
+		// No correction provided -> falls back (null or shared), never fabricates.
+		const nocorr = { ...wide };
+		delete nocorr._categoryCorrection;
+		const fb = R.categoryCorrection(nocorr, {}, { siblings: [] });
+		this.assert(
+			!fb || fb.evidence.remediated !== "category-correction",
+			"category-correction: sin corrección no fabrica categoría",
 		);
 	},
 };

@@ -46,6 +46,7 @@ function parseArgs(argv) {
 		if (a === "--export") out.export = argv[++i];
 		else if (a === "--catalogs") out.catalogs = argv[++i];
 		else if (a === "--config") out.config = argv[++i];
+		else if (a === "--category-corrections") out.corrections = argv[++i];
 		else if (a === "--json") out.json = true;
 		else if (a === "--help" || a === "-h") out.help = true;
 	}
@@ -199,12 +200,28 @@ Meta: GREEN >= 99% del corpus elegible (post-filtro import). Idempotente.`);
 		const loaded = loadExport(args.export);
 		products = loaded.products;
 		meta = loaded.meta || {};
-	} else {
-		console.error("Se requiere --export o --catalogs");
-		process.exit(2);
-	}
+    	} else {
+    		console.error("Se requiere --export o --catalogs");
+    		process.exit(2);
+    	}
 
-	const outDir = repoRoot;
+    	// Optional vision-confirmed category corrections side channel (off by default).
+    	// Data lives in a JSON file, never hardcoded; applied only when consistent with
+    	// the item's image aspect (see Remediation.categoryCorrection).
+    	if (args.corrections) {
+    		try {
+    			const cj = JSON.parse(fs.readFileSync(args.corrections, "utf8"));
+    			const map = (cj && cj.corrections) || {};
+    			for (const p of products) {
+    				if (p && map[p.sku]) p._categoryCorrection = map[p.sku];
+    			}
+    		} catch (e) {
+    			console.error(`ERROR: corrections ${args.corrections} no legible (${e.message})`);
+    			process.exit(2);
+    		}
+    	}
+
+    	const outDir = repoRoot;
 
 	// Fixed-point loop
 	let iter = 0;
