@@ -332,6 +332,7 @@ const Tests = {
 			this.testSharedImageReassignStrategy();
 			this.testPromotionEvidenceContract();
 			this.testReasonLabelResolution();
+			this.testLegacyOnlyCleanStrategy();
 		}
 		// 3. isSpecOnlyModel discrimina specs de modelos legítimos sin dígitos.
 		this.assert(
@@ -7302,6 +7303,53 @@ const Tests = {
 		this.assert(
 			/Sin observaciones|UNCLASSIFIED/.test(R.resolveReasonLabel(cleanItem)),
 			"report: ítem sin evidencia no inventa una razón",
+		);
+	},
+	testLegacyOnlyCleanStrategy() {
+		// Red-e: a YELLOW item whose only degradation is a STALE legacy truncation
+		// warning (extraction already fixed it; sourceStatus GREEN, no structured
+		// evidence, no unclosed bracket) promotes to GREEN with honest evidence.
+		const R = typeof window !== "undefined" ? window.Remediation || null : null;
+		if (!R || typeof R.legacyOnlyClean !== "function") {
+			this.assert(false, "RED 2.x: Remediation.legacyOnlyClean no implementado");
+			return;
+		}
+		const stale = {
+			sku: "L-01",
+			status: "YELLOW",
+			sourceStatus: "GREEN",
+			modelo: "AK680 Island",
+			variante: "",
+			cat: "TECLADO",
+			warnings: ["Modelo truncado (paréntesis/llave sin cerrar)"],
+			_imgTextWarnings: [],
+			_modelQuality: { marketing: { class: "code", marketingWords: 0 } },
+			grounded: true,
+		};
+		const res = R.legacyOnlyClean({ ...stale }, {}, { siblings: [] });
+		this.assert(!!res, "legacy-only-clean: item con warning stale aplica");
+		this.assert(
+			res && res.evidence.remediated === "legacy-only-clean",
+			"legacy-only-clean: evidencia remediated=legacy-only-clean",
+		);
+		this.assert(
+			res && !res.item.warnings.some((w) => /truncad/i.test(w)),
+			"legacy-only-clean: warning stale removido del clon",
+		);
+		// A genuinely truncated model must NOT apply.
+		const truncated = { ...stale, modelo: "AK680 (Island" };
+		this.assert(
+			R.legacyOnlyClean(truncated, {}, { siblings: [] }) === null,
+			"legacy-only-clean: modelo realmente truncado NO aplica",
+		);
+		// An item with real structured evidence must NOT apply.
+		const withEvidence = {
+			...stale,
+			_imgTextWarnings: [{ type: "color-mismatch" }],
+		};
+		this.assert(
+			R.legacyOnlyClean(withEvidence, {}, { siblings: [] }) === null,
+			"legacy-only-clean: evidencia estructurada real NO aplica",
 		);
 	},
 };

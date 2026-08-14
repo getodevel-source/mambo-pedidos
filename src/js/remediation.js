@@ -126,6 +126,7 @@ const REASON_TO_STRATEGY = {
 	SPEC_FRAGMENT: "codeAdoption",
 	ASPECT_MISMATCH: "sharedImageReassign",
 	SHARED_IMAGE: "sharedImageReassign",
+	LEGACY_ONLY_CLEAN: "legacyOnlyClean",
 };
 
 // Atomic reason → legible Spanish label for the human-review report. Keeps
@@ -901,6 +902,53 @@ const Remediation = {
 	},
 
 	/**
+	 * 10. legacy-only-clean (LEGACY_ONLY_CLEAN): the item is flagged YELLOW only
+	 * by a STALE legacy warning (e.g. "Modelo truncado") that the extraction
+	 * already fixed — sourceStatus GREEN, no structured image/marketing/outlier
+	 * evidence, and the model has NO actually-unclosed bracket. Clearing the
+	 * stale warning and re-verifying yields GREEN. Structural and generalizable:
+	 * it never trusts the warning, it re-checks the model for a real unclosed
+	 * bracket and requires clean structured evidence.
+	 */
+	legacyOnlyClean(item, rowEvidence, ctx) {
+		if (!item || this.alreadyRemediated(item, "legacyOnlyClean")) return null;
+		if (String(item.sourceStatus || "") !== "GREEN") return null;
+		if (item._outlierEvidence) return null;
+		if (item.grounded === false) return null;
+		const itw = Array.isArray(item._imgTextWarnings)
+			? item._imgTextWarnings
+			: [];
+		if (itw.length) return null; // real structured evidence present → not legacy-only
+		const mq = item._modelQuality;
+		if (
+			mq &&
+			mq.marketing &&
+			(mq.marketing.class === "puffery" ||
+				mq.marketing.class === "marketing-only")
+		)
+			return null; // real marketing issue → not clean
+		const model = String(item.modelo || "");
+		// Structural check: the model must NOT have a real unclosed bracket.
+		if (/[({[]/.test(model) && !/[)}\]]/.test(model)) return null; // genuinely truncated
+		const warnings = Array.isArray(item.warnings) ? item.warnings : [];
+		const stale = warnings.filter((w) => /truncad/i.test(String(w)));
+		if (!stale.length) return null; // nothing stale to clear
+		const clone = {
+			...item,
+			warnings: warnings.filter((w) => !/truncad/i.test(String(w))),
+		};
+		return {
+			item: clone,
+			evidence: {
+				remediated: "legacy-only-clean",
+				sourceStatus: "GREEN",
+				staleWarning: stale[0],
+				model,
+			},
+		};
+	},
+
+	/**
 	 * Per-strategy already-remediated detection (no global flag): evidence key
 	 * present, variante already carries the moved color/token, code already
 	 * adopted, literal grounding already groundingMode:'literal'.
@@ -951,6 +999,8 @@ const Remediation = {
 				return !!(ev && ev.remediated === "code-adoption");
 			case "sharedImageReassign":
 				return !!(ev && ev.remediated === "shared-image-reassign");
+			case "legacyOnlyClean":
+				return !!(ev && ev.remediated === "legacy-only-clean");
 			default:
 				return false;
 		}
@@ -1054,6 +1104,18 @@ const Remediation = {
 						String(ev.reassignedToCategory).toUpperCase() &&
 					!!ev.siblingSku &&
 					typeof ev.imageHash === "string"
+				);
+			case "legacy-only-clean":
+				return (
+					ev.sourceStatus === "GREEN" &&
+					String(item.sourceStatus || "") === "GREEN" &&
+					ev.model === String(item.modelo || "") &&
+					typeof ev.staleWarning === "string" &&
+					// the model must not have a real unclosed bracket (trace to artifact)
+					!(
+						/[({[]/.test(String(item.modelo || "")) &&
+						!/[)}\]]/.test(String(item.modelo || ""))
+					)
 				);
 			default:
 				return false; // unknown strategy → fail closed
@@ -1371,6 +1433,8 @@ Remediation.strategies = {
 		Remediation.codeAdoption(item, rowEvidence, ctx),
 	sharedImageReassign: (item, rowEvidence, ctx) =>
 		Remediation.sharedImageReassign(item, rowEvidence, ctx),
+	legacyOnlyClean: (item, rowEvidence, ctx) =>
+		Remediation.legacyOnlyClean(item, rowEvidence, ctx),
 };
 
 if (typeof window !== "undefined") window.Remediation = Remediation;
