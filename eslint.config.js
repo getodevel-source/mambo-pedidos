@@ -132,6 +132,10 @@ module.exports = [
 			"no-prototype-builtins": "off",
 			"no-useless-escape": "warn",
 			"no-useless-assignment": "warn",
+			// Complexity budget (maintainability): caps NEW cyclomatic complexity so the
+			// extraction motor's debt (extractPageProductsByTableRows ~178) does not grow.
+			// Warn-only; the deep refactor is tracked as a dedicated SDD.
+			complexity: ["warn", { max: 40 }],
 			"preserve-caught-error": "off",
 		},
 	},
