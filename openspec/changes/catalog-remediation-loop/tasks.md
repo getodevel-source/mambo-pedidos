@@ -115,7 +115,7 @@ Run in order; each is a hard criterion. Full-corpus steps are env-gated (8–10 
 
 - [x] A.1 **Full-corpus loop to fixed point**: `node scripts/remediate-catalog.js` on FINAL5 baseline converges (two identical per-status AND per-reason passes) and reports final GREEN/YELLOW/RED counts. Verify: fixed-point fields `fixedPoint:true` in `remediation-ledger.json`; convergence observed in run log.
 
-> **Estado real (2026-08-14):** GREEN 93.9% elegible (2122/2261) con correcciones de categoria por vision; target 99% aun NO alcanzado.
+> **Estado real (2026-08-14):** GREEN 94.8% elegible (2144/2261) con correcciones de categoria por vision (106 SKUs); target 99% aun NO alcanzado. Restantes 117: SHARED_IMAGE 33, ASPECT-retrato/ambiguo 22, COLOR 32, MODEL_MARKETING 13, otros — requieren vision por item o calibracion de gates.
 > Promote 503 items con evidencia (auditado 0 FP): legacy-only-clean (+7) y category-correction por vision (+69). Defecto raiz: asignacion de categoria en extraccion (FASE 2). Gap restante dominado por ASPECT_MISMATCH
 > (113 items, requerimento de validación visual de imágenes) + SHARED_IMAGE (33) + COLOR (35).
 > Los gates de generalización (hold-out, synthetic-stress, anti-overfit, promotion-audit) pasan.

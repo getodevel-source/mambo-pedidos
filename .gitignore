@@ -79,3 +79,6 @@ scripts/_t1.js
 session-export-*.md
 remediation-ledger.json
 human-review-report.json
+# Vision scratch (contact sheets)
+_vis/
+_vis2/
