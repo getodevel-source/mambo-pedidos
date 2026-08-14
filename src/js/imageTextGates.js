@@ -517,7 +517,19 @@ const ImageTextGates = {
       if (aspectNum !== null && Number.isFinite(aspectNum)) {
         const aspect = Math.round(aspectNum * 100) / 100;
         const vio = this.categoryAspectViolation(p.cat, aspect);
-        if (vio.violation) {
+        // Aspect-product-calibration (Slice 3 loop-orchestration): a real
+        // catalog photo of a product with real identity + confirmed row has a
+        // NATURAL aspect (mouses/controllers are elongated, 60% keyboards are
+        // vertical). The calibration evidence from remediation.js is respected
+        // here so the re-verify does not re-degrade the same product.
+        const calibrated =
+          p._aspectCalibrated &&
+          p._aspectCalibrated.aspect === aspect &&
+          String(p._aspectCalibrated.cat || "") ===
+            String(p.cat || "").toUpperCase();
+        if (vio.violation && calibrated) {
+          // calibrated: no degradation — natural product shape
+        } else if (vio.violation) {
           const warn = `Imagen ${aspect > 1.9 ? "ancha" : "angosta"} (ratio ${aspect.toFixed(2)}) incompatible con ${(p.cat || "").toUpperCase()}`;
           p._imgTextWarnings.push({
             type: "category-aspect",

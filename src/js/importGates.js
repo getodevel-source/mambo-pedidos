@@ -111,7 +111,10 @@ const ImportGates = {
     // 1. Clasificación de marketing calibrada (evidencia estructurada).
     const mq = item._modelQuality;
     if (mq && mq.marketing) {
-      if (mq.marketing.class === "switch-axis") return "SWITCH_IN_MODEL";
+      // Anti-FN (catalog-remediation-loop): for cat=SWITCH the word "Switch"
+      // in the model IS the product name, not a spec token.
+      const switchCat = /^(switch|interruptor)$/i.test(String(item.cat || "").trim());
+      if (mq.marketing.class === "switch-axis" && !switchCat) return "SWITCH_IN_MODEL";
       if (
         mq.marketing.class === "puffery" ||
         mq.marketing.class === "marketing-only"
@@ -153,6 +156,10 @@ const ImportGates = {
     const warnings = Array.isArray(item.warnings) ? item.warnings : [];
     for (const w of warnings) {
       const code = ImportGates._warningToReasonCode(String(w));
+      if (code === "SWITCH_IN_MODEL") {
+        const switchCat = /^(switch|interruptor)$/i.test(String(item.cat || "").trim());
+        if (switchCat) continue; // product name, not a spec token
+      }
       if (code === "MODEL_TRUNCATED") {
         // The legacy warning may persist after a parse fix: only treat
         // the model as truncated if a bracket is REALLY unclosed now.
@@ -164,6 +171,14 @@ const ImportGates = {
     }
 
     // COLOR_AMBIGUOUS is WATCH-level (no status change by itself): last
+    // Legacy-only staleness: every warning mapped to a reason was a
+    // parse-time artifact that the extraction already fixed (e.g.
+    // "Modelo truncado" when the model has no unclosed bracket). The
+    // product itself is clean (sourceStatus GREEN, no structured
+    // evidence) — treat it as GREEN, never UNCLASSIFIED.
+    if (String(item.sourceStatus || "") === "GREEN" && !item._outlierEvidence && item.grounded !== false) {
+      return "LEGACY_ONLY_CLEAN";
+    }
     // priority so a real degradation reason (model, FOB, outlier) wins.
     const itw2 = Array.isArray(item._imgTextWarnings) ? item._imgTextWarnings : [];
     for (const w of itw2) {

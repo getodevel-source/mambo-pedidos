@@ -27,6 +27,7 @@ const DEFAULT_REMEDIATION_CONFIG = {
     rowContextDisambiguation: true,
     codeAdoption: true,
     sharedImageReassign: true,
+    aspectProductCalibration: true,
     // config-gated calibration rules (Slice 1) — flipping off restores
     // pre-calibration gate behavior
     nounPhraseCalibration: true,

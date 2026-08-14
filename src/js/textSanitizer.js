@@ -789,10 +789,14 @@ const TextSanitizer = {
     // BARE "Hall Effect" (the whole model is the phrase) is a class the ground
     // truth keeps GREEN, so it is excluded (FP guard, task 3.6 - 0 new FPs).
     const isBareHallEffect = /^hall\s*effect$/i.test(m.trim());
+    const isSwitchCategory = /^(switch|interruptor)$/i.test(
+      String(cat || "").trim(),
+    );
     if (
-      /\baxis\b/i.test(m) ||
-      /\bswitch\b/i.test(m) ||
-      (/\bhall\s*effect\b/i.test(m) && !isBareHallEffect)
+      !isSwitchCategory &&
+      (/\baxis\b/i.test(m) ||
+        /\bswitch\b/i.test(m) ||
+        (/\bhall\s*effect\b/i.test(m) && !isBareHallEffect))
     ) {
       reasons.push(
         "El modelo incluye el tipo de switch/axis (debería ir aparte)",
@@ -932,8 +936,9 @@ const TextSanitizer = {
     const m = String(modelo || "").trim();
     const out = { class: "plain", marketingWords: 0 };
     if (!m) return out;
+    const switchCategoryOnly = /^(switch|interruptor)$/i.test(String(categoria || "").trim());
     // 1. Token de switch/axis (prioridad 2 del diseño, antes de puffery).
-    const switchToken = this.extractSwitchToken(m);
+    const switchToken = switchCategoryOnly ? null : this.extractSwitchToken(m);
     const noun = this.findProductNoun(m);
     if (switchToken && !noun) {
       out.class = "switch-axis";
