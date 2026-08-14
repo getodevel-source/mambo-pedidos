@@ -128,6 +128,57 @@ const REASON_TO_STRATEGY = {
 	SHARED_IMAGE: "sharedImageReassign",
 };
 
+// Atomic reason → legible Spanish label for the human-review report. Keeps
+// reporting honest: an item flagged YELLOW with structured evidence but no
+// legacy warning string must show its real degradation reason, never the
+// "Sin observaciones" fallback. LEGACY_ONLY_CLEAN and COLOR_AMBIGUOUS are
+// covered so a degenerate item never loses its true reason.
+const REASON_TEXT = {
+	COLOR_MISMATCH: "Color de imagen no coincide con el color declarado",
+	COLOR_AMBIGUOUS: "Color de imagen ambiguo (multi-color)",
+	ASPECT_MISMATCH: "Ratio de imagen incompatible con la categoría",
+	SHARED_IMAGE: "Imagen compartida entre categorías (asignación inválida)",
+	OUTLIER_PRICE: "Precio atípico (outlier IQR×3)",
+	FOB_NO_LITERAL_EVIDENCE:
+		"FOB sin evidencia literal suficiente (ancla geométrica)",
+	FOB_NEIGHBOR_ANCHOR:
+		"FOB anclado a fila vecina/fusionada (sin evidencia literal propia)",
+	FOB_UNALIGNED: "FOB con ancla desalineada respecto a la fila",
+	MODEL_GENERIC_WORD:
+		"Modelo es una palabra genérica (no un código de producto)",
+	MODEL_MARKETING:
+		"Modelo tiene palabras de marketing sin un identificador real",
+	MODEL_TRUNCATED: "Modelo truncado (paréntesis/llave sin cerrar)",
+	MODEL_TEMPLATE: "Modelo con plantilla/placeholders sin identidad real",
+	MODEL_TYPE_GLUED: "Modelo con keyword de tipo/switch pegada (specs)",
+	SWITCH_IN_MODEL:
+		"El modelo incluye el tipo de switch/axis (debería ir aparte)",
+	SPEC_FRAGMENT: "Modelo = fragmento de especificación técnica",
+	CATEGORY_DOUBTFUL: "Categoría dudosa en la imagen",
+	IMAGE_MISSING: "Sin imagen de producto",
+	UNCLASSIFIED_YELLOW: "Degradación sin razón atómica (defecto de pipeline)",
+	LEGACY_ONLY_CLEAN: "Sin observaciones (solo warnings legacy ya resueltos)",
+};
+
+/**
+ * Legible Spanish label for a non-GREEN item. Prefers the real structured
+ * reason (`_atomicReason`) mapped to its human label; falls back to the first
+ * legacy warning, then to a generic UNCLASSIFIED label. An item that is
+ * genuinely unobserved stays YELLOW only with a real reason — "Sin
+ * observaciones" is never emitted for a flagged item when atomic evidence
+ * exists.
+ * @param {Object} item
+ * @returns {string}
+ */
+function resolveReasonLabel(item) {
+	const atomic = item && item._atomicReason;
+	if (atomic && REASON_TEXT[atomic]) return REASON_TEXT[atomic];
+	const warnings = Array.isArray(item && item.warnings) ? item.warnings : [];
+	if (warnings.length && typeof warnings[0] === "string") return warnings[0];
+	if (atomic) return atomic;
+	return "Sin observaciones";
+}
+
 /** Parses a literal price token ("$89.00", "23,90") into a number, or null. */
 function parsePriceToken(str) {
 	const s = String(str || "").trim();
@@ -164,6 +215,8 @@ function escapeRe(s) {
 const Remediation = {
 	MODEL_CODE_RE,
 	REASON_TO_STRATEGY,
+	REASON_TEXT,
+	resolveReasonLabel,
 
 	/** Interior sample read from the item (parser or imageEvidence). */
 	interiorOf(item) {
