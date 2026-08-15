@@ -7373,15 +7373,24 @@ const Tests = {
 			_categoryCorrection: "TECLADO",
 		};
 		const res = R.categoryCorrection({ ...wide }, {}, { siblings: [] });
-		this.assert(!!res, "category-correction: aplica con corrección consistente");
 		this.assert(
-			res && res.item.cat === "TECLADO" && res.evidence.remediated === "category-correction",
+			!!res,
+			"category-correction: aplica con corrección consistente",
+		);
+		this.assert(
+			res &&
+				res.item.cat === "TECLADO" &&
+				res.evidence.remediated === "category-correction",
 			"category-correction: re-asigna a TECLADO con evidencia",
 		);
 		// Inconsistent correction (corrected cat violates the aspect) must fail closed.
 		const inconsistent = { ...wide, _categoryCorrection: "MOUSE" };
 		// MOUSE is compact; aspect 2.3 wide violates compact -> should NOT re-assign to MOUSE.
-		const bad = R.categoryCorrection({ ...wide, cat: "TECLADO", _categoryCorrection: "MOUSE" }, {}, { siblings: [] });
+		const bad = R.categoryCorrection(
+			{ ...wide, cat: "TECLADO", _categoryCorrection: "MOUSE" },
+			{},
+			{ siblings: [] },
+		);
 		this.assert(
 			!bad || bad.evidence.remediated !== "category-correction",
 			"category-correction: corrección inconsistente con aspect NO aplica",

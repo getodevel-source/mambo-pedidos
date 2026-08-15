@@ -937,58 +937,64 @@ const Remediation = {
 			...item,
 			warnings: warnings.filter((w) => !/truncad/i.test(String(w))),
 		};
-    		return {
-    			item: clone,
-    			evidence: {
-    				remediated: "legacy-only-clean",
-    				sourceStatus: "GREEN",
-    				staleWarning: stale[0],
-    				model,
-    			},
-    		};
-    	},
+		return {
+			item: clone,
+			evidence: {
+				remediated: "legacy-only-clean",
+				sourceStatus: "GREEN",
+				staleWarning: stale[0],
+				model,
+			},
+		};
+	},
 
-    	/**
-    	 * 11. category-correction (ASPECT_MISMATCH): vision-confirmed category fix
-    	 * supplied via the --category-corrections side channel (off by default). The
-    	 * image is the source of truth: when a human/multimodal review confirmed the
-    	 * real category differs from the SKU-assigned one, re-assign it — but ONLY if
-    	 * the corrected category is consistent with the item's image aspect (fail
-    	 * closed otherwise). Falls back to sharedImageReassign when no correction is
-    	 * provided, preserving prior behavior.
-    	 */
-    	categoryCorrection(item, rowEvidence, ctx) {
-    		if (!item || this.alreadyRemediated(item, "categoryCorrection"))
-    			return this._sharedFallback(item, rowEvidence, ctx);
-    		const corrected = item._categoryCorrection;
-    		if (!corrected || String(corrected).toUpperCase() === String(item.cat || "").toUpperCase())
-    			return this._sharedFallback(item, rowEvidence, ctx);
-    		const aspect =
-    			typeof item._imgAspect === "number"
-    				? item._imgAspect
-    				: typeof item.imgAspect === "number"
-    					? item.imgAspect
-    					: null;
-    		if (aspect === null || !Number.isFinite(aspect))
-    			return this._sharedFallback(item, rowEvidence, ctx);
-    		// Consistency guard: the corrected category must fit the image aspect.
-    		if (this.categoryAspectViolation(String(corrected).toUpperCase(), aspect).violation)
-    			return this._sharedFallback(item, rowEvidence, ctx);
-    		return {
-    			item: { ...item, cat: String(corrected).toUpperCase() },
-    			evidence: {
-    				remediated: "category-correction",
-    				from: String(item.cat || "").toUpperCase(),
-    				to: String(corrected).toUpperCase(),
-    				aspect,
-    			},
-    		};
-    	},
+	/**
+	 * 11. category-correction (ASPECT_MISMATCH): vision-confirmed category fix
+	 * supplied via the --category-corrections side channel (off by default). The
+	 * image is the source of truth: when a human/multimodal review confirmed the
+	 * real category differs from the SKU-assigned one, re-assign it — but ONLY if
+	 * the corrected category is consistent with the item's image aspect (fail
+	 * closed otherwise). Falls back to sharedImageReassign when no correction is
+	 * provided, preserving prior behavior.
+	 */
+	categoryCorrection(item, rowEvidence, ctx) {
+		if (!item || this.alreadyRemediated(item, "categoryCorrection"))
+			return this._sharedFallback(item, rowEvidence, ctx);
+		const corrected = item._categoryCorrection;
+		if (
+			!corrected ||
+			String(corrected).toUpperCase() === String(item.cat || "").toUpperCase()
+		)
+			return this._sharedFallback(item, rowEvidence, ctx);
+		const aspect =
+			typeof item._imgAspect === "number"
+				? item._imgAspect
+				: typeof item.imgAspect === "number"
+					? item.imgAspect
+					: null;
+		if (aspect === null || !Number.isFinite(aspect))
+			return this._sharedFallback(item, rowEvidence, ctx);
+		// Consistency guard: the corrected category must fit the image aspect.
+		if (
+			this.categoryAspectViolation(String(corrected).toUpperCase(), aspect)
+				.violation
+		)
+			return this._sharedFallback(item, rowEvidence, ctx);
+		return {
+			item: { ...item, cat: String(corrected).toUpperCase() },
+			evidence: {
+				remediated: "category-correction",
+				from: String(item.cat || "").toUpperCase(),
+				to: String(corrected).toUpperCase(),
+				aspect,
+			},
+		};
+	},
 
-    	/** Internal: fall back to sharedImageReassign for categoryCorrection. */
-    	_sharedFallback(item, rowEvidence, ctx) {
-    		return this.sharedImageReassign(item, rowEvidence, ctx);
-    	},
+	/** Internal: fall back to sharedImageReassign for categoryCorrection. */
+	_sharedFallback(item, rowEvidence, ctx) {
+		return this.sharedImageReassign(item, rowEvidence, ctx);
+	},
 
 	/**
 	 * Per-strategy already-remediated detection (no global flag): evidence key
@@ -1156,23 +1162,24 @@ const Remediation = {
 					ev.model === String(item.modelo || "") &&
 					typeof ev.staleWarning === "string" &&
 					// the model must not have a real unclosed bracket (trace to artifact)
-    					!(
-    						/[({[]/.test(String(item.modelo || "")) &&
-    						!/[)}\]]/.test(String(item.modelo || ""))
-    					)
-    				);
-    		case "category-correction":
-    			return (
-    				!!ev.to &&
-    				String(item.cat || "").toUpperCase() === String(ev.to).toUpperCase() &&
-    				typeof ev.aspect === "number" &&
-    				!this.categoryAspectViolation(String(ev.to).toUpperCase(), ev.aspect)
-    					.violation
-    			);
-    		default:
-    			return false; // unknown strategy → fail closed
-    		}
-    	},
+					!(
+						/[({[]/.test(String(item.modelo || "")) &&
+						!/[)}\]]/.test(String(item.modelo || ""))
+					)
+				);
+			case "category-correction":
+				return (
+					!!ev.to &&
+					String(item.cat || "").toUpperCase() ===
+						String(ev.to).toUpperCase() &&
+					typeof ev.aspect === "number" &&
+					!this.categoryAspectViolation(String(ev.to).toUpperCase(), ev.aspect)
+						.violation
+				);
+			default:
+				return false; // unknown strategy → fail closed
+		}
+	},
 
 	/**
 	 * Bounded-irremediable declaration: every non-GREEN item that cannot be fixed
