@@ -1,0 +1,12 @@
+{
+  "_meta": "Vision-confirmed aspect exemptions: products whose category is CORRECT but photographed as portrait renders, which the aspect gate would wrongly degrade. Confirmed by multimodal contact-sheet review (2026-08-14). Applied only via --aspect-exempt (off by default).",
+  "skus": [
+    "ROY-TEC-ABYSS-4758",
+    "MCH-TEC-K99-43AD",
+    "MCH-TEC-G87-3F63",
+    "MCH-TEC-MATCHA-B76B",
+    "MCH-TEC-G87-EF0F",
+    "MCH-TEC-FLAME-DC5E",
+    "MCH-TEC-FLAME-BBEE"
+  ]
+}

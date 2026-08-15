@@ -957,10 +957,22 @@ const Remediation = {
 	 * closed otherwise). Falls back to sharedImageReassign when no correction is
 	 * provided, preserving prior behavior.
 	 */
-	categoryCorrection(item, rowEvidence, ctx) {
-		if (!item || this.alreadyRemediated(item, "categoryCorrection"))
-			return this._sharedFallback(item, rowEvidence, ctx);
-		const corrected = item._categoryCorrection;
+    	categoryCorrection(item, rowEvidence, ctx) {
+    		if (!item || this.alreadyRemediated(item, "categoryCorrection"))
+    			return this._sharedFallback(item, rowEvidence, ctx);
+    		// Vision-confirmed portrait render of a CORRECT category: re-verify so the
+    		// aspect gate honors _aspectCalibrated and stops degrading it.
+    		if (item._aspectCalibrated) {
+    			return {
+    				item: { ...item },
+    				evidence: {
+    					remediated: "aspect-calibrated",
+    					aspect: item._aspectCalibrated.aspect,
+    					cat: item._aspectCalibrated.cat,
+    				},
+    			};
+    		}
+    		const corrected = item._categoryCorrection;
 		if (
 			!corrected ||
 			String(corrected).toUpperCase() === String(item.cat || "").toUpperCase()
@@ -1049,8 +1061,12 @@ const Remediation = {
 				return !!(ev && ev.remediated === "shared-image-reassign");
 			case "legacyOnlyClean":
 				return !!(ev && ev.remediated === "legacy-only-clean");
-			case "categoryCorrection":
-				return !!(ev && ev.remediated === "category-correction");
+    		case "categoryCorrection":
+    			return !!(
+    				ev &&
+    				(ev.remediated === "category-correction" ||
+    					ev.remediated === "aspect-calibrated")
+    			);
 			default:
 				return false;
 		}
@@ -1173,13 +1189,20 @@ const Remediation = {
 					String(item.cat || "").toUpperCase() ===
 						String(ev.to).toUpperCase() &&
 					typeof ev.aspect === "number" &&
-					!this.categoryAspectViolation(String(ev.to).toUpperCase(), ev.aspect)
-						.violation
-				);
-			default:
-				return false; // unknown strategy → fail closed
-		}
-	},
+    				!this.categoryAspectViolation(String(ev.to).toUpperCase(), ev.aspect)
+    					.violation
+    			);
+    		case "aspect-calibrated":
+    			return (
+    				!!item._aspectCalibrated &&
+    				ev.aspect === item._aspectCalibrated.aspect &&
+    				String(ev.cat || "").toUpperCase() ===
+    					String(item.cat || "").toUpperCase()
+    			);
+    		default:
+    			return false; // unknown strategy → fail closed
+    		}
+    	},
 
 	/**
 	 * Bounded-irremediable declaration: every non-GREEN item that cannot be fixed
