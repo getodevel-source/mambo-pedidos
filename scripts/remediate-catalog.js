@@ -216,38 +216,38 @@ Meta: GREEN >= 99% del corpus elegible (post-filtro import). Idempotente.`);
 			for (const p of products) {
 				if (p && map[p.sku]) p._categoryCorrection = map[p.sku];
 			}
-    		} catch (e) {
-    			console.error(
-    				`ERROR: corrections ${args.corrections} no legible (${e.message})`,
-    			);
-    			process.exit(2);
-    		}
-    	}
+		} catch (e) {
+			console.error(
+				`ERROR: corrections ${args.corrections} no legible (${e.message})`,
+			);
+			process.exit(2);
+		}
+	}
 
-    	// Optional vision-confirmed aspect exemption side channel (off by default).
-    	// For portrait renders of products whose category is CORRECT (e.g. keyboards
-    	// photographed vertically) that the aspect gate would wrongly degrade. Data is
-    	// vision-confirmed per SKU; the gate's existing _aspectCalibrated path honors it.
-    	if (args.aspectExempt) {
-    		try {
-    			const aj = JSON.parse(fs.readFileSync(args.aspectExempt, "utf8"));
-    			const set = new Set((aj && aj.skus) || []);
-    			for (const p of products) {
-    				if (p && set.has(p.sku) && typeof p._imgAspect === "number") {
-    					p._aspectCalibrated = {
-    						// match the gate's own rounding so the calibrated check hits
-    						aspect: Math.round(p._imgAspect * 100) / 100,
-    						cat: String(p.cat || "").toUpperCase(),
-    					};
-    				}
-    			}
-    		} catch (e) {
-    			console.error(
-    				`ERROR: aspect-exempt ${args.aspectExempt} no legible (${e.message})`,
-    			);
-    			process.exit(2);
-    		}
-    	}
+	// Optional vision-confirmed aspect exemption side channel (off by default).
+	// For portrait renders of products whose category is CORRECT (e.g. keyboards
+	// photographed vertically) that the aspect gate would wrongly degrade. Data is
+	// vision-confirmed per SKU; the gate's existing _aspectCalibrated path honors it.
+	if (args.aspectExempt) {
+		try {
+			const aj = JSON.parse(fs.readFileSync(args.aspectExempt, "utf8"));
+			const set = new Set((aj && aj.skus) || []);
+			for (const p of products) {
+				if (p && set.has(p.sku) && typeof p._imgAspect === "number") {
+					p._aspectCalibrated = {
+						// match the gate's own rounding so the calibrated check hits
+						aspect: Math.round(p._imgAspect * 100) / 100,
+						cat: String(p.cat || "").toUpperCase(),
+					};
+				}
+			}
+		} catch (e) {
+			console.error(
+				`ERROR: aspect-exempt ${args.aspectExempt} no legible (${e.message})`,
+			);
+			process.exit(2);
+		}
+	}
 
 	const outDir = repoRoot;
 

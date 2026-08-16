@@ -7400,50 +7400,58 @@ const Tests = {
 		const nocorr = { ...wide };
 		delete nocorr._categoryCorrection;
 		const fb = R.categoryCorrection(nocorr, {}, { siblings: [] });
-    		this.assert(
-    			!fb || fb.evidence.remediated !== "category-correction",
-    			"category-correction: sin corrección no fabrica categoría",
-    		);
-    	},
-    	testAspectCalibratedStrategy() {
-    		// Red-e: a vision-confirmed portrait render of a CORRECT category is
-    		// re-verified (aspect-calibrated) instead of degraded by the aspect gate.
-    		const R = typeof window !== "undefined" ? window.Remediation || null : null;
-    		if (!R || typeof R.categoryCorrection !== "function") {
-    			this.assert(false, "RED: aspect-calibrated no implementado");
-    			return;
-    		}
-    		const portrait = {
-    			sku: "A-01",
-    			status: "YELLOW",
-    			cat: "TECLADO",
-    			_imgAspect: 0.56,
-    			_aspectCalibrated: { aspect: 0.56, cat: "TECLADO" },
-    		};
-    		const res = R.categoryCorrection({ ...portrait }, {}, { siblings: [] });
-    		this.assert(
-    			res && res.evidence.remediated === "aspect-calibrated",
-    			"aspect-calibrated: retrato confirmado fuerza re-verificación",
-    		);
-    		this.assert(
-    			R.assertPromotionEvidence({
-    				...portrait,
-    				status: "GREEN",
-    				remediationEvidence: { remediated: "aspect-calibrated", aspect: 0.56, cat: "TECLADO" },
-    			}) === true,
-    			"aspect-calibrated: evidencia trazable a _aspectCalibrated",
-    		);
-    		// Fabricated aspect (mismatch with _aspectCalibrated) must fail closed.
-    		this.assert(
-    			R.assertPromotionEvidence({
-    				...portrait,
-    				status: "GREEN",
-    				remediationEvidence: { remediated: "aspect-calibrated", aspect: 0.99, cat: "TECLADO" },
-    			}) === false,
-    			"aspect-calibrated: aspect fabricado rechazado",
-    		);
-    	},
-    };
+		this.assert(
+			!fb || fb.evidence.remediated !== "category-correction",
+			"category-correction: sin corrección no fabrica categoría",
+		);
+	},
+	testAspectCalibratedStrategy() {
+		// Red-e: a vision-confirmed portrait render of a CORRECT category is
+		// re-verified (aspect-calibrated) instead of degraded by the aspect gate.
+		const R = typeof window !== "undefined" ? window.Remediation || null : null;
+		if (!R || typeof R.categoryCorrection !== "function") {
+			this.assert(false, "RED: aspect-calibrated no implementado");
+			return;
+		}
+		const portrait = {
+			sku: "A-01",
+			status: "YELLOW",
+			cat: "TECLADO",
+			_imgAspect: 0.56,
+			_aspectCalibrated: { aspect: 0.56, cat: "TECLADO" },
+		};
+		const res = R.categoryCorrection({ ...portrait }, {}, { siblings: [] });
+		this.assert(
+			res && res.evidence.remediated === "aspect-calibrated",
+			"aspect-calibrated: retrato confirmado fuerza re-verificación",
+		);
+		this.assert(
+			R.assertPromotionEvidence({
+				...portrait,
+				status: "GREEN",
+				remediationEvidence: {
+					remediated: "aspect-calibrated",
+					aspect: 0.56,
+					cat: "TECLADO",
+				},
+			}) === true,
+			"aspect-calibrated: evidencia trazable a _aspectCalibrated",
+		);
+		// Fabricated aspect (mismatch with _aspectCalibrated) must fail closed.
+		this.assert(
+			R.assertPromotionEvidence({
+				...portrait,
+				status: "GREEN",
+				remediationEvidence: {
+					remediated: "aspect-calibrated",
+					aspect: 0.99,
+					cat: "TECLADO",
+				},
+			}) === false,
+			"aspect-calibrated: aspect fabricado rechazado",
+		);
+	},
+};
 
 if (typeof window !== "undefined") window.Tests = Tests;
 if (typeof module !== "undefined") module.exports = Tests;
