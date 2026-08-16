@@ -9,15 +9,7 @@
 // `process` NO existe (a diferencia de Node, donde corren las auditorías).
 // Sin este guard, cada PDF lanzaba "process is not defined" y el import real
 // no producía ni un producto (los tests/auditorías en Node nunca lo veían).
-const envFlag = (name) => {
-	try {
-		return typeof process !== "undefined" && process.env
-			? process.env[name]
-			: undefined;
-	} catch {
-		return undefined;
-	}
-};
+const envFlag = (name) => { try { return typeof process !== "undefined" && process.env ? process.env[name] : undefined; } catch { return undefined; } };
 
 const PdfParser = {
 	async processPdfFile(
