@@ -15,32 +15,32 @@ Verificación por unidad: `npm test` (unit en `src/js/tests.js`) + gates FASE 2 
 
 Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
 
-- [ ] 1. Test en `src/js/tests.js`: imagen casi-blanca con franja oscura →
+- [x] 1. Test en `src/js/tests.js`: imagen casi-blanca con franja oscura →
       `isMarginalCrop(...) === true`; foto completa → `false`. RED.
-- [ ] 2. Implementar `isMarginalCrop` en el módulo de imagen (nuevo
+- [x] 2. Implementar `isMarginalCrop` en el módulo de imagen (nuevo
       `src/js/imageQuality.js`): fracción de píxeles no-fondo < umbral → marginal.
-- [ ] 3. GREEN + mostrar el caso MCHOSE real como fixture.
-- [ ] 4. Commit `feat(import): detect marginal crops`.
+- [x] 3. GREEN + mostrar el caso MCHOSE real como fixture.
+- [x] 4. Commit `feat(import): detect marginal crops`.
 
 ## Unidad 3 — Calidad: subir cap (Fase A, stopgap)
 
-- [ ] 1. Test: `extractImagesFromPage` produce lado menor ≥300px para una foto
+- [x] 1. Test: `extractImagesFromPage` produce lado menor ≥300px para una foto
       nativa ≥400px. RED.
-- [ ] 2. `MAX_DIM` 150→300 en `pdfParser.js` (ruta render). GREEN.
-- [ ] 3. Presupuesto: medir tamaño de catálogo resultante; si >quota store real,
+- [x] 2. `MAX_DIM` 150→300 en `pdfParser.js` (ruta render). GREEN.
+- [x] 3. Presupuesto: medir tamaño de catálogo resultante; si >quota store real,
       documentar y priorizar Unidad 4.
-- [ ] 4. Commit `feat(import): raise image cap to 300px`.
+- [x] 4. Commit `feat(import): raise image cap to 300px`.
 
 ## Unidad 4 — Persistencia a archivos (Fase B, la real)
 
-- [ ] 1. Test: `Storage.saveCatalog` escribe imágenes a
+- [x] 1. Test: `Storage.saveCatalog` escribe imágenes a
       `app-data/images/<cat>/<sku>.png` y guarda ref en el JSON; carga async.
       RED.
-- [ ] 2. Implementar en `src/js/storage.js`: al guardar, separar data URLs →
+- [x] 2. Implementar en `src/js/storage.js`: al guardar, separar data URLs →
       archivos (fs plugin, permisos ya presentes); al cargar, lazy-load.
-- [ ] 3. GC: al sobrescribir catálogo, eliminar PNGs huérfanos. Test RED→GREEN.
-- [ ] 4. Contrato del parser intacto: `processPdfFile` sigue devolviendo data URLs.
-- [ ] 5. Commit `feat(storage): images to files, decouple quality from JSON quota`.
+- [x] 3. GC: al sobrescribir catálogo, eliminar PNGs huérfanos. Test RED→GREEN.
+- [x] 4. Contrato del parser intacto: `processPdfFile` sigue devolviendo data URLs.
+- [x] 5. Commit `feat(storage): images to files, decouple quality from JSON quota`.
 
 ## Unidad 5 — Migración de catálogos existentes
 
