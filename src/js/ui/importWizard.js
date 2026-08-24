@@ -393,7 +393,6 @@ const ImportWizard = {
   exportCsv() {
     const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
     if (!items.length) { if (typeof toast === 'function') toast('No hay pedido para exportar', 'error'); return; }
-    const s = ImportWizard.state;
     const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
     const sum = res.summary;
     const sep = ',';
