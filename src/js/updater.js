@@ -1,7 +1,7 @@
 /**
  * AppUpdater — Tauri 2.0 Native Plugin-Updater
  *
- * Usa el plugin oficial @tauri-apps/plugin-updater que hace delta updates:
+ * Usa el plugin oficial @tauri-apps/plugin-updater (descarga completa firmada):
  * descarga el artefacto firmado (.nsis.zip.sig), verifica la firma criptográfica,
  * reemplaza el binario in-place y relanza la app. Sin desinstalar, sin navegador.
  *
