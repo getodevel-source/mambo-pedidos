@@ -489,9 +489,7 @@ const ImageTextGates = {
           p._aspectCalibrated.aspect === aspect &&
           String(p._aspectCalibrated.cat || "") ===
             String(p.cat || "").toUpperCase();
-        if (vio.violation && calibrated) {
-          // calibrated: no degradation — natural product shape
-        } else if (vio.violation) {
+        if (vio.violation && !calibrated) {
           const warn = `Imagen ${aspect > 1.9 ? "ancha" : "angosta"} (ratio ${aspect.toFixed(2)}) incompatible con ${(p.cat || "").toUpperCase()}`;
           p._imgTextWarnings.push({
             type: "category-aspect",
