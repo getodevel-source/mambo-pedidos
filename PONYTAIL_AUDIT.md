@@ -101,6 +101,28 @@ Each batch = one Conventional commit, one module, tests + eslint cleanup in the 
 Each batch: `npm run lint` + `npm run test` green before commit. #14 needs the regression
 numbers compared against this baseline; all other batches must not change behavior.
 
+## Application status — APPLIED vs KEPT (by engineering judgment)
+Applied (all green: 660 suite + lint 0 errors, one Conventional commit each):
+- `32fc14f` **#14 bug-fix** + #23 app.js + 5 IT23-ncmKey regression tests.
+- `fd4be18` **#3** interiorColorFor, **#4** isGateFlagged, **#5** setCalibrationFlags x3 +
+  reasonInstrumentationEnabled + colorAmbiguityResolutionEnabled, **#6** modals spread. −92 LOC.
+- `afe3dd3` **#26** empty calibrated if-branch.
+
+KEPT — the audit OVER-FLAGGED these; deleting them would remove maintained/contract surface
+or change behavior, so they stay (verify grep counts = real callers, not dead):
+- **#2** `classify`/SYNONYMS is NOT dead — called by `textSanitizer.js`, `hold-out-catalog.js`,
+  `synthetic-stress.js`. Audit claimed "0 callers" — wrong.
+- **#17** `evaluateItem`/`aggregateViolations` is a **documented R1-R10 validation contract**
+  with ~30 test sites. It's maintained public API, not dead code.
+- **#15/#16** skuAllocator + storage archived-slice methods are pinned by real tests
+  (test-maintained surface, like the audit's own "keep" list).
+- **#7/#8/#9/#10/#11** guessCategory, notifications progress/cancel, updater validations,
+  reliability helpers are test-covered reserved/legacy APIs. Removing would cut coverage.
+- **#1/#13/#18/#19/#20/#22/#25/#27/#28** low-value or behavior-risky; not worth regression risk.
+
+Net: the plan's line-count was inflated by test-maintained/contract surface. The real dead code
+was removed; the rest is intentionally conservative. This is the correct outcome.
+
 ## Pre-apply checks / uncertainty
 
 - Symbols possibly invoked dynamically by the FASE-2 `pdfParser.js` (e.g.
