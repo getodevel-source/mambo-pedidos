@@ -143,7 +143,7 @@ const UIModals = {
     if (document.getElementById('simMargenVal')) document.getElementById('simMargenVal').textContent = `${margenRange}%`;
 
     const origCosts = getCostInputs();
-    const simCosts = JSON.parse(JSON.stringify(origCosts));
+    const simCosts = { ...origCosts }; // shallow copy — getCostInputs() outputs primitives
 
     simCosts.tipoCambio = tcRange;
     simCosts.flete = parseFloat(origCosts.flete || 15) * (1 + (fleteRange / 100));

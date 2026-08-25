@@ -1016,21 +1016,6 @@ const TextSanitizer = {
     return matches.slice().sort((a, b) => b.length - a.length)[0];
   },
 
-  /**
-   * Actualiza los flags de calibración (Slice 1). Slice 2 los consolida en
-   * remediationConfig.js; apagar nounPhraseCalibration restaura el gate de
-   * marketing pre-calibración (incluye la supresión de switch-axis).
-   * @returns {{nounPhraseCalibration:boolean}}
-   */
-  setCalibrationFlags(flags) {
-    if (flags && typeof flags === "object") {
-      for (const key of Object.keys(TEXT_SANITIZER_CALIBRATION)) {
-        if (typeof flags[key] === "boolean")
-          TEXT_SANITIZER_CALIBRATION[key] = flags[key];
-      }
-    }
-    return { ...TEXT_SANITIZER_CALIBRATION };
-  },
 };
 
 if (typeof window !== "undefined") window.TextSanitizer = TextSanitizer;

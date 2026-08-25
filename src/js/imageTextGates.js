@@ -300,44 +300,6 @@ const ImageTextGates = {
     }
   },
 
-  /**
-   * Decode adapter: samples the interior color of an image element. Browser
-   * path decodes via Image + canvas; Node path uses the ambient canvas
-   * implementation when available (node-canvas). Returns null when no decode
-   * path is available — the pipeline prefers parser-attached `_interiorColor`.
-   */
-  interiorColorFor(img) {
-    try {
-      if (!img || typeof img.dataUrl !== "string") return null;
-      const dataUrl = img.dataUrl;
-      const { decodeCanvas } =
-        typeof document !== "undefined" && document.createElement
-          ? (() => {
-              const c = document.createElement("canvas");
-              return { decodeCanvas: c };
-            })()
-          : {};
-      const canvas = decodeCanvas || null;
-      if (!canvas || typeof canvas.getContext !== "function") return null;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      const imageObj = new Image();
-      imageObj.src = dataUrl;
-      // Synchronous decode is only reliable in the Node canvas shim where
-      // width/height are known up-front; browser decode is async, so this
-      // adapter is best-effort (the parser computes interiorColor at render).
-      const width = img.width || imageObj.width || 0;
-      const height = img.height || imageObj.height || 0;
-      if (!width || !height) return null;
-      canvas.width = width;
-      canvas.height = height;
-      ctx.drawImage(imageObj, 0, 0, width, height);
-      const imageData = ctx.getImageData(0, 0, width, height);
-      return this.sampleInteriorColor(imageData.data, width, height, 0.6);
-    } catch {
-      return null;
-    }
-  },
 
   /**
    * Finds ALL declared color words on the product (color → variante → modelo).
@@ -566,16 +528,3 @@ if (typeof module !== "undefined") module.exports = ImageTextGates;
 // restaura el comportamiento pre-calibración (todo multi-color no declarado
 // o ilegible queda WATCH con warning).
 const IMAGE_TEXT_CALIBRATION = { colorAmbiguityResolution: true };
-ImageTextGates.setCalibrationFlags = function setCalibrationFlags(flags) {
-  if (flags && typeof flags === "object") {
-    for (const key of Object.keys(IMAGE_TEXT_CALIBRATION)) {
-      if (typeof flags[key] === "boolean")
-        IMAGE_TEXT_CALIBRATION[key] = flags[key];
-    }
-  }
-  return { ...IMAGE_TEXT_CALIBRATION };
-};
-ImageTextGates.colorAmbiguityResolutionEnabled =
-  function colorAmbiguityResolutionEnabled() {
-    return IMAGE_TEXT_CALIBRATION.colorAmbiguityResolution;
-  };

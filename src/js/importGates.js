@@ -22,13 +22,6 @@
  * Browser-global + CommonJS compatible (same convention as the other modules).
  */
 const ImportGates = {
-  /** True when any image-text/assignment gate flagged the product. */
-  isGateFlagged(item) {
-    return (
-      Array.isArray(item && item._imgTextWarnings) &&
-      item._imgTextWarnings.length > 0
-    );
-  },
 
   /**
    * Runs the full verification chain over the items and returns the final
@@ -294,25 +287,7 @@ const ImportGates = {
     return null;
   },
 
-  /**
-   * Actualiza los flags de calibración (Slice 1). Slice 2 los consolida en
-   * remediationConfig.js; apagar reasonInstrumentation restaura la composición
-   * pre-calibración (qualityReason fallback "Sin observaciones").
-   * @returns {{reasonInstrumentation:boolean}}
-   */
-  setCalibrationFlags(flags) {
-    if (flags && typeof flags === "object") {
-      for (const key of Object.keys(IMPORT_GATES_CALIBRATION)) {
-        if (typeof flags[key] === "boolean")
-          IMPORT_GATES_CALIBRATION[key] = flags[key];
-      }
-    }
-    return { ...IMPORT_GATES_CALIBRATION };
-  },
 
-  reasonInstrumentationEnabled() {
-    return IMPORT_GATES_CALIBRATION.reasonInstrumentation;
-  },
 };
 
 // Slice 1 (gate-calibration): flag de instrumentación de razones (default ON;
