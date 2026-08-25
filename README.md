@@ -5,7 +5,7 @@
 [![Tauri 2.0](https://img.shields.io/badge/Tauri-2.0-blueviolet.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 
-**Mambo Pedidos** es una aplicación de escritorio desarrollada por [@geto_dev](https://instagram.com/geto_dev) para la gestión inteligente de catálogos mayoristas de periféricos gamer. Importa PDFs con parsing espacial, enriquecimiento por IA local, validación visual de imágenes y armado de pedidos con cálculo automático de rentabilidad y logística.
+**Mambo Pedidos** es una aplicación de escritorio desarrollada por [@geto_dev](https://instagram.com/geto_dev) para la gestión inteligente de catálogos mayoristas de periféricos gamer. Importa PDFs con parsing espacial determinístico, validación visual de imágenes y armado de pedidos con cálculo automático de rentabilidad y logística.
 
 🔗 **Repositorio:** [https://github.com/getodevel-source/mambo-pedidos](https://github.com/getodevel-source/mambo-pedidos)
 
@@ -16,17 +16,12 @@
 ### 📐 Motor de Importación Espacial (Table Row Engine)
 - **Detección automática de layout**: identifica si el catálogo es tabla (una columna de precios) o grilla (múltiples columnas) y adapta el parsing.
 - **Extracción por coordenadas X/Y**: cada producto se localiza por su posición espacial en el PDF, no por texto plano. Límites Y dinámicos calculados entre filas consecutivas.
-- **13 marcas detectadas automáticamente**: 8BitDo, AJAZZ, ATK, Attack Shark, AULA, Irok/Mars, Haimu, KZ, Logitech, Madlions, Razer, Royal Kludge, MCHOSE.
-- **15 categorías con 99.8% de cobertura**: MOUSE, TECLADO, CONTROLLER, AURICULAR, HEADSET, SWITCH, MOUSEPAD, CAMARA, SPEAKER, SILLA_GAMING, ACCESORIO, NUMPAD, MONITOR, CUIDADO_PERSONAL.
+- **14 marcas detectadas automáticamente**: 8BitDo, AJAZZ, AULA, Attack Shark, Irok, Mars, Haimu, KZ, Logitech, Madlions, Razer, Royal Kludge, MCHOSE, Keychron.
+- **~13 categorías**: MOUSE, TECLADO, CONTROLLER, AURICULAR, HEADSET, SWITCH, MOUSEPAD, CAMARA, SPEAKER, SILLA_GAMING, ACCESORIO, NUMPAD, MONITOR.
 - **Limpieza de modelos**: remoción de códigos de barras EAN, specs de sensores (PAW3950), ruido corporativo, colores separados a variante.
 
-### 🤖 IA Local por Celda (Ollama)
-- **Enriquecimiento por celda**: cada producto se envía individualmente al LLM local para limpiar nombre, detectar categoría y normalizar atributos.
-- **Grounding anti-alucinación**: verificación literal de precios FOB contra el texto crudo del PDF.
-- **Fallback determinístico**: si Ollama no está activo, el parser espacial funciona de forma autónoma.
-
 ### 🖼️ Validación Visual de Imágenes
-- **Color dominante**: extrae el color principal de la imagen y lo compara con la variante del producto (ej: producto "Black" con imagen blanca → rechaza).
+- **Color dominante**: extrae el color principal de la imagen y lo compara con la variante del producto (ej: producto "Black" con imagen blanca → degradan a YELLOW/WATCH).
 - **Aspect ratio por categoría**: un teclado no puede tener una imagen estrecha, un mouse no puede tener una imagen panorámica.
 - **Hard gates**: si la imagen falla la validación, el producto queda sin foto. Sin imagen > imagen incorrecta.
 - **Deduplicación**: elimina imágenes duplicadas extraídas del PDF antes del matching.
@@ -64,7 +59,6 @@
 |---|---|
 | **Backend** | Rust + Tauri 2.0 |
 | **Frontend** | HTML5 + CSS3 + JavaScript ES6+ (Vanilla) |
-| **IA Local** | Ollama (llama3 / qwen2.5) vía REST API |
 | **PDF Parser** | PDF.js 3.11 (extracción espacial X/Y + Canvas 2D) |
 | **Spreadsheets** | SheetJS (XLSX) + PapaParse (CSV) |
 | **Persistencia** | LocalStorage + Tauri Store |
@@ -82,10 +76,9 @@ mambo-pedidos/
 │   └── js/
 │       ├── app.js              # Controlador principal
 │       ├── pdfParser.js        # Motor espacial: Table Row Engine + Grid Cell Engine + validación de imágenes
-│       ├── aiCatalogEngine.js  # Motor de ingesta por IA local (3 capas anti-alucinación)
+│       ├── pdfParserClassifier.js # Clasificador puro: marcas + categorías + limpiez
 │       ├── textSanitizer.js    # Sanitización determinística de texto
-│       ├── localLlm.js         # Conector a Ollama / LM Studio
-│       ├── catalogValidator.js # Auditor de calidad por producto (6 reglas)
+│       ├── catalogValidator.js # Auditor de calidad por producto (reglas R1-R10)
 │       ├── calculator.js       # Motor de cálculo financiero y logística
 │       ├── fileImporter.js     # Importador CSV/Excel + Packing List
 │       ├── quoteGenerator.js   # Generador de cotizaciones en PDF
@@ -102,8 +95,8 @@ mambo-pedidos/
 │   ├── test-spatial-import.js  # Test de calidad contra 13 catálogos reales
 │   └── test-geometry-dump.js   # Diagnóstico de geometría PDF
 ├── .github/workflows/
-│   └── release.yml             # CI/CD multi-platform
-└── .keys/                      # Claves de firma (NUNCA commitear)
+│   ├── ci.yml                  # CI: tests + lint + sintaxis
+│   └── release.yml             # CI/CD multi-platform (build + firma + release)
 ```
 
 ---
