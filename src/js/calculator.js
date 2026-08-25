@@ -274,6 +274,10 @@ const Calculator = {
     if (catUpper.includes('TECLADO')) return textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'TECLADO_WIRELESS' : 'TECLADO_CABLE';
     if (catUpper.includes('MOUSE') && !catUpper.includes('MOUSEPAD')) return textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'MOUSE_WIRELESS' : 'MOUSE_CABLE';
     if (catUpper.includes('HEADSET') || catUpper.includes('AURICULAR')) return textAll.includes('WIRELESS') || textAll.includes('BT') ? 'HEADSET_WIRELESS' : 'HEADSET_CABLE';
+    if (catUpper.includes('CONTROLLER')) return 'CONTROLLER_WIRELESS';
+    if (catUpper.includes('MONITOR')) return 'MONITOR';
+    if (catUpper.includes('MOUSEPAD')) return 'MOUSEPAD';
+    if (catUpper.includes('SWITCH')) return 'SWITCH';
     if (this.NCM_MATRIX[catUpper]) return catUpper; // categorías directas (LAVADORA, TV...)
     return 'OTRO';
   },
@@ -346,26 +350,9 @@ const Calculator = {
       const itemSeguro = seguroTotal * weightFrac;
       const itemCif = subFob + itemFlete + itemSeguro;
 
-      // Determinar NCM y Aranceles exactos por categoría/variante
-      let ncmKey = 'OTRO';
-      const catUpper = (item.cat || '').toUpperCase();
-      const textAll = `${item.modelo} ${item.variante || ''} ${item.cat}`.toUpperCase();
-
-      if (catUpper.includes('TECLADO')) {
-        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'TECLADO_WIRELESS' : 'TECLADO_CABLE';
-      } else if (catUpper.includes('MOUSE') && !catUpper.includes('MOUSEPAD')) {
-        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') || textAll.includes('BLUETOOTH') ? 'MOUSE_WIRELESS' : 'MOUSE_CABLE';
-      } else if (catUpper.includes('HEADSET') || catUpper.includes('AURICULAR')) {
-        ncmKey = textAll.includes('WIRELESS') || textAll.includes('BT') ? 'HEADSET_WIRELESS' : 'HEADSET_CABLE';
-      } else if (catUpper.includes('CONTROLLER')) {
-        ncmKey = 'CONTROLLER_WIRELESS';
-      } else if (catUpper.includes('MONITOR')) {
-        ncmKey = 'MONITOR';
-      } else if (catUpper.includes('MOUSEPAD')) {
-        ncmKey = 'MOUSEPAD';
-      } else if (catUpper.includes('SWITCH')) {
-        ncmKey = 'SWITCH';
-      }
+      // Determinar NCM y Aranceles exactos por categoría/variant
+      // (lógica consolidada en ncmKeyFor — incluye fallback a categorías directas de la matriz
+      const ncmKey = this.ncmKeyFor(item)
 
       const baseRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
       const ov = doorConfig.ncmOverrides && doorConfig.ncmOverrides[ncmKey];

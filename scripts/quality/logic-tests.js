@@ -184,6 +184,16 @@ function testCalculator() {
   assert(keyTecl === 'TECLADO_CABLE' && Calculator.NCM_MATRIX[keyTecl].ncm === '8471.60.52', 'IT23: teclado → 8471.60.52');
   assert(keyMouse === 'MOUSE_WIRELESS' && Calculator.NCM_MATRIX[keyMouse].ncm === '8471.60.53', 'IT23: mouse wireless → 8471.60.53');
   assert(NcmDatabase.byCode(Calculator.NCM_MATRIX[keyTecl].ncm).di === 0, 'IT23: DI teclado 0% (autoritativo ARCA, no 12%)');
+  // ponytail #14: ncmKeyFor unificado con el motor D2D (matriz directa + controladores) — fija el fix
+  assert(Calculator.ncmKeyFor({ cat: 'CONTROLLER', modelo: 'Pro', variante: '' }) === 'CONTROLLER_WIRELESS', 'IT23-ncmKey: controlador → CONTROLLER_WIRELESS (no cae a OTRO)');
+  assert(Calculator.ncmKeyFor({ cat: 'MONITOR', modelo: '27', variante: '' }) === 'MONITOR', 'IT23-ncmKey: monitor → MONITOR');
+  assert(Calculator.ncmKeyFor({ cat: 'LAVADORA', modelo: 'X', variante: '' }) === 'LAVADORA' && Calculator.NCM_MATRIX.LAVADORA.ncm === '8450.11.00', 'IT23-ncmKey: lavadora cae a matriz directa 8450.11.00');
+  assert(Calculator.ncmKeyFor({ cat: 'TV', modelo: '55', variante: '' }) === 'TV', 'IT23-ncmKey: TV → TV');
+  const d2dLav = Calculator.calculateDoorToDoorExactCost(
+    [{ sku: 'D2D-L', fob: 100, qty: 1, cat: 'LAVADORA', modelo: 'X', variante: '' }],
+    { tipoCambio: 1000, pesoKg: 0, depositoFiscalUsd: 0, despachanteUsd: 0, simDigitalizacionUsd: 0, fleteInternoUsd: 0 }
+  );
+  assert(d2dLav.items[0].ncm === '8450.11.00' && Math.abs(d2dLav.items[0].derechosUsd / d2dLav.summary.cifTotalUsd - 0.20) < 1e-9, 'IT23-ncmKey: D2D lavadora usa la matriz directa (DI 20%), no OTRO');
 
   // IT30: default de derechos NCM-aware (teclado BIT → 0%, no 16% stale)
   const cfgTecl = Calculator.getCostConfig({}, [{ cat: 'TECLADO', modelo: 'F75', variante: '' }]);

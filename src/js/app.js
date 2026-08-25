@@ -217,7 +217,7 @@ function getCostInputs() {
     derechos: (function(){ const v = document.getElementById('cDerechos')?.value; return v !== undefined && v !== '' ? parseFloat(v) : undefined; })(),
     tasa: document.getElementById('cTasa')?.value || 3,
     perc: document.getElementById('cPerc')?.value || 6,
-    ivaPct: document.getElementById('cIvaPct')?.value !== undefined && document.getElementById('cIvaPct')?.value !== '' ? document.getElementById('cIvaPct').value : 21,
+    ivaPct: document.getElementById('cIvaPct')?.value || 21,
     desp: document.getElementById('cDesp')?.value || 500,
     courier: document.getElementById('cCourier')?.value || 8,
     markup: document.getElementById('cMarkup')?.value || 2.5,
