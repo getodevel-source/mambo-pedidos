@@ -75,16 +75,20 @@ delete-list, not yet applied. No test gutting proposed.
 - `remediate-catalog.js`/`quality-pipeline.js` single-responsibility (keep).
 
 ## Decisions (user) — agreed application policy
-- **Defer all edits until FASE 2 closes** (parallel session owns the working tree; final
-  commit is one session's job per AGENTS.md). This file is the living debt ledger.
-- **#14 is a BUG**: rewrite the inline `ncmKey` chain in `calculator.js:350-367` to use
-  `ncmKeyFor` (line 273-278). It changes door-to-door numbers for direct-matrix categories
-  (LAVADORA/HELADERA/TV/AIRE). Treat as a fix: **pin a regression test first** that captures
-  before/after per-category D2D numbers, then rewrite.
+- **FASE 2 is CLOSED** (confirmed: feature `c885081` committed + `table-parser-column-detection`
+  archived in `3e8a8f9`, working tree clean). The "defer until FASE 2 closes" gate is released.
+  Note: the AGENTS.md FASE-2 section is **stale** (dates 08-03, pre-archive).
+- **#14 is a BUG, FIXED in Lote 1**: `ncmKeyFor` is now a superset (added CONTROLLER/MONITOR/
+  MOUSEPAD/SWITCH branches + `NCM_MATRIX[catUpper]` fallback) and the D2D inline chain
+  delegates to it. Earlier analysis plus the fix corrected the subtlety: a naive
+  `this.ncmKeyFor(item)` swap alone would have DROPPED controller handling (controllers were
+  only in the inline branch), so the correct fix unifies into the superset, preserving behavior
+  everywhere except the previously-wrong direct-matrix categories and controllers.
 
-## Batching plan (apply at FASE 2 close)
+## Batching plan (FASE 2 closed — plan is live)
 Each batch = one Conventional commit, one module, tests + eslint cleanup in the same commit.
-1. `refactor(calculator)` — #14 bug-fix (+ regression test), #23 app.js verbosity.
+1. ✅ `fix(calculator)` — #14 bug-fix+dedup, #23 app.js, +5 IT23-ncmKey regression tests.
+   Commit `32fc14f`. Suite 660 green, lint 0 errors. (DONE)
 2. `refactor(catalog)` — #17 evaluateItem/violations, #21 GARBAGE_RE, #16 storage evidence fns.
 3. `refactor(imports)` — #4, #5(importGates), #12, #18 importFlow isPhotoOnly, #20 deriveReasonCode.
 4. `refactor(sku)` — #15 skuAllocator archived Slice 6.
