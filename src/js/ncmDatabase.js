@@ -78,42 +78,6 @@ const NcmDatabase = {
       .map(([i, score]) => Object.assign({ score }, NcmDatabase._db.registros[i]));
   },
 
-  // Sinónimos EN→ES + términos comunes de producto (las descripciones NCM son ES).
-  SYNONYMS: {
-    keyboard: 'teclado', keycap: 'tecla', mouse: 'indicadores apuntadores raton',
-    raton: 'mouse', headset: 'auriculares', earbuds: 'auriculares', headphones: 'auriculares',
-    controller: 'mando consola', gamepad: 'mando joystick', joystick: 'mando',
-    printer: 'impresora', print: 'impresora', washing: 'lavadora', washer: 'lavadora',
-    fridge: 'heladera', refrigerator: 'heladera', freezer: 'heladera congelador',
-    microwave: 'microondas', vacuum: 'aspiradora', blender: 'licuadora',
-    coffee: 'cafetera', iron: 'plancha', smartphone: 'telefono inteligente',
-    celular: 'telefono inteligente smartphone', monitor: 'monitor',
-    television: 'television', laptop: 'computadora portatil', notebook: 'computadora portatil',
-    tablet: 'tableta', camera: 'camara', webcam: 'camara web', fan: 'ventilador',
-    air: 'acondicionador aire', conditioner: 'acondicionador', water: 'agua', heater: 'calentador'
-  },
-
-  _expand(text) {
-    let t = ' ' + String(text || '').toLowerCase() + ' ';
-    Object.entries(NcmDatabase.SYNONYMS).forEach(([k, v]) => {
-      t = t.replace(new RegExp('\\b' + k + '\\b', 'g'), ' ' + v + ' ');
-    });
-    return t;
-  },
-
-  // Autoclasifica un producto (texto modelo+variante+marca) a su NCM.
-  // Devuelve { ncm, desc, di, score, confidence } o { ncm:null, confidence:0 }.
-  classify(text) {
-    const expanded = NcmDatabase._expand(text);
-    const res = NcmDatabase.search(expanded, 3);
-    if (!res.length) return { ncm: null, score: 0, confidence: 0 };
-    const top = res[0];
-    const tokens = NcmDatabase._tokenize(expanded);
-    const confidence = tokens.length ? Math.min(1, top.score / Math.max(2, tokens.length)) : 0;
-    // Umbral: solo auto-asigna si hay confianza razonable (2+ tokens de overlap).
-    if (confidence < 0.4 || top.score < 2) return { ncm: null, score: top.score, confidence, pending: true };
-    return { ncm: top.ncm, desc: top.desc, di: top.di, score: top.score, confidence };
-  }
 };
 
 if (typeof window !== 'undefined') window.NcmDatabase = NcmDatabase;
