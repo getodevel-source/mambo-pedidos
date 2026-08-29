@@ -138,6 +138,7 @@ const Tests = {
 		await this.testStorageQuotaStripPolicy();
 		this.testBytesToDataUrlChunked();
 		await this.testImportWizardProjectPersistence();
+		this.testScriptGlobalLexicalCollisions();
 		await this.testStorageRealDiskPersistence();
 		await this.testImportWizardStatePersistence();
 		this.testFase2Slice3KzMatrixModelName();
@@ -7956,6 +7957,67 @@ const Tests = {
 			global.window.toast = prevToast;
 			localStorage.removeItem(legacy);
 		}
+	},
+
+	testScriptGlobalLexicalCollisions() {
+		// Un <script> clasico comparte con los demas el entorno lexico global: dos
+		// `const` con el mismo nombre en dos archivos hacen que el SEGUNDO falle al
+		// parsear (SyntaxError: Identifier ... has already been declared) y ese modulo
+		// no se ejecuta nunca. En Node no se ve: cada módulo se requiere en su propio
+		// scope. Paso real: COLOR_KEEP_WORDS declarado en textSanitizer.js:1035 y en
+		// imageTextGates.js:23, con textSanitizer cargado antes (index.html 4058 vs
+		// 4061) => ImageTextGates nunca existio en la app, y los consumers guardados
+		// con typeof cayeron siempre al fallback (runAll en import, sampleInteriorColor).
+		const nodeFs = require("fs");
+		const nodePath = require("path");
+		const vm = require("vm");
+		// __dirname no es fiable aca: el runner carga tests.js con su propio filename y
+		// resuelve C:\Mambo\src en vez de src/js. Se resuelve la raiz probando
+		// candidatos hasta dar con src/index.html + package.json.
+		// El cwd de referencia va leido con guarda de typeof: este archivo vive en
+		// src/js y el escaneo de browser-runtime rechaza la variable de entorno del
+		// runner sin esa guarda (romperia en WebView2).
+		const cwd = typeof process !== "undefined" && process.cwd ? process.cwd() : null;
+		const candidates = [__dirname, nodePath.join(__dirname, ".."), nodePath.join(__dirname, "..", ".."), cwd].filter(Boolean);
+		const root = candidates.find((c) => {
+			try {
+				return nodeFs.existsSync(nodePath.join(c, "src", "index.html")) && nodeFs.existsSync(nodePath.join(c, "package.json"));
+			} catch {
+				return false;
+			}
+		});
+		this.assert(!!root, "raiz del repo resuelta para leer index.html");
+		if (!root) return;
+		const html = nodeFs.readFileSync(nodePath.join(root, "src", "index.html"), "utf8");
+		const order = [];
+		for (const m of html.matchAll(/<script\s+src="([^"]+)"><\/script>/g)) {
+			if (m[1].startsWith("js/")) order.push(m[1]);
+		}
+		this.assert(order.length > 20, `orden de <script> leido de index.html (${order.length} modulos)`);
+		const skipped = ["js/tests.js"];
+		let acc = "";
+		const collisions = [];
+		for (const rel of order) {
+			if (skipped.includes(rel)) continue;
+			const src = nodeFs.readFileSync(nodePath.join(root, "src", rel), "utf8");
+			acc += `\n//# ${rel}\n` + src + ";\n";
+			try {
+				new vm.Script(acc, { filename: "concat:" + rel });
+			} catch (e) {
+				if (/already been declared|has already declared/i.test(e.message)) {
+					collisions.push(rel + ": " + e.message);
+				} else {
+					collisions.push(rel + ": " + e.message + " (no es colision lexica: fallo de parseo)");
+				}
+				break;
+			}
+		}
+		this.assert(
+			collisions.length === 0,
+			collisions.length
+				? "los <script> classicos no redeclaran identificadores globales (" + collisions.join(" | ") + ")"
+				: "los <script> classicos no redeclaran identificadores globales"
+		);
 	},
 
 	async testStorageRealDiskPersistence() {

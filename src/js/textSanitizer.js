@@ -1032,7 +1032,16 @@ if (typeof module !== "undefined") module.exports = TextSanitizer;
 // Keep vocabulary derived from CatalogValidator.COLOR_AUDIT_RE plus the
 // switch-adjacent colors the spec adds (transparent, smoke, mint, navy,
 // beige). Kept in sync with ImageTextGates.COLOR_KEEP_WORDS (slice 1).
-const COLOR_KEEP_WORDS = [
+//
+// El nombre local NO puede ser COLOR_KEEP_WORDS: los <script> clasicos comparten
+// el entorno lexico global, imageTextGates.js declara el mismo const, y este
+// archivo se carga antes en index.html (4058 vs 4061). Redeclarlo hacia que el
+// parseo de imageTextGates.js fallara con "Identifier COLOR_KEEP_WORDS has
+// already been declared", y ese modulo no se ejecutaba nunca en la app: ni
+// ImageTextGates.runAll en el import ni sampleInteriorColor en el parser. Las dos
+// copias del vocabulario son identicas (medido), asi que el rename no cambia
+// el comportamiento de TextSanitizer.
+const TEXT_SANITIZER_COLOR_KEEP_WORDS = [
   "black",
   "white",
   "pink",
@@ -1082,9 +1091,9 @@ const COLOR_KEEP_WORDS = [
   "navy",
   "beige",
 ];
-TextSanitizer.COLOR_KEEP_WORDS = COLOR_KEEP_WORDS;
+TextSanitizer.COLOR_KEEP_WORDS = TEXT_SANITIZER_COLOR_KEEP_WORDS;
 TextSanitizer.COLOR_KEEP_RE = new RegExp(
-  "\\b(" + COLOR_KEEP_WORDS.join("|") + ")\\b",
+  "\\b(" + TEXT_SANITIZER_COLOR_KEEP_WORDS.join("|") + ")\\b",
   "gi",
 );
 
