@@ -26,10 +26,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Node >=22: el harness usa el WebSocket global de la plataforma. Con 20 el
+      # runner llegaba a descubrir el target CDP y reventaba con
+      # 'WebSocket is not defined'. La suite de tests sigue en 20 en ci.yml.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

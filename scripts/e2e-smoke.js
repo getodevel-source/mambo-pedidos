@@ -137,6 +137,15 @@ async function realClick(client, sel) {
 const fail = bugs => { console.error('\n❌ E2E FAIL — ' + bugs.length + ' bug(s):'); bugs.forEach(b => console.error('  • ' + b)); process.exit(1); };
 
 async function main() {
+  // El WebSocket global existe desde Node 22. Con 20 el harness descubre el
+  // target y luego falla con un "WebSocket is not defined" que no dice nada
+  // de la causa real, asi que se anuncia antes de intentarlo.
+  if (typeof WebSocket === 'undefined') {
+    throw new Error(
+      `Este smoke necesita el WebSocket global (Node >= 22). Version actual: ${process.version}`
+    );
+  }
+
   const wsUrl = await discoverWsUrl();
   const client = await connect(wsUrl);
   await client.send('Runtime.enable');
