@@ -5,11 +5,11 @@ Verificación por unidad: `npm test` (unit en `src/js/tests.js`) + gates FASE 2 
 
 ## Unidad 1 — Medición base (cero código de app)
 
-- [ ] 1. Correr `node scripts/_dbg_real_audit.js` y guardar el baseline (avg lado
+- [x] 1. Correr `node scripts/_dbg_real_audit.js` y guardar el baseline (avg lado
       menor, % <150px, tamaño total) como referencia de regresión.
 - [ ] 2. Correr la variante a 300px (`_dbg_real_audit300.js`) y anotar el tamaño
       total en filesystem equivalente. Confirmar el número de ~139MB vs 35MB.
-- [ ] 3. Commit `chore: photo-quality baseline audit`.
+- [x] 3. Commit `chore: photo-quality baseline audit`. (baseline versionado)
 
 ## Unidad 2 — Gate de crop marginal (unit, TDD)
 
@@ -84,3 +84,57 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
   "images a archivos" nunca había escrito un solo archivo. Los audits de
   tamaño/storage de esta unidad se miden sobre un camino que recién ahora
   funciona, así que el baseline viejo no sirve como referencia de regresión.
+
+## Medicion 2026-08-29 con el corpus real (y el criterio no se cumple)
+
+El corpus existia todo el tiempo: `C:\Mambo catalogos` (con espacio, en la raiz
+de C:), 13 PDFs / 56 MB. `scripts/export-catalog-batch.js` ahora acepta
+`MAMBO_CATALOG_DIR` como los otros tres scripts que lo leen, y el re-export salio
+en ~2 min: 2170 productos (8BitDo 89, AJAZZ 285, ATK 241, Attack 210, AULA 352,
+Irok 108, Keyboard Switch 33, KZ 88, Madlions 55, Razer 279, RK 51, VGN 162,
+MCHOSE 217).
+
+Unidad 1: el baseline **no** se puede guardar con `_dbg_real_audit.js` porque ese
+script nunca se versiono (gitignored, y hoy no existe). Se escribio uno real,
+`scripts/photo-baseline.js` (`npm run photo:baseline`), y su salida quedo
+versionada en `ground-truth/photo-baseline.json` para que exista referencia de
+regresion de verdad. Medido sobre 2147 imagenes decodificadas:
+
+| metrica | valor | meta de la Unidad 2.2 |
+|---|---|---|
+| lado menor avg / mediana | **178.8 / 169** | avg >= 300 |
+| lado menor min / p10 / p90 / max | 13 / 113 / 280 / 300 | - |
+| fotos con lado menor < 150px | **765 (35.6%)** | ~0% |
+| < 300px / >= 300px | 98.8% / 1.2% | - |
+| payload total de imagenes | 99.2 MB | estimaba ~139 vs 35 MB |
+| unicas / reutilizadas | 1904 unicas, 196 repetidas en 439 usos | - |
+| placeholder `-` | 23 de 2170 | - |
+
+Peores marcas por lado menor promedio: madlions 134.1 (74.1% <150px), atk 143.6
+(min 13px, 55.7%), mars 149.3, aula 156.6, razer 163.6, vgn 170.9.
+
+Lectura honesta: el techo de 300px que landed (`449bc5f`) es un **techo**, no un
+piso. El 98.8% de las fotos del corpus ya nace abajo de 300px, asi que la
+aceptacion "avg >= 300px, <150px ~0" es inalcanzable re-midiendo: choca con la
+propia nota de fuera de alcance del change ("subir calidad de fotos cuyo nativo
+en el PDF es <300px no tiene ganancia"). La decision pendiente es del dueno: bajar
+la barra a lo que el corpus permite, o atacar las 765 fotos <150px que son
+recortes chicos y no limitacion del techo. `npm run photo:check` codifica los
+umbrales actuales y hoy falla a proposito; NO esta enganchado a CI para no
+pintar de rojo el build con un criterio que nadie revalido.
+
+Unidad 2 sigue abierta: el re-export persiste un JSON unico con las imagenes
+inline (`catalog-export.json`, 144 MB, gitignored), no archivos por imagen. La
+capacidad de escribir `images/` si existe y esta verificada en desktop
+(`06d083c` + el job e2e), pero el batch del corpus no la usa.
+
+Unidad 6.2: `measure-model-quality.js` en verde (recall_dirty 100%, 40/40 con 0
+FN; FP_rate_clean 8%, 2/25), pero **`ground-truth.js` no se puede pasar como
+"sin regresión"**: al correrlo contra el corpus regenera `ground-truth/manifest.json`
+y el manifest regenerado **no coincide** con el etiquetado (mismos 130 casos, pero
+cambian `sku`, `variante`, `status` YELLOW→GREEN, coordenadas `y`, y desaparece
+`cropFile`). `measure-extraction.js` muestra que la mayoria del drift es mejora
+post-FASE 2 (ej: "Flame Switch"→"Flame" + variante, "Turbo+"→"Turbo+ V9"), pero
+las verdicts humanas estan casadas con el manifest viejo: hay que re-baselinear
+(regenerar manifest + crops y re-etiquetar) o el gate queda inevaluable. No se
+comiteo ese regenerado; la copia esta en `scripts/_img_audit/manifest-regenerado.json`.

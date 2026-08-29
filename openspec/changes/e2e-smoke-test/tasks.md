@@ -25,7 +25,7 @@ Reutilizar el cableado de `scripts/_dbg_audit_full.js` (conexión WS, `send`,
 - [x] `npm run e2e` exit 0 con la app real corriendo. (ejecutado en CI, ver cierre)
 
 ## U6 — Loop de auditoría hasta 0 bugs
-- [ ] Correr `npm run e2e` + `npm run audit:full` sobre la app/catálogo reales.
+- [x] Correr `npm run e2e` + `npm run audit:full` sobre la app/catálogo reales.
 - [x] Registrar bugs, arreglar, re-correr hasta 0. (1 bug: ver cierre)
 
 ## Reconciliación 2026-08-29 (corrección de una claim falsa)
@@ -86,8 +86,27 @@ evidencia de que "existe el probe" no es "el probe pasó":
    `ImageTextGates.runAll` (color interior + aspect por categoría) nunca corrió
    en el import y `sampleInteriorColor` tampoco en el parser.
 
-U6 sigue abierta en su primera caja: `npm run audit:full` sobre el catalogo real.
-Verificado hoy: tampoco es ejecutable aca. `npm run audit:quick` falla porque
-`scripts/audit-app.js` exige el corpus de los 13 PDFs (`C:\Mambo\Catalogos`,
-o `MAMBO_CATALOG_DIR`), que no esta en esta maquina, y no hay ningun
-`audit-app-report.json` versionado que sirva de baseline.
+U6 quedo cerrada el mismo dia: el corpus aparecio en `C:\Mambo catalogos` (con
+espacio, no en `C:\Mambo\Catalogos`) y se pudo correr
+`MAMBO_CATALOG_DIR="C:\Mambo catalogos" npm run audit:full` -> PASS, con los
+numeros registrados aca abajo. El reporte (`audit-app-report.json`) sigue
+siendo gitignored: es generado, no referencia; la referencia versionada de
+fotos es `ground-truth/photo-baseline.json`.
+
+## `npm run audit:full` sobre los 13 catalogos reales (2026-08-29)
+
+Corpus: `C:\Mambo catalogos` (13 PDFs, 56 MB), pasado por `MAMBO_CATALOG_DIR`.
+Resultado: **PASS — pipeline integro** (0 image-mismatches duros, 0 RED
+estructurales), con semaforo honesto en lugar de verde inflado:
+
+| metrica | valor |
+|---|---|
+| productos | 2170 |
+| GREEN / YELLOW / RED | 1754 / 372 / 44 |
+| con imagen | 2169 (falta 1) |
+| shape-advisories (aceptadas por politica del parser) | 218 |
+| primera razon de RED | 44x "modelo = specs tecnicas de hoja de datos" |
+
+Con `export-catalog-batch.js` mas gates del import el split final del export es
+1488 GREEN / 638 YELLOW / 44 RED sobre los mismos 2170: el numero de GREEN
+depende de donde se apliquen las gates, y conviene citar cual de los dos se midio.

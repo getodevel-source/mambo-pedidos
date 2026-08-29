@@ -143,3 +143,30 @@ A.2 sigue abierta y está bloqueada de entorno, no de diseño: el criterio es
 esta máquina y no hay ningún `remediation-ledger.json` versionado ni en disco.
 El `greenPct: 99.2` que aparece en `design.md` es un ejemplo de forma del
 archivo, no una medición.
+
+## A.2 ejecutado contra el corpus real — NO CIERRA (2026-08-29)
+
+Con los 13 PDFs disponibles (`C:\Mambo catalogos`) se pudo correr el loop de una
+vez: `node scripts/remediate-catalog.js --export catalog-export.json --json`.
+
+```
+eligibleCount:   2126
+eligibleGreenPct: 88.9   (barra: 99.0)
+fixedPoint:      true    iterations: 3
+pass:            false
+humanReviewReport: human-review-report.json  (50 KB, emitido)
+```
+
+Es el comportamiento que la propia caja A.2 especifica para el punto fijo honesto
+por debajo de la barra: el change NO se cierra y se emite el informe de revision
+humana. La maquinaria (ledger + fixed point + informe) esta verificada; lo que
+falta es calidad de datos. Razones residuales del no-GREEN, por peso:
+44 specs tecnicas como modelo, 30 imagen compartida entre categorias, 20
+marketing sin identificador, 17 color de imagen vs color declarado, 15 color
+ambiguo, 9 outlier de precio, 2 genericas, 2 FOB sin evidencia.
+
+Nota operativa: `remediation-ledger.json` y `human-review-report.json` son
+gitignored (.gitignore lineas 80-81), asi que el `greenPct` de cada corrida vive
+solo en la maquina que la ejecuta. Si se quiere un gate de verdad, hace falta
+versionar un resumen chico del ledger, como se hizo con
+`ground-truth/photo-baseline.json` para las fotos.
