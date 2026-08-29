@@ -41,17 +41,48 @@ async function discoverWsUrl() {
   // 3) no hay app → lanzarla con CDP habilitado y esperar el target
   if (!process.env.E2E_NO_LAUNCH) {
     if (!require('fs').existsSync(EXE)) throw new Error(`Sin build: ${EXE} (corré npx tauri build --no-bundle)`);
-    spawn(EXE, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${DEBUG_PORT}` }, detached: true, stdio: 'ignore' }).unref();
-    for (let i = 0; i < 30; i++) {
+    // --remote-allow-origins: desde Chromium 111 el endpoint de DevTools rechaza
+    // el upgrade de WebSocket si el origen no esta permitido, asi que sin este
+    // flag el target aparece en /json pero la conexion WS cae igual.
+    const cdpArgs = `--remote-debugging-port=${DEBUG_PORT} --remote-allow-origins=*`;
+    let child;
+    try {
+      child = spawn(EXE, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: cdpArgs }, detached: true, stdio: 'ignore' });
+    } catch (e) {
+      throw new Error(`No se pudo lanzar ${EXE}: ${e.message}`);
+    }
+    child.on('error', (e) => console.error(`spawn error en ${EXE}: ${e.message}`));
+    child.unref();
+    // En un runner frio la app puede tardar en levantar WebView2 (el defensor
+    // escaneando un .exe de ~8 MB a primera ejecucion). 30s era poco y ademas no
+    // decia nada: se reporta si el proceso sobrevivio y que respondio el endpoint
+    // para distinguir "no arranco" de "arranco sin CDP".
+    const tries = Number(process.env.E2E_LAUNCH_TRIES || 60);
+    let lastErr = null;
+    let lastStatus = 'nunca respondio';
+    for (let i = 0; i < tries; i++) {
       await new Promise(r => setTimeout(r, 1000));
+      if (child.exitCode !== null) {
+        throw new Error(`${EXE} salio con code ${child.exitCode} antes de exponer CDP (segundos: ${i + 1})`);
+      }
       try {
         const res = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`);
+        lastStatus = `HTTP ${res.status}`;
         const list = await res.json();
         const page = list.find(t => t.type === 'page');
         if (page) return page.webSocketDebuggerUrl;
-      } catch {}
+        lastStatus = `HTTP ${res.status}, ${list.length} targets (ninguno type=page)`;
+      } catch (e) {
+        lastErr = e;
+        lastStatus = `${e.code || 'fetch'}: ${e.message}`;
+      }
     }
-    throw new Error(`No apareció el target CDP en :${DEBUG_PORT} tras lanzar la app`);
+    const alive = child.exitCode === null;
+    throw new Error(
+      `No aparecio el target CDP en :${DEBUG_PORT} tras ${tries}s. ` +
+      `proceso=${alive ? 'vivo' : 'muerto(code ' + child.exitCode + ')'} endpoint=${lastStatus}` +
+      (lastErr ? ` ultimo=${lastErr.message}` : '')
+    );
   }
   throw new Error(`Sin target CDP en :${DEBUG_PORT}`);
 }
