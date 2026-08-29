@@ -42,10 +42,22 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # --no-bundle: alcanza con el .exe para el smoke y evita exigir los
-      # secrets de firma del updater (viven solo en release.yml).
-      - name: Build the app binary
-        run: npx tauri build --no-bundle
+      # e2e:build = --no-bundle (no exige los secrets de firma del updater, que
+      # viven solo en release.yml) + src-tauri/tauri.e2e.conf.json.
+      #
+      # Ese config extra es obligatorio, no un lujo: wry crea el entorno de
+      # WebView2 pasando su propio additionalBrowserArgs, y con esa opcion presente
+      # WebView2 IGNORA WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS. Las dos primeras
+      # corridas del job lo probaron: binario construido, proceso vivo, y el
+      # puerto 9222 cerrado durante 60s. Los args van aca y no en tauri.conf.json
+      # porque distribuir un binario con DevTools abierto deja que cualquier
+      # proceso local lea y escriba los datos de la app.
+      #
+      # Si se bumpéa el identifier en tauri.conf.json, actualizarlo aca tambien:
+      # el schema raiz lo exige (Config.required) y un valor distinto cambiaria el
+      # $APPDATA que prueba el smoke.
+      - name: Build the app binary (with CDP browser args)
+        run: npm run e2e:build
 
       - name: E2E smoke over CDP
         run: node scripts/e2e-smoke.js

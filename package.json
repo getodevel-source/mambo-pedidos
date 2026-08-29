@@ -14,6 +14,7 @@
     "check:version": "node scripts/bump-version.js --check",
     "test": "node scripts/run-tests.js",
     "e2e": "node scripts/e2e-smoke.js",
+    "e2e:build": "tauri build --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
     "audit": "node scripts/quality-pipeline.js --verbose",
     "audit:quick": "node scripts/quality-pipeline.js",

@@ -40,10 +40,15 @@ async function discoverWsUrl() {
   } catch {}
   // 3) no hay app → lanzarla con CDP habilitado y esperar el target
   if (!process.env.E2E_NO_LAUNCH) {
-    if (!require('fs').existsSync(EXE)) throw new Error(`Sin build: ${EXE} (corré npx tauri build --no-bundle)`);
-    // --remote-allow-origins: desde Chromium 111 el endpoint de DevTools rechaza
-    // el upgrade de WebSocket si el origen no esta permitido, asi que sin este
-    // flag el target aparece en /json pero la conexion WS cae igual.
+    if (!require('fs').existsSync(EXE)) throw new Error(`Sin build: ${EXE} (corré npm run e2e:build)`);
+    // Los flags van en el WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS de abajo solo
+    // como respaldo: wry construye el entorno de WebView2 pasando su propio
+    // additionalBrowserArgs (--disable-features=msWebOOUI,msPdfOOUI,...) y cuando
+    // esa opcion esta presente WebView2 IGNORA la variable de entorno. Por eso el
+    // binario del smoke tiene que salir de `npm run e2e:build`, que fija los args
+    // (incluidos los de wry) en src-tauri/tauri.e2e.conf.json. --remote-allow-
+    // origins hace falta ademas: desde Chromium 111 el endpoint rechaza el upgrade
+    // de WebSocket si el origen no esta permitido.
     const cdpArgs = `--remote-debugging-port=${DEBUG_PORT} --remote-allow-origins=*`;
     let child;
     try {
@@ -81,7 +86,10 @@ async function discoverWsUrl() {
     throw new Error(
       `No aparecio el target CDP en :${DEBUG_PORT} tras ${tries}s. ` +
       `proceso=${alive ? 'vivo' : 'muerto(code ' + child.exitCode + ')'} endpoint=${lastStatus}` +
-      (lastErr ? ` ultimo=${lastErr.message}` : '')
+      (alive
+        ? '. Proceso vivo y puerto cerrado = el binario NO se construyo con los args'
+          + ' de CDP: corré `npm run e2e:build` (ver src-tauri/tauri.e2e.conf.json)'
+        : '') + (lastErr ? ` ultimo=${lastErr.message}` : '')
     );
   }
   throw new Error(`Sin target CDP en :${DEBUG_PORT}`);
