@@ -625,8 +625,12 @@ async function testImportWizard() {
 
   // ── Estado guardado viejo (sin campos nuevos) → defaults preservados ──
   resetWizardState();
+  // persistence-fix: hay que limpiar TAMBIEN la clave nueva, si no el state
+  // auto-guardado por los tests anteriores gana y la migracion de CACHE_KEY
+  // no se ejercita nunca.
+  localStorage.removeItem(ImportWizard._stateKey());
   localStorage.setItem(ImportWizard.CACHE_KEY, JSON.stringify({ regimen: 'courier', seguro: 0.02 }));
-  ImportWizard.open();
+  await ImportWizard.open();
   check('wizard: estado viejo sin campos nuevos mantiene defaults (precioLocalUsd null, bpPct 0)',
     ImportWizard.state.precioLocalUsd === null && ImportWizard.state.bpPct === 0 && ImportWizard.state.seguroUsdOverride === null);
   check('wizard: merge conserva campos del estado viejo (seguro 0.02)',

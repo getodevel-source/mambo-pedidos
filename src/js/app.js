@@ -43,10 +43,23 @@ function hasCatalogImage(value) {
 }
 
 let catalogSaveTimer = null;
+// persistence-fix: el autosave solo hacía console.error, así que un fallo del
+// backend real (ahora lanza en vez de despojar imágenes) era invisible para el
+// usuario. Se avisa una vez por mensaje distinto para no spammar el debounce.
+let catalogSaveError = null;
 function scheduleCatalogSave() {
   clearTimeout(catalogSaveTimer);
   catalogSaveTimer = setTimeout(() => {
-    AppStorage.saveCatalog(catalog, selection).catch(err => console.error('No se pudo persistir el catálogo:', err));
+    AppStorage.saveCatalog(catalog, selection).then(() => {
+      catalogSaveError = null;
+    }).catch(err => {
+      const msg = (err && err.message) || String(err);
+      console.error('No se pudo persistir el catálogo:', err);
+      if (msg !== catalogSaveError && typeof toast === 'function') {
+        catalogSaveError = msg;
+        toast('No se pudo guardar el catálogo: ' + msg, 'error');
+      }
+    });
   }, 150);
 }
 

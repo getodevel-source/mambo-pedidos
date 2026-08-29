@@ -1169,7 +1169,15 @@ if (typeof window !== "undefined") {
         .then(() => {
           console.log("💾 Catálogo guardado con las correcciones.");
         })
-        .catch((e) => console.warn("No se pudo guardar:", e));
+        .catch((e) => {
+          console.warn("No se pudo guardar:", e);
+          // persistence-fix: este comando deja el catalogo corregido en memoria; si el
+          // guardado falla la UI muestra algo que no esta persistido. Aviso visible
+          // ademas del log de consola.
+          if (typeof toast === "function") {
+            toast("No se pudo guardar el catálogo corregido: " + ((e && e.message) || e), "error");
+          }
+        });
     }
 
     window.auditReport = after;

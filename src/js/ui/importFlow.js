@@ -446,7 +446,17 @@ const ImportFlow = {
       }
     }
 
-    await AppStorage.saveCatalog(catalog, selection);
+    // persistence-fix: saveCatalog lanza si el backend real no puede escribir
+    // (en desktop ya no despoja imágenes en silencio). Aun así se pinta lo
+    // importado — está en memoria y es lo que el usuario quiere ver — pero el
+    // aviso final pasa a 'error': decir 'success' con datos sin guardar miente.
+    let saveError = null;
+    try {
+      await AppStorage.saveCatalog(catalog, selection);
+    } catch (e) {
+      saveError = (e && e.message) || String(e);
+      console.error('No se pudo persistir el catálogo:', e);
+    }
     showCatalogContent();
     populateCatalogFilters();
     renderCatalog();
@@ -456,7 +466,7 @@ const ImportFlow = {
     if (updatedCount > 0) msg += `, ${updatedCount} precios actualizados`;
     if (skippedCount > 0) msg += ` (${skippedCount} sin cambios)`;
 
-    toast(msg, 'success');
+    toast(saveError ? msg + ' — ⚠️ NO se pudo guardar: ' + saveError : msg, saveError ? 'error' : 'success');
   }
 };
 

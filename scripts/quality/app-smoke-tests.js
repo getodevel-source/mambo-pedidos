@@ -797,6 +797,53 @@ async function testKeydownHandlers() {
 // ============================================
 //  17) showValidationPanel / hideValidationPanel (directo)
 // ============================================
+// ── persistence-fix: el autosave no puede fallar en silencio ─────────────
+// scheduleCatalogSave() antes solo hacia console.error: con el backend real
+// de Tauri (que ahora lanza en vez de despojar imagenes para caber en cuota)
+// eso significaba perder el guardado sin que el usuario lo vea.
+async function testCatalogSaveErrorSurfaced() {
+  const prevSave = global.AppStorage.saveCatalog;
+  const toastEl = dom.window.document.getElementById('toast');
+  if (!toastEl) {
+    check('scheduleCatalogSave: fixture con #toast presente', false);
+    return;
+  }
+  const probe = 'PRUEDA-CUOTA-' + Date.now();
+  try {
+    // 1) el backend falla -> tiene que aparecer un toast de error con la causa
+    toastEl.className = 'toast';
+    toastEl.textContent = '';
+    global.AppStorage.saveCatalog = () => Promise.reject(new Error(probe));
+    ctx('scheduleCatalogSave()');
+    await new Promise((r) => setTimeout(r, 300));
+    check(
+      'scheduleCatalogSave: fallo de persistencia se avisa como toast de error',
+      /(^|\s)error(\s|$)/.test(toastEl.className) && toastEl.textContent.includes(probe)
+    );
+
+    // 2) un guardado exitoso posterior limpia el estado de aviso
+    toastEl.className = 'toast';
+    toastEl.textContent = '';
+    global.AppStorage.saveCatalog = () => Promise.resolve();
+    ctx('scheduleCatalogSave()');
+    await new Promise((r) => setTimeout(r, 300));
+    check('scheduleCatalogSave: guardado exitoso no dispara avisos', toastEl.textContent === '');
+
+    // 3) despues del exito vuelve a avisar (el flag se limpio, no se silenció)
+    global.AppStorage.saveCatalog = () => Promise.reject(new Error(probe + '-2'));
+    ctx('scheduleCatalogSave()');
+    await new Promise((r) => setTimeout(r, 300));
+    check(
+      'scheduleCatalogSave: reavisa un fallo despues de un guardado bueno',
+      /(^|\s)error(\s|$)/.test(toastEl.className) && toastEl.textContent.includes(probe + '-2')
+    );
+  } finally {
+    global.AppStorage.saveCatalog = prevSave;
+    toastEl.className = 'toast';
+    toastEl.textContent = '';
+  }
+}
+
 function testValidationPanelDirect() {
   global.showValidationPanel(
     [{ field: 'sku', message: 'SKU inválido' }],
@@ -850,6 +897,7 @@ function testIndexHtmlImportsShell() {
   try { await testDolarRates(); } catch (e) { failSection('fetchLiveDolarRates/dólar', e); }
   try { testUpdateProductImage(); } catch (e) { failSection('updateProductImage', e); }
   try { await testKeydownHandlers(); } catch (e) { failSection('keydown handlers', e); }
+  try { await testCatalogSaveErrorSurfaced(); } catch (e) { failSection('scheduleCatalogSave persistencia'); }
   try { testValidationPanelDirect(); } catch (e) { failSection('showValidationPanel/hideValidationPanel', e); }
   try { testIndexHtmlImportsShell(); } catch (e) { failSection('index.html shell importaciones', e); }
 
