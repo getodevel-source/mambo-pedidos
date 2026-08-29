@@ -18,7 +18,9 @@
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
     "audit": "node scripts/quality-pipeline.js --verbose",
     "audit:quick": "node scripts/quality-pipeline.js",
-    "audit:full": "node scripts/audit-app.js --json audit-app-report.json"
+    "audit:full": "node scripts/audit-app.js --json audit-app-report.json",
+    "photo:baseline": "node scripts/photo-baseline.js catalog-export.json --json ground-truth/photo-baseline.json",
+    "photo:check": "node scripts/photo-baseline.js catalog-export.json --check --min-avg 300 --max-under-150 1"
   },
   "keywords": [
     "mambo",

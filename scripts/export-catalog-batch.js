@@ -14,7 +14,10 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 
-const CATALOG_DIR = "C:\\Mambo\\Catalogos";
+// Mismo knob que audit-app.js / ground-truth.js / measure-extraction.js.
+// Sin esto este era el unico script del corpus que no se podia apuntar a
+// otra carpeta, y el re-export de photo-quality parecia bloqueado.
+const CATALOG_DIR = process.env.MAMBO_CATALOG_DIR || "C:\\Mambo\\Catalogos";
 const OUTPUT = process.argv[2] || "catalog-export.json";
 
 /* ------------------------------------------------------------------ *
@@ -291,7 +294,7 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
  * ------------------------------------------------------------------ */
 (async () => {
 	if (!fs.existsSync(CATALOG_DIR)) {
-		console.error(`❌ La carpeta ${CATALOG_DIR} no existe`);
+		console.error(`❌ La carpeta ${CATALOG_DIR} no existe (set MAMBO_CATALOG_DIR)`);
 		process.exit(1);
 	}
 	const files = fs

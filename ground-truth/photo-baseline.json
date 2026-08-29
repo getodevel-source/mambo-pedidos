@@ -1,0 +1,129 @@
+{
+  "generatedAt": "2026-08-29T18:06:11.918Z",
+  "source": "catalog-export.json",
+  "products": 2170,
+  "withImage": 2147,
+  "placeholder": 23,
+  "invalidImage": 0,
+  "decodeFailed": 0,
+  "measured": 2147,
+  "uniqueImages": 1904,
+  "duplicatedImages": 196,
+  "duplicatedUses": 439,
+  "shortSide": {
+    "avg": 178.8,
+    "median": 169,
+    "min": 13,
+    "p10": 113,
+    "p90": 280,
+    "max": 300
+  },
+  "under": {
+    "lt150": 765,
+    "lt150Pct": 35.6,
+    "lt300": 2122,
+    "lt300Pct": 98.8,
+    "ge300Pct": 1.2
+  },
+  "imagePayloadMB": 99.2,
+  "byBrand": [
+    {
+      "brand": "madlions",
+      "n": 54,
+      "avg": 134.1,
+      "min": 102,
+      "under150Pct": 74.1
+    },
+    {
+      "brand": "atk",
+      "n": 228,
+      "avg": 143.6,
+      "min": 13,
+      "under150Pct": 55.7
+    },
+    {
+      "brand": "mars",
+      "n": 15,
+      "avg": 149.3,
+      "min": 114,
+      "under150Pct": 66.7
+    },
+    {
+      "brand": "aula",
+      "n": 351,
+      "avg": 156.6,
+      "min": 62,
+      "under150Pct": 53.6
+    },
+    {
+      "brand": "razer",
+      "n": 278,
+      "avg": 163.6,
+      "min": 64,
+      "under150Pct": 26.6
+    },
+    {
+      "brand": "vgn",
+      "n": 171,
+      "avg": 170.9,
+      "min": 105,
+      "under150Pct": 50.3
+    },
+    {
+      "brand": "mchose",
+      "n": 212,
+      "avg": 173.1,
+      "min": 118,
+      "under150Pct": 13.7
+    },
+    {
+      "brand": "irok",
+      "n": 83,
+      "avg": 177,
+      "min": 113,
+      "under150Pct": 43.4
+    },
+    {
+      "brand": "ajazz",
+      "n": 284,
+      "avg": 185.6,
+      "min": 97,
+      "under150Pct": 43.7
+    },
+    {
+      "brand": "attack shark",
+      "n": 208,
+      "avg": 190.2,
+      "min": 99,
+      "under150Pct": 17.3
+    },
+    {
+      "brand": "8bitdo",
+      "n": 87,
+      "avg": 223,
+      "min": 99,
+      "under150Pct": 9.2
+    },
+    {
+      "brand": "royal kludge",
+      "n": 55,
+      "avg": 244.2,
+      "min": 105,
+      "under150Pct": 12.7
+    },
+    {
+      "brand": "kz",
+      "n": 88,
+      "avg": 292.8,
+      "min": 163,
+      "under150Pct": 0
+    },
+    {
+      "brand": "haimu",
+      "n": 33,
+      "avg": 296.2,
+      "min": 245,
+      "under150Pct": 0
+    }
+  ]
+}
