@@ -96,6 +96,7 @@ mambo-pedidos/
 │   └── test-geometry-dump.js   # Diagnóstico de geometría PDF
 ├── .github/workflows/
 │   ├── ci.yml                  # CI: tests + lint + sintaxis
+│   ├── e2e-windows.yml         # CI: app real compilada + e2e por CDP
 │   └── release.yml             # CI/CD multi-platform (build + firma + release)
 ```
 
@@ -118,7 +119,21 @@ node scripts/test-spatial-import.js
 
 # Verificar coherencia de versión
 node scripts/bump-version.js
+
+# E2E sobre la app real (Tauri + WebView2): exige el binario compilado.
+# Verifica el puente de plugins y que la persistencia no caiga a localStorage.
+npm run e2e
 ```
+
+### Persistencia
+
+En desktop los datos viven en `$APPDATA/com.mambo.pedidos`: el catálogo en el
+store de Tauri (`.mambo-store.json`) y las imágenes como archivos en `images/`.
+El acceso a los plugins de Tauri v2 pasa por `src/bridge/tauri-bridge.mjs`, que
+`build-frontend.js` compila a `dist/vendor/tauri-bridge.js`; sin ese puente la
+app cae a `localStorage` (cuota ~5 MB y degradado de imágenes), y el job
+`e2e-windows` de CI lo detecta. `await AppStorage.diagnostics()` en la consola
+de la app debe responder `{ mode: "tauri", storeReady: true, imagesDir: ... }`.
 
 ---
 

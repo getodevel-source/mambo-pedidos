@@ -4,14 +4,17 @@
 Este repo se trabaja con VARIAS sesiones de agente en paralelo sobre el
 mismo working tree (misma carpeta en disco). Reglas:
 
-1. **FASE 2 (table-parser)**: `src/js/pdfParser.js` lo está reescribiendo
-   otra sesión siguiendo `openspec/changes/table-parser-column-detection/`.
-   NO tocar `src/js/pdfParser.js` ni `scripts/ground-truth.js`,
-   `scripts/measure-model-quality.js`, `scripts/measure-extraction.js`,
-   `ground-truth/` ni `openspec/` salvo que esa fase esté cerrada.
+1. **FASE 2 (table-parser): CERRADA.** El feature quedó en `c885081` y el
+   change se archivó en `3e8a8f9` (ver `PONYTAIL_AUDIT.md`, sección
+   "Decisions (user)"). La regla sigue vigente para cualquier fase que se
+   reabra sobre estos archivos: NO tocar `src/js/pdfParser.js`,
+   `scripts/ground-truth.js`, `scripts/measure-model-quality.js`,
+   `scripts/measure-extraction.js`, `ground-truth/` ni `openspec/` mientras
+   otra sesión los tenga activos. Antes de editarlos, confirmar que no hay
+   fase abierta (preguntar en la sesión dueña, no asumir).
 2. **Archivos scratch de FASE 2**: `scripts/_dbg_*`, `scripts/_splice*`,
    `scripts/_t1.js` son debug (ignorados en git y lint). No commitearlos.
-3. **Commit/push final**: cuando la FASE 2 cierre, UNA sola sesión hace:
+3. **Commit/push final**: cuando cierra una fase, UNA sola sesión hace:
    `git status` (confirmar que no quede trabajo sin guardar de otra
    sesión) → `git add -A` → `git commit` → `git push`. No hace falta
    repetirlo en cada sesión: git es estado del repo, no de la sesión.
@@ -38,16 +41,22 @@ Lazy about the solution, NEVER lazy about reading: read the code the change touc
 trace the real flow before picking a rung. Never cut validation, error handling,
 security, or accessibility to shrink code.
 
-Scoped audit: ponytail review/audit covers only non-FASE-2 areas. DO NOT touch
-`src/js/pdfParser.js`, `scripts/ground-truth.js`, `scripts/measure-model-quality.js`,
-`scripts/measure-extraction.js`, `ground-truth/`, `openspec/` (owned by the parallel
-FASE 2 session), and never commit `scripts/_dbg_*`, `scripts/_splice*`, `scripts/_t1.js`.
+Scoped audit: FASE 2 is closed, so those files are no longer owned by another
+session — but they are the extraction core: read before touching and keep the
+ground-truth gates (`scripts/ground-truth.js` vs `ground-truth/verdicts.json` y
+`scripts/measure-model-quality.js`) sin regresión. Never commit `scripts/_dbg_*`,
+`scripts/_splice*`, `scripts/_t1.js` (scratch).
 
 ## Verificación estándar
-- `npm run test` (660 tests) · `npm run lint` (0 errores) · `npm run check:version`
-- Gates de FASE 2 (antes de cerrar): `scripts/ground-truth.js` + diff contra
-  `ground-truth/verdicts.json` y `scripts/measure-model-quality.js` sin
-  regresión (ver tasks.md de la FASE 2).
+- `npm run test` (1.472 aserciones en 4 suites: 1.003 unitarias + 101 de UI
+  smoke + 239 de lógica + 129 de `app.js` en jsdom) · `npm run lint`
+  (0 errores) · `npm run check:version` · `npm run build:frontend`
+- `npm run e2e` es lo único que verifica el runtime real (Tauri + WebView2):
+  requiere el binario compilado (`src-tauri/target/release/`), así que corre
+  en el job `e2e-windows` de CI, no en cualquier máquina. Cubre el puente de
+  plugins y `AppStorage.mode === 'tauri': si ese job está verde, la
+  persistencia real funciona; si alguien lo rompe, el fallback silencioso a
+  localStorage vuelve a existir sin que nadie se entere.
 
 ## Estilo de commits
 Conventional Commits, uno por tema: `feat(ui): ...`, `fix(pipeline): ...`,

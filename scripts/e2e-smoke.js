@@ -8,7 +8,9 @@
  *   1. Consola/excepciones limpias al load.
  *   2. Botones de navegación vivos (tamaño>0) y click real cambia la vista.
  *   3. Store real del plugin (no null, no fallback silencioso) + roundtrip.
- *   4. Catálogo carga filas.
+ *   4. Puente de plugins (window.MamboTauriBridge), AppStorage.mode='tauri' y
+ *      roundtrip de una imagen real por images/ en $APPDATA.
+ *   5. Catálogo carga filas.
  *
  * Exit: 0 = todo OK; 1 = hay bugs; 2 = error de harness.
  * Uso:
@@ -125,25 +127,51 @@ async function main() {
   await realClick(client, '.nav-item[data-view=catalogo]');
   await new Promise(r => setTimeout(r, 400));
 
-  // 3) store real + roundtrip
-  const storeInfo = await rc(client, `(async () => {
-    const s = window.AppStorage ? (await window.AppStorage.init()) : null;
-    const inst = window.AppStorage ? window.AppStorage.storeInstance : null;
-    if (!inst || typeof inst.set !== 'function') return { storeNull: true };
+  // 3) puente de plugins + store real + roundtrip de imagen en images/
+  const persist = await rc(client, `(async () => {
+    const A = window.AppStorage, B = window.MamboTauriBridge;
+    const fsOk = !!(B && B.fs && B.fs.ensureDir && B.fs.writeBytes && B.fs.readBytes && B.fs.remove && B.fs.exists);
+    const out = { bridgePresent: !!B, inTauri: !!(B && B.inTauri), fsOk: fsOk, mode: A ? (A.mode || null) : null, storeNull: true, roundtrip: false, imageRoundtrip: false, imagesProbed: false, imagesDir: null, persistenceError: A ? (A.persistenceError || null) : null, err: null };
+    if (!A) return out;
     try {
-      const k = '_e2e_probe_' + Date.now();
-      await inst.set(k, { ok: true });
-      const read = await inst.get(k);
-      await inst.save();
-      await inst.reload();
-      const read2 = await inst.get(k);
-      await inst.delete(k);
-      await inst.save();
-      return { storeNull: false, roundtrip: read && read.ok && read2 && read2.ok };
-    } catch (e) { return { storeNull: false, roundtrip: false, err: String(e) }; }
+      await A.init();
+      out.mode = A.mode || null;
+      out.storeNull = !A.storeInstance;
+      if (typeof A.diagnostics === 'function') { const d = await A.diagnostics(); out.imagesDir = d.imagesDir || null; out.inTauri = !!d.inTauri; out.persistenceError = A.persistenceError || null; }
+      if (A.storeInstance && typeof A.storeInstance.set === 'function') {
+        const k = '_e2e_probe_' + Date.now();
+        await A.storeInstance.set(k, { ok: true });
+        const read = await A.storeInstance.get(k);
+        await A.storeInstance.save();
+        await A.storeInstance.reload();
+        const read2 = await A.storeInstance.get(k);
+        await A.storeInstance.delete(k);
+        await A.storeInstance.save();
+        out.roundtrip = !!(read && read.ok && read2 && read2.ok);
+      }
+      // Imagen: el mismo camino real (dataURL -> bytes -> images/ -> bytes ->
+      // dataURL). NO se usa saveCatalog a proposito: su garbage collect
+      // borraria los archivos del catalogo verdadero del usuario.
+      if (out.inTauri && fsOk) {
+        const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+        const rel = 'images/_e2e_probe_' + Date.now() + '.png';
+        out.imagesProbed = true;
+        await B.fs.ensureDir('images');
+        await B.fs.writeBytes(rel, A._dataUrlToBytes(png));
+        const back = A._bytesToDataUrl(await B.fs.readBytes(rel), 'png');
+        await B.fs.remove(rel);
+        out.imageRoundtrip = back === png && !(await B.fs.exists(rel));
+      }
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
   })()`);
-  if (storeInfo.storeNull) bugs.push('store: AppStorage.storeInstance es null (fallback silencioso a localStorage)');
-  else if (!storeInfo.roundtrip) bugs.push('store: roundtrip set/get/save/reload falló' + (storeInfo.err ? ': ' + storeInfo.err : ''));
+  if (!persist.bridgePresent) bugs.push('puente: window.MamboTauriBridge NO existe (falta dist/vendor/tauri-bridge.js o se cargo despues de js/storage.js)');
+  else if (!persist.inTauri) bugs.push('puente: MamboTauriBridge.inTauri=false (el bridge se evaluo fuera del runtime Tauri)');
+  if (!persist.fsOk) bugs.push('puente: MamboTauriBridge.fs no expone ensureDir/writeBytes/readBytes/remove/exists');
+  if (persist.mode !== 'tauri') bugs.push('modo: AppStorage.mode=' + JSON.stringify(persist.mode) + ' (esperado "tauri": fallback silencioso a localStorage)' + (persist.persistenceError ? ' — ' + persist.persistenceError : ''));
+  if (persist.storeNull) bugs.push('store: AppStorage.storeInstance es null (fallback silencioso a localStorage)');
+  else if (!persist.roundtrip) bugs.push('store: roundtrip set/get/save/reload falló' + (persist.err ? ': ' + persist.err : ''));
+  if (persist.imagesProbed && !persist.imageRoundtrip) bugs.push('imagenes: roundtrip por images/ en disco falló' + (persist.err ? ': ' + persist.err : ''));
 
   // 4) catálogo carga filas
   await rc(client, `(() => { try { typeof loadDemoCatalog === 'function' && loadDemoCatalog(); } catch(e){} })()`);
@@ -158,8 +186,13 @@ async function main() {
     const s = navStatus[v];
     console.log(`  nav "${v}" ........................ ${s.click.clicked ? '✅' : '❌'} (${s.before}→${s.after})`);
   }
-  console.log('  store real (no null) ........... ' + (storeInfo.storeNull ? '❌ null' : '✅'));
-  console.log('  store roundtrip persist ........ ' + (storeInfo.roundtrip ? '✅' : '❌'));
+  console.log('  puente MamboTauriBridge ...... ' + (persist.bridgePresent ? (persist.inTauri ? '✅' : '❌ inTauri=false') : '❌ ausente'));
+  console.log('  AppStorage.mode .............. ' + (persist.mode === 'tauri' ? '✅ tauri' : '❌ ' + JSON.stringify(persist.mode)));
+  console.log('  store real (no null) ......... ' + (persist.storeNull ? '❌ null' : '✅'));
+  console.log('  store roundtrip persist ...... ' + (persist.roundtrip ? '✅' : '❌'));
+  console.log('  images/ roundtrip en disco ... ' + (!persist.imagesProbed ? '— (sin fs en el puente)' : (persist.imageRoundtrip ? '✅' : '❌')));
+  console.log('  $APPDATA (base de images/) ... ' + (persist.imagesDir || '❌ sin resolver'));
+  if (persist.persistenceError) console.log('  persistenceError ............. ' + persist.persistenceError);
   console.log('  catálogo carga filas ........... ' + (rows ? `✅ (${rows})` : '❌ 0'));
   if (logSkips.length) console.log('  (detalle: ' + logSkips.join('; ') + ')');
 

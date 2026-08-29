@@ -1,0 +1,67 @@
+name: E2E Smoke (real Tauri app)
+
+# Los unit/smoke de Node no pueden ver el runtime Tauri: el puente de plugins
+# (src/bridge/tauri-bridge.mjs) y el modo 'tauri' de AppStorage solo se
+# comprueban contra la app compilada corriendo en WebView2 de verdad. Este job
+# es el unico que puede decir "la persistencia real funciona", y existe para que
+# el fallback silencioso a localStorage no pueda volver sin que se note.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-windows:
+    name: Persistencia real (Windows + WebView2 + CDP)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # --no-bundle: alcanza con el .exe para el smoke y evita exigir los
+      # secrets de firma del updater (viven solo en release.yml).
+      - name: Build the app binary
+        run: npx tauri build --no-bundle
+
+      - name: E2E smoke over CDP
+        run: node scripts/e2e-smoke.js
+
+      # Si falla, sin evidencia no se puede distinguir "el bridge no cargo" de
+      # "WebView2 no levanto en el runner".
+      - name: Leave evidence on failure
+        if: failure()
+        run: |
+          echo "--- dist/vendor/tauri-bridge.js ---"
+          if (Test-Path dist/vendor/tauri-bridge.js) {
+            Get-Item dist/vendor/tauri-bridge.js | Select-Object Length, FullName
+            Select-String -Path dist/index.html -Pattern 'tauri-bridge' -SimpleMatch
+          } else {
+            echo "NO EXISTE dist/vendor/tauri-bridge.js"
+          }
+          echo "--- binario ---"
+          Get-ChildItem src-tauri/target/release/*.exe | Select-Object Name, Length
+        shell: pwsh
