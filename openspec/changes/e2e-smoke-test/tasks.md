@@ -22,11 +22,11 @@ Reutilizar el cableado de `scripts/_dbg_audit_full.js` (conexión WS, `send`,
 
 ## U5 — Cablear npm
 - [x] `package.json` → `"e2e": "node scripts/e2e-smoke.js"`.
-- [ ] `npm run e2e` exit 0 con la app real corriendo. (ver nota abajo)
+- [x] `npm run e2e` exit 0 con la app real corriendo. (ejecutado en CI, ver cierre)
 
 ## U6 — Loop de auditoría hasta 0 bugs
 - [ ] Correr `npm run e2e` + `npm run audit:full` sobre la app/catálogo reales.
-- [ ] Registrar bugs, arreglar, re-correr hasta 0.
+- [x] Registrar bugs, arreglar, re-correr hasta 0. (1 bug: ver cierre)
 
 ## Reconciliación 2026-08-29 (corrección de una claim falsa)
 
@@ -54,3 +54,40 @@ Qué cambió desde entonces:
   sobrevive al roundtrip por `images/` en disco.
 - Falta la otra mitad de U6: `npm run audit:full` no deja artefacto en el repo
   (`audit-app-report.json` no existe), así que su resultado sigue sin registrar.
+
+## Cierre 2026-08-29 (ejecución real, no lectura del harness)
+
+El job `e2e-windows` pasó verde sobre `ed16ad0` (run 33261587381, Windows +
+WebView2 + CDP, 8m47s): `E2E PASS — 0 bugs de integracion`, con
+`consola limpia al load ✅`, `puente MamboTauriBridge ✅`,
+`AppStorage.mode ✅ tauri`, `store real (no null) ✅`,
+`store roundtrip persist ✅`, `images/ roundtrip en disco ✅` y
+`catálogo carga filas ✅ (36)`. La base real de las imágenes:
+`%APPDATA%\com.mambo.pedidos`.
+
+Para llegar hubo que arreglar tres cosas del arnés y una de la app, todas
+evidencia de que "existe el probe" no es "el probe pasó":
+
+1. `fix(e2e)` 766374b — el puerto nunca abría: wry pasa su propio
+   `additionalBrowserArgs` y con esa opción presente WebView2 ignora
+   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`. Va en
+   `src-tauri/tauri.e2e.conf.json` (build dedicado `npm run e2e:build`), no en
+   `tauri.conf.json`: distribuir el binario con DevTools abierto deja que
+   cualquier proceso local lea y escriba los datos de la app.
+2. `fix(e2e)` 699025e — Node 20 no tiene `WebSocket` global; el runner llegaba a
+   descubrir el target y reventaba ahí.
+3. El probe ahora se explica solo (salida con proceso/endpoint) y no usa
+   `saveCatalog` para tocar disco, porque el GC del catálogo ajeno.
+4. `fix(browser)` ed16ad0 — **el bug de la app**: el gate de consola al load
+   encontró `SyntaxError: Identifier COLOR_KEEP_WORDS has already been
+   declared`. Dos `<script>` clásicos lo declaraban y textSanitizer.js se carga
+   antes, así que `imageTextGates.js` no se ejecutaba NUNCA en desktop. Como
+   todos los consumidores se guardan con `typeof`, el efecto fue silencioso:
+   `ImageTextGates.runAll` (color interior + aspect por categoría) nunca corrió
+   en el import y `sampleInteriorColor` tampoco en el parser.
+
+U6 sigue abierta en su primera caja: `npm run audit:full` sobre el catalogo real.
+Verificado hoy: tampoco es ejecutable aca. `npm run audit:quick` falla porque
+`scripts/audit-app.js` exige el corpus de los 13 PDFs (`C:\Mambo\Catalogos`,
+o `MAMBO_CATALOG_DIR`), que no esta en esta maquina, y no hay ningun
+`audit-app-report.json` versionado que sirva de baseline.

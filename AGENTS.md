@@ -48,15 +48,19 @@ ground-truth gates (`scripts/ground-truth.js` vs `ground-truth/verdicts.json` y
 `scripts/_splice*`, `scripts/_t1.js` (scratch).
 
 ## Verificación estándar
-- `npm run test` (1.472 aserciones en 4 suites: 1.003 unitarias + 101 de UI
+- `npm run test` (1.475 aserciones en 4 suites: 1.006 unitarias + 101 de UI
   smoke + 239 de lógica + 129 de `app.js` en jsdom) · `npm run lint`
   (0 errores) · `npm run check:version` · `npm run build:frontend`
-- `npm run e2e` es lo único que verifica el runtime real (Tauri + WebView2):
-  requiere el binario compilado (`src-tauri/target/release/`), así que corre
-  en el job `e2e-windows` de CI, no en cualquier máquina. Cubre el puente de
-  plugins y `AppStorage.mode === 'tauri': si ese job está verde, la
-  persistencia real funciona; si alguien lo rompe, el fallback silencioso a
-  localStorage vuelve a existir sin que nadie se entere.
+- `npm run e2e` es lo único que verifica el runtime real (Tauri + WebView2).
+  Local: primero `npm run e2e:build` (compila el binario con
+  `src-tauri/tauri.e2e.conf.json`, que es lo único que expone el puerto de CDP
+  porque wry pasa sus propios `additionalBrowserArgs`) y necesita Node >= 22
+  por el `WebSocket` global. Eso corre solo en el job `e2e-windows` de CI.
+  Cubre el puente de plugins, `AppStorage.mode === 'tauri'`, el roundtrip del
+  store y el de `images/` en `%APPDATA%`, y la consola limpia al load. Ese
+  último ítem ya cazó un `SyntaxError` que Node no puede ver: los `<script>`
+  clásicos comparten el scope léxico global, así que un `const` redeclarado
+  aborta un módulo entero sin tocar las suites.
 
 ## Estilo de commits
 Conventional Commits, uno por tema: `feat(ui): ...`, `fix(pipeline): ...`,
