@@ -105,7 +105,7 @@ verificación de regresión del merge de la otra sesión.
       worker-src 'self' blob:` — VALIDADA en browser (render completo, dolar
       en vivo OK, 0 violaciones CSP, 0 errores JS) y aplicada en
       tauri.conf.json. → P17: 3 → 7.
-- [ ] Pendiente P17: bundler/minify (esbuild) + lazy-load xlsx/pdf.worker —
+- [x] Pendiente P17: bundler/minify (esbuild) + lazy-load xlsx/pdf.worker —
       requiere decisión usuario o iteración dedicada.
 
 ## Estado de la sesión paralela (17:4x, evidencia fresca)
@@ -153,7 +153,7 @@ Objetivo: subir los procesos más bajos restantes (P17=7, P19=6, P4=6, P6=7,
 P8=8) con evidencia. Decisión usuario: P17 = OPCIÓN 2 (golpes cortos, sin
 bundler).
 
-- [ ] WS-P17 (orquestador): lazy-load del stack pdf.js (pdf.min.js 316K +
+- [x] WS-P17 (orquestador): lazy-load del stack pdf.js (pdf.min.js 316K +
       pdf.worker 1.1MB) y xlsx.full.min.js (864K) — SOLO se descargan al
       primer uso real (import PDF / import-export planilla). Nuevo
       src/js/lazyLoaders.js con ensurePdfLib()/ensureXlsxLib() idempotentes;
@@ -165,12 +165,12 @@ bundler).
 - [ ] WS-P4 (orquestador): re-medir húngaro OPT-IN con evidencia fresca:
       8BitDo con HUNGARIAN_P4=1 (time + corpus G/Y/R vs sin flag). Cierre:
       pase 4 corre en segundos, corpus idéntico → P4: 6 → 8 (documentado).
-- [ ] WS-P8 (subagente): cobertura de app.js (877 LOC) con jsdom —
+- [x] WS-P8 (subagente): cobertura de app.js (877 LOC) con jsdom —
       scripts/quality/app-smoke-tests.js (nuevo, standalone): init, switchView,
       badges, dolar banner (fetch mockeado), drag&drop handlers, export/import
       JSON, fix catalog, reset. Cierre: suite standalone PASS, integrada al
       runner, npm test total OK.
-- [ ] WS-P19 (orquestador): re-medir AULA post-fix bilinear (05/08 noche) —
+- [x] WS-P19 (orquestador): re-medir AULA post-fix bilinear (05/08 noche) —
       baseline era 261.7s. Evidencia: time CATALOG_FILTER=Aula. Si mejoró,
       P19: 6 → 7 (deuda (a) pdfjs 5.x, (b) render-based, (c) imágenes solo
       con productos — documentada, requiere tocar pdfParser.js / FASE 2).
@@ -517,3 +517,39 @@ a cualquier PDF) — jamás con reglas por catálogo ni excepciones hardcodeadas
 - [x] **WS-CIERRE P14**: corrida completa post-commit 9e4c44f: **audit PASS G=2250 Y=64 R=0 idéntico a IT11/IT12**, gates FASE 2 idénticos (FP 8%, recall 40%, 44/65 mejoras, 0 regresiones), lint 0/0, npm test 950/950 + build suite → **P14 9 → 10 (2ª iteración sin regresión)**.
 - [x] **LOOP CERRADO**: **18/18 procesos en 10** con evidencia (scorecard IT13, promedio 10.0). Criterio del loop (>=8 con 2 iteraciones) superado desde IT10; meta 10/10 alcanzada.
 - [x] Deuda documentada que NO bloquea el cierre: P1 (pdfParser 2864 LOC main thread), P10 (separadores mixtos AR/US — ambigüedad inherente, decisión aceptada).
+
+## Reconciliación 2026-08-29 (por evidencia de código)
+
+Cerradas por estar implementadas y verificables en el árbol:
+
+- **P17 / WS-P17 (lazy-load)**: `src/js/lazyLoaders.js` define
+  `ensurePdfLib()`/`ensureXlsxLib()`/`ensureNcmDbLib()` idempotentes; la única
+  entrada de PDF (`src/js/ui/importFlow.js:40`) dispara `ensurePdfLib()` antes de
+  `PdfParser.processPdfFile`, y `fileImporter.js` hace lo propio con XLSX (179,
+  194, 293). `src/index.html` no tiene ningún `<script>` estático de
+  `vendor/pdf.min.js` ni `vendor/xlsx.full.min.js`. La minificación vive en
+  `scripts/build-frontend.js` con self-check integrado al runner de tests.
+  Corrección al texto del task: los hooks nombraban `aiCatalogEngine.js`, que no
+  existe en el repo (ver `e6b2470`, que borró la claim de Ollama del README).
+- **WS-P8**: `scripts/quality/app-smoke-tests.js` (866 LOC) carga `app.js` en
+  jsdom y hoy produce 129 asserts integrados en `scripts/run-tests.js`.
+- **WS-P19**: la caja era un duplicado del ítem ya marcado "**WS-P19 MEDIDO**",
+  que registra 259.8s vs 261.7s de baseline y deja la deuda (a) pdfjs 5.x,
+  (b) render-based, (c) imágenes sólo en páginas con productos. El trabajo
+  real sigue abierto más abajo ("FIX REAL P19"), no estaba perdido.
+
+Aclaraciones sobre lo que NO se puede cerrar acá:
+
+- **WS-P4 (húngaro OPT-IN)**: PARCIAL y BLOQUEADO. El tiempo sí se midió
+  (sección CIERRE: 8BitDo con `HUNGARIAN_P4=1` exporta en segundos tras el guard
+  anti-ciclo), pero la comparación de corpus G/Y/R con y sin flag se midió en
+  MCHOSE, no en 8BitDo como pide la caja. Re-medir exige `C:\Mambo\Catalogos`,
+  que no existe en esta máquina.
+- **P6 (Ollama)**: VOID como workstream de calidad. No hay ningún dependiente de
+  Ollama en el código: `grep -ri "ollama|11434|localLlm|aiCatalogEngine" src/`
+  sólo devuelve un comentario en `src/js/pdfParser.js:916` ("Capa A: LLM visión
+  (si Ollama corre)") que describe una capacidad inexistente. Ese comentario
+  está obsoleto y es lo único que queda por corregir; es documentación, no
+  métrica.
+- **FIX REAL P19 / Cierre P19**: siguen abiertos y legítimos. Requieren ventana
+  dedicada sobre `pdfParser.js` (cambia la API de pdf.js) y el corpus de PDFs.

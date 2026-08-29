@@ -23,3 +23,15 @@
 - [ ] UI de búsqueda NCM manual + override por producto en el wizard (F4 avanzado).
 - [ ] Medir recall@1 del autoclasificador sobre muestra etiquetada (métrica de cierre).
 - [ ] Actualización automática de la base (re-descargar arancel.zip en update).
+
+## Reconciliación 2026-08-29
+
+Las 3 cajas abiertas siguen abiertas: verificado por código, no están.
+
+- Override por producto: `state.ncmOverrides` se indexa por categoría
+  (`importWizard.js:288`) y el motor lo lee por categoría (`calculator.js:358`).
+- recall@1 del autoclasificador: ningún número en el repo (`grep recall@1` sólo
+  toca este tasks.md). Medirlo pide muestra etiquetada; `ground-truth/` tiene
+  65 casos de calidad de modelo, no de clasificación NCM.
+- Re-descarga de `arancel.zip`: no existe en `src/js/` ni en `scripts/`; la base
+  es un snapshot congelado de 856 KB en `src/data/ncmDatabase.json`.

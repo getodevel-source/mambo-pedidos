@@ -51,7 +51,7 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
 
 ## Unidad 6 — Verificación final
 
-- [ ] 1. `npm test` + `npm run lint` + `npm run build` 🟢.
+- [x] 1. `npm test` + `npm run lint` + `npm run build` 🟢.
 - [ ] 2. Gates FASE 2 (ground-truth + measure-model-quality) sin regresión.
 - [ ] 3. Auditoría visual: sample de fotos a 300px, nenhua rota.
 - [ ] 4. Commit `chore: photo-quality verified`.
@@ -60,3 +60,27 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
 
 - Mover el parser a Rust (decisión separada, no bloquea calidad).
 - Subir calidad de fotos cuyo nativo en el PDF es <300px (no hay ganancia).
+
+## Reconciliación 2026-08-29 (por evidencia de código y ejecución)
+
+- **Unidad 6.1 CERRADA** con corrida fresca sobre `840d479`: `npm run test` 1.472
+  aserciones en 4 suites (1.003 unitarias + 101 UI smoke + 239 lógica + 129 app
+  jsdom), 0 fallos; `npm run lint` 0 errores; `npm run build:frontend` OK.
+  `npm run build` (tauri) NO corre en esta máquina: no hay toolchain Rust.
+- **Unidad 6.2 PARCIAL**: `scripts/measure-model-quality.js` ejecuta y está en
+  verde contra la meta archivada (`archive/parser-to-10`: recall ≥85%, FP ≤8%) —
+  recall_dirty 100% (40/40, 0 FN), FP_rate_clean 8% (2/25). En cambio
+  `scripts/ground-truth.js` no es ejecutable acá: `ENOENT scandir
+  C:\Mambo\Catalogos`. Ese gate necesita los 13 PDFs originales.
+- **Unidades 1 y 2 BLOQUEADAS, no pendientes a secas**: piden correr
+  `scripts/_dbg_real_audit.js` / `_dbg_real_audit300.js`, que son scratch nunca
+  versionados (hoy no existen) y dependen del mismo `C:\Mambo\Catalogos`
+  ausente. El techo de 300px sí landed (`449bc5f`), y
+  `scripts/export-catalog-batch.js` ya dibuja a 300 (líneas 73 y 214) pero
+  hardcodea `CATALOG_DIR = "C:\Mambo\Catalogos"` (línea 17).
+- **La persistencia de imágenes a archivos estaba rota y se arregló hoy
+  (`06d083c`)**: el Slice 5b llamaba la API v1 del plugin fs y no pasaba
+  `baseDir`, además de un `window.__TAURI__.fs` inexistente en v2. Es decir:
+  "images a archivos" nunca había escrito un solo archivo. Los audits de
+  tamaño/storage de esta unidad se miden sobre un camino que recién ahora
+  funciona, así que el baseline viejo no sirve como referencia de regresión.

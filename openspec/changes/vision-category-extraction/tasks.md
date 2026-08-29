@@ -32,3 +32,14 @@ Strict TDD: fixtures in `src/js/tests.js` FIRST (RED), then implementation (GREE
 - [ ] A.1 Category mis-assignment (mouse↔teclado) no longer produces YELLOW/FP on held-out catalogs.
 - [ ] A.2 GREEN eligible rises with 0 false positives (promotion-audit).
 - [ ] A.3 Uncertain items appear in the human-review report with class + reason.
+
+## Reconciliación 2026-08-29
+
+Sin implementar: `_imageCategory`, `_categoryUncertain`, `colorEvidence` y
+`vision.enabled` no aparecen en `src/js/` (grep = 0 hits). Las 14 cajas
+reflejan trabajo real pendiente, no deuda de documentación.
+
+Aviso práctico para quien lo tome: las cajas de verificación (2.4 hold-out, 4.1
+audits, 4.2 baseline) piden el corpus de los 13 PDFs en `C:\Mambo\Catalogos`,
+que no está en esta máquina. 4.3 (no-regresión de `measure-model-quality.js`,
+recall ≥85% / FP ≤8%) sí es ejecutable hoy y está en verde: 100% / 8%.

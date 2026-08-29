@@ -132,3 +132,14 @@ Run in order; each is a hard criterion. Full-corpus steps are env-gated (8–10 
 - Every strategy and calibration rule is config-gated (`src/js/remediationConfig.js` + optional repo-root `remediation-config.json` deep-merge). Flipping any flag off, or `enabled:false`, restores the prior (measure-only) behavior with no code revert.
 - Full rollback = `enabled:false` (or remove `remediation-config.json`) + reverting the remediation file set (`src/js/remediation.js`, `src/js/remediationConfig.js`, `scripts/remediate-catalog.js`, `scripts/quality/*` new scripts, and per-slice edits to `textSanitizer.js`, `importGates.js`, `imageTextGates.js`, `catalogValidator.js`, `pdfParser.js`, `export-catalog-batch.js`, `quality-iterate.js`, `index.html`, `run-tests.js`, `eslint.config.js`).
 - **No storage/migration changes exist to roll back**: stored catalogs are untouched (remediation is read-only in-memory post-processing over extraction); export JSON gains only additive fields (`remediationEvidence` on promoted items, `_rowEvidence` side channel off by default).
+
+## Reconciliación 2026-08-29
+
+A.2 sigue abierta y está bloqueada de entorno, no de diseño: el criterio es
+`greenPct` ≥ 99.0 en `remediation-ledger.json`, y ese ledger lo produce
+`scripts/remediate-catalog.js` sobre el export de
+`scripts/export-catalog-batch.js`, que hardcodea
+`CATALOG_DIR = "C:\Mambo\Catalogos"` (línea 17). El directorio no existe en
+esta máquina y no hay ningún `remediation-ledger.json` versionado ni en disco.
+El `greenPct: 99.2` que aparece en `design.md` es un ejemplo de forma del
+archivo, no una medición.
