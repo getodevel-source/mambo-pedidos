@@ -9,8 +9,18 @@ name: E2E Smoke (real Tauri app)
 on:
   push:
     branches: [master, main]
+    # El smoke compila Rust y WebView2 (~9 min de runner Windows, que se cobra
+    # doble que Linux). Docs y artefactos de openspec no pueden romper el
+    # runtime; ci.yml si corre en esos commits. workflow_dispatch sigue
+    # disponible para forzarlo cuando hace falta.
+    paths-ignore:
+      - "**.md"
+      - "openspec/**"
   pull_request:
     branches: [master, main]
+    paths-ignore:
+      - "**.md"
+      - "openspec/**"
   workflow_dispatch:
 
 permissions:
