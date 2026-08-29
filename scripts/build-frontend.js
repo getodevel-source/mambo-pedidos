@@ -45,6 +45,33 @@ function jsFiles(dir) {
     fs.cpSync(path.join(SRC, rel), path.join(DIST, rel), { recursive: true });
   }
 
+  // Puente ESM -> IIFE. Se compila DESPUES de copiar vendor/ para que la copia
+  // no lo pise. Sin esto, los plugins de Tauri v2 (publicados solo como modulos
+  // ESM) son inalcanzables desde <script src> classiques, AppStorage cae siempre
+  // a localStorage y su strip por cuota borra imagenes en silencio.
+  await esbuild.build({
+    entryPoints: [path.join(SRC, 'bridge', 'tauri-bridge.mjs')],
+    outfile: path.join(DIST, 'vendor', 'tauri-bridge.js'),
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['es2020'],
+    minify: true,
+    allowOverwrite: true,
+    logLevel: 'warning',
+  });
+
+  // Self-check: el puente existe y define el global que espera storage.js.
+  const bridgePath = path.join(DIST, 'vendor', 'tauri-bridge.js');
+  if (!fs.existsSync(bridgePath) || fs.statSync(bridgePath).size === 0) {
+    console.error('FALTA dist/vendor/tauri-bridge.js (no se compilo el puente)');
+    process.exit(1);
+  }
+  if (!fs.readFileSync(bridgePath, 'utf8').includes('MamboTauriBridge')) {
+    console.error('dist/vendor/tauri-bridge.js no define MamboTauriBridge');
+    process.exit(1);
+  }
+
   // Self-check: todo JS minificado existe y es más chico que el original
   let bad = 0;
   let srcBytes = 0;

@@ -29,6 +29,8 @@ const ImportWizard = {
     seguroUsdOverride: null
   },
   CACHE_KEY: 'mamboImportWizardState',
+  // persistence-fix: clave del state auto-guardado. CACHE_KEY queda solo como
+  // origen de la migración (los drafts vivos de usuarios no se pierden).
   PROJECT_KEY: 'mamboImportProyecto',
   // IIBB por jurisdicción (olmoscomex: CABA ~2.5%, PBA más alto). Configurable.
   IIBB_JURISDICCIONES: { cab: 0.025, pba: 0.035, santa_fe: 0.03, otra: null },
@@ -40,15 +42,95 @@ const ImportWizard = {
   },
 
   open() {
-    const saved = localStorage.getItem(ImportWizard.CACHE_KEY);
-    if (saved) { try { ImportWizard.state = Object.assign(ImportWizard.state, JSON.parse(saved)); } catch (e) {} }
-    // IT20: restaurar proyecto guardado (pedido + paso) si existe
-    const proy = localStorage.getItem(ImportWizard.PROJECT_KEY);
-    if (proy) { try { const p = JSON.parse(proy); if (p.step != null) ImportWizard.step = p.step; } catch (e) {} }
+    // persistence-fix: leer el state es async ahora (vive en AppStorage, que en
+    // desktop escribe en $APPDATA). Se pinta con los defaults y _restoreState
+    // repinta si trajo un state guardado; open() sigue sincronico para el onclick.
+    const restoringState = ImportWizard._restoreState();
     ImportWizard._loadNcmDb();
     const modal = document.getElementById('importWizardModal');
     if (modal) modal.style.display = 'flex';
     ImportWizard.render();
+    // IT20 + persistence-fix: restaurar proyecto guardado (pedido + paso). La
+    // lectura ahora es async (el draft vive en AppStorage, no en localStorage
+    // crudo), asi que se pinta primero con el state sincronico y
+    // _restoreProject repinta si el draft trae otro paso. open() sigue siendo
+    // sincronico para el onclick.
+    const restoringProject = ImportWizard._restoreProject();
+    // Awaitable opcional: el onclick lo ignora, los tests lo usan para esperar
+    // el state/proyecto restaurado antes de afirmar.
+    return Promise.all([restoringState, restoringProject]);
+  },
+
+  // ── draft del proyecto de importacion (persistence-fix) ──
+  // Clave logica: KEYS.PROJECT en AppStorage (store en $APPDATA dentro de Tauri,
+  // localStorage fuera). PROJECT_KEY queda solo como origen de la migracion.
+  _projectKey() {
+    return (typeof AppStorage !== 'undefined' && AppStorage.KEYS && AppStorage.KEYS.PROJECT) || ImportWizard.PROJECT_KEY;
+  },
+
+  async _writeProject(payload) {
+    if (typeof AppStorage !== 'undefined' && typeof AppStorage.setItem === 'function') {
+      await AppStorage.setItem(ImportWizard._projectKey(), payload);
+    } else {
+      localStorage.setItem(ImportWizard._projectKey(), JSON.stringify(payload));
+    }
+  },
+
+  async _readProject() {
+    let proj;
+    if (typeof AppStorage !== 'undefined' && typeof AppStorage.getItem === 'function') {
+      proj = await AppStorage.getItem(ImportWizard._projectKey(), null);
+    } else {
+      const raw = localStorage.getItem(ImportWizard._projectKey());
+      try { proj = raw ? JSON.parse(raw) : null; } catch { proj = null; }
+    }
+    if (proj) return proj;
+    // Migracion: todavia queda draft en la clave vieja (localStorage crudo)? se
+    // usa, se copia a la nueva y SOLO ENTONCES se borra la vieja: si el write
+    // nuevo falla el usuario no pierde nada.
+    const legacy = localStorage.getItem(ImportWizard.PROJECT_KEY);
+    if (!legacy) return null;
+    try { proj = JSON.parse(legacy); } catch { return null; }
+    try {
+      await ImportWizard._writeProject(proj);
+      localStorage.removeItem(ImportWizard.PROJECT_KEY);
+    } catch {}
+    return proj;
+  },
+
+  async _restoreProject() {
+    let proj;
+    try { proj = await ImportWizard._readProject(); } catch { return; }
+    if (proj && proj.step != null) {
+      ImportWizard.step = proj.step;
+      ImportWizard.render();
+    }
+  },
+
+  // Guarda el proyecto completo (pedido + paso + inputs) para retomar.
+  // Antes: localStorage crudo dentro de try{}catch{} y toast de exito igual
+  // (nadie se enteraba de un draft perdido). Ahora pasa por AppStorage y un
+  // fallo real se avisa como error, nunca como exito falso.
+  async saveProject() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items.map(i => ({ sku: i.sku, qty: i.qty })) : [];
+    const payload = { step: ImportWizard.step, items, state: ImportWizard.state, guardado: Date.now() };
+    let err = null;
+    try {
+      await ImportWizard._writeProject(payload);
+    } catch (e) { err = e; }
+    if (typeof toast === 'function') {
+      if (err) toast('No se pudo guardar el proyecto de importación: ' + ((err && err.message) || err), 'error');
+      else toast('Proyecto de importación guardado', 'success');
+    }
+    return !err;
+  },
+
+  async clearProject() {
+    try { localStorage.removeItem(ImportWizard.PROJECT_KEY); } catch {}
+    try {
+      if (typeof AppStorage !== 'undefined' && typeof AppStorage.removeItem === 'function') await AppStorage.removeItem(ImportWizard._projectKey());
+      else localStorage.removeItem(ImportWizard._projectKey());
+    } catch {}
   },
 
   // IT23: carga la base NCM (ARCA) y construye los DI autoritativos por categoría.
@@ -71,21 +153,6 @@ const ImportWizard = {
     ImportWizard.render();
   },
 
-  // Guarda el proyecto completo (pedido + paso + inputs) para retomar.
-  saveProject() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items.map(i => ({ sku: i.sku, qty: i.qty })) : [];
-    try {
-      localStorage.setItem(ImportWizard.PROJECT_KEY, JSON.stringify({
-        step: ImportWizard.step, items, state: ImportWizard.state, guardado: Date.now()
-      }));
-    } catch (e) {}
-    if (typeof toast === 'function') toast('Proyecto de importación guardado', 'success');
-  },
-
-  clearProject() {
-    try { localStorage.removeItem(ImportWizard.PROJECT_KEY); } catch (e) {}
-  },
-
   close() {
     const modal = document.getElementById('importWizardModal');
     if (modal) modal.style.display = 'none';
@@ -99,8 +166,63 @@ const ImportWizard = {
   prev() { ImportWizard.goTo(ImportWizard.step - 1); },
   next() { ImportWizard.goTo(ImportWizard.step + 1); },
 
+  _stateKey() {
+    return (typeof AppStorage !== 'undefined' && AppStorage.KEYS && AppStorage.KEYS.WIZARD) || ImportWizard.CACHE_KEY;
+  },
+
+  // Un aviso por sesion: _save() corre en cada change e input, y spamear toasts
+  // haria intratable el wizard.
+  _stateSaveError(e) {
+    console.error('No se pudo guardar el estado del asistente:', e);
+    if (ImportWizard._stateWarned) return;
+    ImportWizard._stateWarned = true;
+    if (typeof toast === 'function') {
+      toast('No se pudo guardar el estado del asistente: ' + ((e && e.message) || e) + '. Los cambios siguen visibles pero no se conservaran.', 'error');
+    }
+  },
+
+  // Lee el state guardado (nueva clave, o migra la vieja) y lo aplica.
+  async _restoreState() {
+    let saved = null;
+    try {
+      if (typeof AppStorage !== 'undefined' && typeof AppStorage.getItem === 'function') {
+        saved = await AppStorage.getItem(ImportWizard._stateKey(), null);
+      } else {
+        const raw = localStorage.getItem(ImportWizard._stateKey());
+        try { saved = raw ? JSON.parse(raw) : null; } catch { saved = null; }
+      }
+      if (!saved) {
+        const legacy = localStorage.getItem(ImportWizard.CACHE_KEY);
+        if (!legacy) return;
+        try { saved = JSON.parse(legacy); } catch { return; }
+        // Se copia a la clave nueva y SOLO ENTONCES se borra la vieja: si el
+        // write falla el usuario conserva su state en la clave original.
+        try {
+          if (typeof AppStorage !== 'undefined' && typeof AppStorage.setItem === 'function') {
+            await AppStorage.setItem(ImportWizard._stateKey(), saved);
+          } else {
+            localStorage.setItem(ImportWizard._stateKey(), JSON.stringify(saved));
+          }
+          localStorage.removeItem(ImportWizard.CACHE_KEY);
+        } catch (e) { ImportWizard._stateSaveError(e); }
+      }
+    } catch (e) { ImportWizard._stateSaveError(e); return; }
+    if (!saved || typeof saved !== 'object') return;
+    ImportWizard.state = Object.assign(ImportWizard.state, saved);
+    const modal = document.getElementById('importWizardModal');
+    if (modal && modal.style.display !== 'none') ImportWizard.render();
+  },
+
   _save() {
-    try { localStorage.setItem(ImportWizard.CACHE_KEY, JSON.stringify(ImportWizard.state)); } catch (e) {}
+    // Fire-and-forget: _save() se llama desde render() y desde onchange; esperar
+    // aca cortaria la edicion. El fallo se propaga a _stateSaveError.
+    if (typeof AppStorage !== 'undefined' && typeof AppStorage.setItem === 'function') {
+      AppStorage.setItem(ImportWizard._stateKey(), ImportWizard.state).catch((e) => ImportWizard._stateSaveError(e));
+      return;
+    }
+    try {
+      localStorage.setItem(ImportWizard._stateKey(), JSON.stringify(ImportWizard.state));
+    } catch (e) { ImportWizard._stateSaveError(e); }
   },
 
   _esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },

@@ -4047,6 +4047,10 @@
     <!-- Application Modules -->
     <script src="js/validations.js"></script>
     <script src="js/calculator.js"></script>
+    <!-- Puente a los plugins de Tauri v2 (fs + store): debe cargar antes de
+         js/storage.js. Sin el, AppStorage no tiene backend real y cae a
+         localStorage con su strip silencioso. -->
+    <script src="vendor/tauri-bridge.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/skuAllocator.js"></script>
     <script src="js/pdfParserClassifier.js"></script>

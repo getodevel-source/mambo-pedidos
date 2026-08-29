@@ -1,6 +1,8 @@
 // ============================================
 //  Mambo Pedidos - Módulo de Persistencia (Storage)
-//  Soporte para Tauri Store con fallback transparente a LocalStorage
+//  Backend real: los plugins de Tauri v2 a traves de window.MamboTauriBridge
+//  (ver src/bridge/tauri-bridge.mjs), con fallback transparente a LocalStorage
+//  cuando el puente no esta (navegador, tests de Node, dist/ sin vendor).
 // ============================================
 
 const AppStorage = {
@@ -8,39 +10,72 @@ const AppStorage = {
     CATALOG: 'mambo_catalog_v2',
     HISTORIAL: 'mambo_historial_v2',
     BRANDS: 'mambo_brands_v1',
-    IMPORTS: 'mambo_imports_v1'
+    IMPORTS: 'mambo_imports_v1',
+    // importWizard: el draft del proyecto vivia en localStorage crudo (cuota
+    // ~5MB, se perdía con el strip). Pasa a este par, que en desktop vive en el
+    // store de $APPDATA.
+    PROJECT: 'mambo_project_v1',
+    // importWizard: state auto-guardado del asistente (markup, fletes, NCM).
+    // Distinta de PROJECT: esa es la guardada explicita del proyecto completo.
+    WIZARD: 'mambo_wizard_v1'
   },
   storeInstance: null,
+  // 'tauri' = store del plugin (cuota de disco) | 'localstorage' = cuota ~5MB.
+  // Se resuelve en init() y manda sobre la politica de strip (ver setItem).
+  mode: 'localstorage',
+  // Ultimo intento de escritura: {backend, at, imagesWritten, imagesFailed,
+  // failedRefs, degraded, stripLevel}. Existe para que ningun fallo de
+  // persistencia vuelva a ser silencioso.
+  lastPersistence: null,
+  // Motivo por el cual NO se pudo usar el store de Tauri (null = sin problema).
+  persistenceError: null,
+  _storeWarned: false,
 
-  // Inicializar Tauri Store si está disponible (Tauri v1/v2 compatible)
+  // Unico acceso al puente de plugins. Fuera de Tauri es null.
+  _bridge() {
+    try { return (typeof window !== 'undefined' && window.MamboTauriBridge) || null; } catch { return null; }
+  },
+
+  // Inicializar el store: SOLO via el puente (MamboTauriBridge.store.load).
   async init() {
+    const bridge = this._bridge();
+    const tauriExpected = !!(bridge && bridge.inTauri);
+    this.mode = 'localstorage';
     try {
-      const storePlugin = window.__TAURI_PLUGIN_STORE__ || window.__TAURI__?.store || window.__TAURI__?.plugin?.store;
-      // photo-quality/fix: Tauri v2 plugin-store expone Store.load / LazyStore /
-      // getStore — NO createStore. Sin este fallback, nunca se crea el store y la
-      // app cae siempre a localStorage (cuota limitada). Verificado 10/08.
-      let createStore = null;
-      if (storePlugin) {
-        if (typeof storePlugin.createStore === 'function') createStore = storePlugin.createStore;
-        else if (storePlugin.Store && typeof storePlugin.Store.load === 'function') createStore = storePlugin.Store.load;
-        else if (typeof storePlugin.getStore === 'function') createStore = storePlugin.getStore;
+      // Causa raiz que arregla esto: en Tauri v2 los plugins se publican solo como
+      // modulos ESM, asi que window.__TAURI_PLUGIN_STORE__ y __TAURI__.store NUNCA
+      // existen y el probe viejo dejaba storeInstance en null para siempre. El
+      // puente es el unico camino real; los probes legacy quedan como ultima
+      // oportunidad porque no cuestan nada y los ejercita la suite de Node, pero
+      // no definen `mode` (en la app real no van a resolver jamas).
+      let pending = null;
+      if (tauriExpected && bridge.store && typeof bridge.store.load === 'function') {
+        pending = bridge.store.load('.mambo-store.json');
+      } else {
+        const storePlugin = window.__TAURI_PLUGIN_STORE__ || window.__TAURI__?.store || window.__TAURI__?.plugin?.store;
+        let createStore = null;
+        if (storePlugin) {
+          if (typeof storePlugin.createStore === 'function') createStore = storePlugin.createStore;
+          else if (storePlugin.Store && typeof storePlugin.Store.load === 'function') createStore = storePlugin.Store.load;
+          else if (typeof storePlugin.getStore === 'function') createStore = storePlugin.getStore;
+        }
+        if (createStore) pending = createStore('.mambo-store.json');
       }
-      if (createStore) {
-        // IT37: guard de timeout — si el store file está lockeado (otra
+      if (pending) {
+        // IT37: guard de timeout — si el store file esta lockeado (otra
         // instancia corriendo) o el IPC no responde, NUNCA colgamos el init
-        // (init colgado = app renderizada sin listeners = ningún botón).
+        // (init colgado = app renderizada sin listeners = ningun boton).
         const timeoutMs = 3000;
         let timer;
         const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Store init timeout')), timeoutMs); });
         try {
-          this.storeInstance = await Promise.race([createStore('.mambo-store.json'), timeout]);
+          this.storeInstance = await Promise.race([pending, timeout]);
         } finally {
           clearTimeout(timer);
         }
-        // Store.load (Tauri v2) ya devuelve el store cargado (sin método .load);
-        // createStore legacy sí necesita load() explícito.
-        if (this.storeInstance && typeof this.storeInstance.load === 'function') {
-          if (this.storeInstance._loaded) return;
+        // Store.load (Tauri v2) ya devuelve el store cargado (sin metodo .load);
+        // createStore legacy si necesita load() explicito, una sola vez.
+        if (this.storeInstance && typeof this.storeInstance.load === 'function' && !this.storeInstance._loaded) {
           let loadTimer;
           const loadTimeout = new Promise((_, reject) => { loadTimer = setTimeout(() => reject(new Error('Store load timeout')), 3000); });
           try {
@@ -51,11 +86,86 @@ const AppStorage = {
           }
         }
       }
+      if (!this.storeInstance) this.storeInstance = null;
+      if (tauriExpected && this.storeInstance) this.mode = 'tauri';
+      if (this.mode === 'tauri') {
+        this.persistenceError = null;
+      } else if (tauriExpected) {
+        // Modo 'tauri' esperado pero el store no resolvio: NO lo decimos con el
+        // modo, porque el resto de la politica (strip) depende de lo que HAY.
+        this.persistenceError = 'El store de Tauri no devolvio una instancia; los datos quedan en localStorage (cuota limitada).';
+        this._warnPersistence();
+      }
     } catch (e) {
       console.warn('Tauri Store no disponible, usando LocalStorage fallback:', e);
       this.storeInstance = null;
+      this.mode = 'localstorage';
+      if (tauriExpected) {
+        this.persistenceError = 'El store de Tauri no se pudo cargar: ' + ((e && e.message) || e) + '. Los datos quedan en localStorage (cuota limitada).';
+        this._warnPersistence();
+      }
     }
   },
+
+  // Aviso unico por sesion: init() puede correrse mas de una vez y repetir el
+  // toast solo tapa el trabajo del usuario.
+  _warnPersistence() {
+    if (this._storeWarned) return;
+    this._storeWarned = true;
+    if (typeof toast === 'function') toast(this.persistenceError, 'warning');
+  },
+
+  // Arranca el registro de un intento de persistencia (lo llama saveCatalog).
+  _beginPersistence() {
+    this.lastPersistence = {
+      backend: null,
+      at: null,
+      imagesWritten: 0,
+      imagesFailed: 0,
+      failedRefs: [],
+      degraded: false,
+      stripLevel: 0
+    };
+    return this.lastPersistence;
+  },
+
+  // Anota el resultado de un paso del intento actual (imagenes, store, strip).
+  _recordPersistence(fields) {
+    const rec = this.lastPersistence || this._beginPersistence();
+    Object.assign(rec, fields);
+    rec.at = new Date().toISOString();
+    return rec;
+  },
+
+  // Error accionable: en desktop el almacen es un archivo bajo $APPDATA; un
+  // "cuota insuficiente" sin ruta ni clave no permite reparar nada.
+  async _storageError(key, cause) {
+    let where = '';
+    try {
+      const fsApi = this._fsApi();
+      if (fsApi && typeof fsApi.appDataDir === 'function') where = ' en ' + (await fsApi.appDataDir());
+    } catch { /* sin ruta: el mensaje sigue siendo util */ }
+    return new Error('No se pudo guardar "' + key + '" en el almacenamiento de la app' + where + ': ' + ((cause && cause.message) || cause));
+  },
+
+  // Foto de la persistencia para diagnostico/soporte. imagesDir es la base
+  // $APPDATA donde el puente ancla images/ (null si no se puede resolver).
+  async diagnostics() {
+    const bridge = this._bridge();
+    let imagesDir = null;
+    try {
+      const fsApi = this._fsApi();
+      if (fsApi && typeof fsApi.appDataDir === 'function') imagesDir = await fsApi.appDataDir();
+    } catch { /* sin appDataDir no hay diagnostico de ruta */ }
+    return {
+      mode: this.mode,
+      storeReady: !!this.storeInstance,
+      bridgePresent: !!bridge,
+      inTauri: !!(bridge && bridge.inTauri),
+      imagesDir
+    };
+  },
+
 
   async getItem(key, defaultValue = null) {
     if (this.storeInstance) {
@@ -79,23 +189,39 @@ const AppStorage = {
       try {
         await this.storeInstance.set(key, value);
         await this.storeInstance.save();
+        // backend='store' solo aparece por el probe legacy (store sin puente);
+        // en la app real el camino bueno es 'tauri'.
+        this._recordPersistence({
+          backend: this.mode === 'tauri' ? 'tauri' : 'store',
+          degraded: false,
+          stripLevel: 0
+        });
         return;
       } catch (e) {
         console.error('Error guardando en Tauri Store:', e);
+        // B: aca NUNCA se despoja nada. En desktop hay cuota de disco y borrar
+        // imagenes o _evaluations en silencio es perder datos que si cabian: el
+        // error sube, accionable.
+        if (this.mode === 'tauri') throw await this._storageError(key, e);
       }
     }
     const serialized = JSON.stringify(value);
     try {
       localStorage.setItem(key, serialized);
+      this._recordPersistence({ backend: 'localstorage', degraded: false, stripLevel: 0 });
       return;
     } catch (e) {
       console.warn('localStorage quota exceeded, attempting progressive strip...', e);
+      // Red de seguridad: en modo tauri no deberíamos llegar acá (arriba ya
+      // lanzamos), pero _stripForQuota esta prohibido en ese modo por contrato.
+      if (this.mode === 'tauri') throw await this._storageError(key, e);
     }
 
     // Progressive strip: remove heavy data to fit localStorage
     const stripped = this._stripForQuota(value);
     try {
       localStorage.setItem(key, JSON.stringify(stripped));
+      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 1 });
       if (typeof toast === 'function') {
         toast('⚠️ Imágenes removidas del almacenamiento local para caber en la cuota. Las imágenes siguen visibles en esta sesión.', 'warning');
       }
@@ -108,6 +234,7 @@ const AppStorage = {
     const strippedDeep = this._stripForQuota(stripped, true);
     try {
       localStorage.setItem(key, JSON.stringify(strippedDeep));
+      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 2 });
       if (typeof toast === 'function') {
         toast('⚠️ Catálogo guardado sin imágenes ni metadatos de validación (cuota localStorage).', 'warning');
       }
@@ -162,6 +289,9 @@ const AppStorage = {
 
   // Helpers específicos
   async saveCatalog(items, selection) {
+    // B: cada guardado deja registro auditable (backend, imagenes escritas y
+    // perdidas, nivel de degradacion si lo hay).
+    this._beginPersistence();
     // Layer 3: Backup before save
     if (typeof Reliability !== 'undefined') {
       Reliability.createBackup({ items, sel: selection });
@@ -276,7 +406,12 @@ const AppStorage = {
   // save → archivos (images/<id>.<ext>) + _imageRef; load → resuelve ref→dataURL.
 
   _fsApi() {
-    try { return (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.fs) || null; } catch { return null; }
+    // El plugin fs de v2 tampoco es alcanzable por window.__TAURI__.fs (siempre
+    // indefinido): la unica fuente valida es el puente.
+    try {
+      const bridge = this._bridge();
+      return (bridge && bridge.inTauri && bridge.fs) || null;
+    } catch { return null; }
   },
 
   _dataUrlToBytes(dataUrl) {
@@ -289,9 +424,16 @@ const AppStorage = {
 
   _bytesToDataUrl(bytes, mime) {
     const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    let bin = '';
-    for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
-    return 'data:image/' + (mime || 'png') + ';base64,' + btoa(bin);
+    // Chunked: String.fromCharCode.apply sobre bloques. Concatenar de a un char
+    // (bin += ...) es quadratico: costaba segundos en un catalogo con cientos de
+    // imagenes de cientos de KB. apply() con demasiados args revienta en algunos
+    // engines, de ahi el tamano del bloque.
+    const CHUNK = 8192;
+    const parts = [];
+    for (let i = 0; i < arr.length; i += CHUNK) {
+      parts.push(String.fromCharCode.apply(null, arr.subarray(i, i + CHUNK)));
+    }
+    return 'data:image/' + (mime || 'png') + ';base64,' + btoa(parts.join(''));
   },
 
   _fileNameFromDataUrl(dataUrl) {
@@ -300,24 +442,36 @@ const AppStorage = {
   },
 
   // Devuelve un payload persistible: escribe cada dataURL a archivo y deja
-  // _imageRef en el item. Sin plugin fs (tests / no-Tauri) → dataURL inline.
+  // _imageRef en el item. Sin puente fs (tests / no-Tauri) → dataURL inline.
   async _serializeImagesToFiles(items, selection) {
     const fsApi = this._fsApi();
     const clone = (items || []).map(o => Object.assign({}, o));
     const refs = [];
+    const failedRefs = [];
+    let imagesWritten = 0;
     if (fsApi) {
+      let dirReady = false;
       for (const item of clone) {
         if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
           const rel = this._fileNameFromDataUrl(item.img);
           if (rel) {
             try {
               const mime = (item.img.match(/^data:image\/([\w.+-]+);/i) || [])[1] || 'png';
-              await fsApi.mkdir('images', { recursive: true });
-              await fsApi.writeBinaryFile(rel, this._dataUrlToBytes(item.img));
+              // v2: rutas relativas SIEMPRE con baseDir (lo fija el puente) y los
+              // nombres reales mkdir/writeBinaryFile de v1 ya no existen.
+              if (!dirReady) { await fsApi.ensureDir('images'); dirReady = true; }
+              await fsApi.writeBytes(rel, this._dataUrlToBytes(item.img));
               item._imageRef = { relativePath: rel, mime };
               item.img = '';
               refs.push(rel);
-            } catch (e) { console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message); }
+              imagesWritten++;
+            } catch (e) {
+              // B: el fallo se CUENTA, no se traga. item.img conserva la dataURL,
+              // asi que el catalogo en memoria y el payload persistido no pierden
+              // la imagen aunque el disco falle.
+              failedRefs.push(rel);
+              console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message);
+            }
           }
         } else if (item && item._imageRef && item._imageRef.relativePath) {
           refs.push(item._imageRef.relativePath);
@@ -325,6 +479,7 @@ const AppStorage = {
       }
       await this._gcOrphanImages(refs, fsApi);
     }
+    this._recordPersistence({ imagesWritten, imagesFailed: failedRefs.length, failedRefs });
     return { items: clone, sel: selection || {} };
   },
 
@@ -336,7 +491,7 @@ const AppStorage = {
       if (item && item._imageRef && item._imageRef.relativePath &&
           !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
         try {
-          const bytes = await fsApi.readBinaryFile(item._imageRef.relativePath);
+          const bytes = await fsApi.readBytes(item._imageRef.relativePath);
           item.img = this._bytesToDataUrl(bytes, item._imageRef.mime);
         } catch (e) { item.img = '-'; }
         delete item._imageRef;
@@ -347,12 +502,12 @@ const AppStorage = {
   // Elimina archivos de images/ no referenciados por el catálogo actual.
   async _gcOrphanImages(refs, fsApi) {
     try {
-      const entries = await fsApi.readDir('images');
+      const entries = await fsApi.list('images');
       for (const e of entries) {
         if (!e || !e.name) continue;
         const rel = 'images/' + e.name;
         if (/\.(png|jpe?g|webp|gif)$/i.test(rel) && refs.indexOf(rel) === -1) {
-          try { await fsApi.remove(rel, { recursive: true }); } catch {}
+          try { await fsApi.remove(rel); } catch {}
         }
       }
     } catch {}

@@ -127,6 +127,19 @@ const Tests = {
 		await this.testPersistenceWithEvidence();
 		await this.testStoreFallbackRecovery();
 		this.testImportabilityFilter();
+		// persistence-fix: puente real hacia los plugins Tauri v2 (modo, cuota,
+		// imagenes en disco, draft del wizard).
+		await this.testStorageModeWithoutBridge();
+		await this.testStorageModeWithTauriBridge();
+		await this.testStorageStoreLoadFailureDegrades();
+		await this.testStorageFsApiFromBridge();
+		await this.testStorageImageFilesRoundTrip();
+		await this.testStorageImageWriteFailure();
+		await this.testStorageQuotaStripPolicy();
+		this.testBytesToDataUrlChunked();
+		await this.testImportWizardProjectPersistence();
+		await this.testStorageRealDiskPersistence();
+		await this.testImportWizardStatePersistence();
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
@@ -7450,6 +7463,676 @@ const Tests = {
 			}) === false,
 			"aspect-calibrated: aspect fabricado rechazado",
 		);
+	},
+
+	// ── persistence-fix: puente Tauri v2 (window.MamboTauriBridge) ──
+	//
+	// Harness de escritorio simulado: un store y un fs en memoria con la misma
+	// superficie que expone src/bridge/tauri-bridge.mjs. El runner de Node no tiene
+	// __TAURI_INTERNALS__, asi que el puente real nunca se activa aca y se inyecta
+	// el fake en window.MamboTauriBridge.
+
+	_fakePersistence(files = new Map()) {
+		const data = new Map();
+		const store = {
+			data,
+			saves: 0,
+			get: async (k) => (data.has(k) ? data.get(k) : undefined),
+			// El store real serializa a JSON: copia profunda para no compartir refs.
+			set: async (k, v) => {
+				data.set(k, JSON.parse(JSON.stringify(v)));
+			},
+			delete: async (k) => {
+				data.delete(k);
+			},
+			save: async () => {
+				store.saves++;
+			},
+			reload: async () => {},
+		};
+		const fs = {
+			dirs: [],
+			ensureDir: async (rel) => {
+				fs.dirs.push(rel);
+			},
+			writeBytes: async (rel, bytes) => {
+				files.set(rel, bytes);
+			},
+			readBytes: async (rel) => {
+				if (!files.has(rel)) throw new Error("ENOENT: " + rel);
+				return files.get(rel);
+			},
+			list: async (rel) =>
+				Array.from(files.keys())
+					.filter((k) => k.startsWith(rel + "/"))
+					.map((k) => ({ name: k.slice(rel.length + 1) })),
+			remove: async (rel) => {
+				files.delete(rel);
+			},
+			exists: async (rel) => files.has(rel),
+			appDataDir: async () => "C:/Users/test/AppData/Roaming/com.mambo.pedidos",
+		};
+		const bridge = { inTauri: true, fs, store: { load: async () => store } };
+		return { bridge, fs, files, store, data };
+	},
+
+	// Instala/retira el puente fake y restaura el estado de AppStorage que tocan
+	// init()/setItem(). ctx.lsWrites registra cada localStorage.setItem.
+	async _withTauriBridge(bridge, body) {
+		const w = global.window;
+		const prev = {
+			bridge: w.MamboTauriBridge,
+			plugin: w.__TAURI_PLUGIN_STORE__,
+			tauri: w.__TAURI__,
+			mode: AppStorage.mode,
+			store: AppStorage.storeInstance,
+			persistence: AppStorage.lastPersistence,
+			persistenceError: AppStorage.persistenceError,
+			toast: w.toast,
+			lsSet: localStorage.setItem,
+		};
+		const ctx = { lsWrites: [], toasts: [] };
+		w.MamboTauriBridge = bridge;
+		// Sin probes legacy: con puente presente el store solo puede venir del puente.
+		w.__TAURI_PLUGIN_STORE__ = undefined;
+		w.__TAURI__ = undefined;
+		w.toast = (msg, type) => {
+			ctx.toasts.push({ msg, type });
+		};
+		localStorage.setItem = function (k, v) {
+			ctx.lsWrites.push(k);
+			return prev.lsSet.call(this, k, v);
+		};
+		try {
+			await body(ctx);
+		} finally {
+			w.MamboTauriBridge = prev.bridge;
+			w.__TAURI_PLUGIN_STORE__ = prev.plugin;
+			w.__TAURI__ = prev.tauri;
+			w.toast = prev.toast;
+			localStorage.setItem = prev.lsSet;
+			AppStorage.mode = prev.mode;
+			AppStorage.storeInstance = prev.store;
+			AppStorage.lastPersistence = prev.persistence;
+			AppStorage.persistenceError = prev.persistenceError;
+		}
+	},
+
+	async testStorageModeWithoutBridge() {
+		// 1) Sin puente (Node, navegador comun, dist/ sin vendor): modo localstorage,
+		//    sin throw, y el fallback sigue funcional.
+		if (typeof AppStorage.diagnostics !== "function") {
+			this.assert(false, "RED: AppStorage.diagnostics() no existe");
+			return;
+		}
+		await this._withTauriBridge(undefined, async () => {
+			let err = null;
+			try {
+				await AppStorage.init();
+			} catch (e) {
+				err = e;
+			}
+			this.assert(err === null, "init() sin puente no lanza (" + (err && err.message) + ")");
+			this.assert(
+				AppStorage.mode === "localstorage",
+				`init() sin puente deja mode='localstorage' (got ${JSON.stringify(AppStorage.mode)})`,
+			);
+			this.assert(
+				AppStorage.storeInstance === null,
+				"init() sin puente deja storeInstance null",
+			);
+			const diag = await AppStorage.diagnostics();
+			this.assert(
+				diag.mode === "localstorage" && diag.storeReady === false,
+				`diagnostics: localstorage + storeReady=false (got ${JSON.stringify(diag)})`,
+			);
+			this.assert(
+				diag.bridgePresent === false && diag.inTauri === false,
+				"diagnostics: bridgePresent=false fuera del puente",
+			);
+			this.assert(
+				diag.imagesDir === null,
+				"diagnostics: imagesDir=null cuando appDataDir no resuelve",
+			);
+			const key = "_test_mode_fallback";
+			await AppStorage.setItem(key, { items: [{ sku: "F-1", img: "data:image/png;base64,AAAA" }] });
+			const raw = JSON.parse(localStorage.getItem(key) || "null");
+			this.assert(
+				raw && raw.items[0].img === "data:image/png;base64,AAAA",
+				"sin puente: setItem sigue persistiendo en localStorage",
+			);
+			localStorage.removeItem(key);
+		});
+	},
+
+	async testStorageModeWithTauriBridge() {
+		// 2) Con puente + inTauri: mode='tauri', storeInstance del puente y setItem
+		//    escribe SOLO en el store (nunca en localStorage).
+		if (typeof AppStorage.diagnostics !== "function") {
+			this.assert(false, "RED: AppStorage.diagnostics() no existe");
+			return;
+		}
+		const h = this._fakePersistence();
+		await this._withTauriBridge(h.bridge, async (ctx) => {
+			await AppStorage.init();
+			this.assert(
+				AppStorage.mode === "tauri",
+				`init() con puente deja mode='tauri' (got ${JSON.stringify(AppStorage.mode)})`,
+			);
+			this.assert(
+				AppStorage.storeInstance === h.store,
+				"init() resuelve el store via MamboTauriBridge.store.load",
+			);
+			this.assert(AppStorage.persistenceError === null, "store sano: persistenceError limpio");
+			const key = "_test_bridge_set";
+			await AppStorage.setItem(key, { items: [{ sku: "B-1" }] });
+			const stored = h.data.get(key);
+			this.assert(stored && stored.items[0].sku === "B-1", "setItem con puente escribe en el store");
+			this.assert(h.store.saves > 0, "setItem con puente hace save() del store");
+			this.assert(
+				ctx.lsWrites.indexOf(key) === -1,
+				`setItem con puente NO toca localStorage (writes: ${JSON.stringify(ctx.lsWrites)})`,
+			);
+			const diag = await AppStorage.diagnostics();
+			this.assert(diag.mode === "tauri" && diag.storeReady === true, "diagnostics: mode tauri + storeReady=true");
+			this.assert(
+				diag.bridgePresent === true && diag.inTauri === true,
+				"diagnostics: bridgePresent/inTauri verdaderos",
+			);
+			this.assert(
+				typeof diag.imagesDir === "string" && diag.imagesDir.includes("com.mambo.pedidos"),
+				`diagnostics: imagesDir resuelto a $APPDATA (got ${JSON.stringify(diag.imagesDir)})`,
+			);
+			h.data.delete(key);
+		});
+	},
+
+	async testStorageStoreLoadFailureDegrades() {
+		// B: puente presente pero store.load roto -> modo 'tauri' mentiroso jamas:
+		//    queda 'localstorage' con el motivo en persistenceError y un toast.
+		const h = this._fakePersistence();
+		h.bridge.store = {
+			load: async () => {
+				throw new Error("store file bloqueado por otra instancia");
+			},
+		};
+		await this._withTauriBridge(h.bridge, async (ctx) => {
+			let err = null;
+			try {
+				await AppStorage.init();
+			} catch (e) {
+				err = e;
+			}
+			this.assert(err === null, "init() con store roto no lanza (" + (err && err.message) + ")");
+			this.assert(
+				AppStorage.mode === "localstorage",
+				`store roto -> mode='localstorage' (got ${JSON.stringify(AppStorage.mode)})`,
+			);
+			this.assert(
+				typeof AppStorage.persistenceError === "string" &&
+					AppStorage.persistenceError.includes("bloqueado"),
+				`persistenceError guarda el motivo (got ${JSON.stringify(AppStorage.persistenceError)})`,
+			);
+			this.assert(
+				ctx.toasts.some((t) => t.type === "error" || t.type === "warning"),
+				"el fallo del store se avisa con toast",
+			);
+			this.assert(
+				AppStorage._fsApi() === h.fs,
+				"con store roto el fs del puente sigue resuelto (son independientes)",
+			);
+		});
+	},
+
+	async testStorageFsApiFromBridge() {
+		// 3) _fsApi() sale del puente, no de window.__TAURI__.fs (inexistente en v2).
+		const h = this._fakePersistence();
+		await this._withTauriBridge(h.bridge, async () => {
+			this.assert(AppStorage._fsApi() === h.fs, "_fsApi() devuelve el fs del puente con inTauri=true");
+		});
+		await this._withTauriBridge({ inTauri: false, fs: h.fs, store: h.bridge.store }, async () => {
+			this.assert(AppStorage._fsApi() === null, "_fsApi() es null cuando inTauri=false");
+		});
+		await this._withTauriBridge(undefined, async () => {
+			this.assert(AppStorage._fsApi() === null, "_fsApi() es null sin puente");
+		});
+		// La API v1 (mkdir/writeBinaryFile/readBinaryFile/readDir) ya no debe estar
+		// llamada en ningun camino de persistencia: en Tauri v2 esos metodos no
+		// existen y el plugin devolvio undefined en silencio durante meses.
+		const src =
+			AppStorage._serializeImagesToFiles.toString() +
+			AppStorage._embedImagesFromFiles.toString() +
+			AppStorage._gcOrphanImages.toString();
+		const v1Calls = /\.\s*(writeBinaryFile|readBinaryFile)\s*\(|\bmkdir\s*\(|\breadDir\s*\(/.test(src);
+		this.assert(!v1Calls, "el camino de imagenes ya no llama la API v1 del plugin fs");
+		this.assert(
+			/\.ensureDir\s*\(/.test(src) && /\.writeBytes\s*\(/.test(src) && /\.readBytes\s*\(/.test(src) && /\.list\s*\(/.test(src),
+			"el camino de imagenes usa la superficie del puente (ensureDir/writeBytes/readBytes/list)",
+		);
+	},
+
+	async testStorageImageFilesRoundTrip() {
+		// 4) Las dataURLs van a images/ en disco y vuelven intactas.
+		const png =
+			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+		const h = this._fakePersistence();
+		await this._withTauriBridge(h.bridge, async () => {
+			await AppStorage.init();
+			const key = AppStorage.KEYS.CATALOG;
+			await AppStorage.saveCatalog(
+				[{ sku: "IMG-RT-001", marca: "AULA", modelo: "F75", cat: "TECLADO", fob: 40, img: png }],
+				{ "IMG-RT-001": 2 },
+			);
+			const written = Array.from(h.files.keys()).filter((k) => /^images\/img_[\w.-]+\.png$/.test(k));
+			this.assert(
+				written.length === 1,
+				`saveCatalog escribe la imagen en images/ (got ${JSON.stringify(Array.from(h.files.keys()))})`,
+			);
+			this.assert(h.fs.dirs.indexOf("images") !== -1, "saveCatalog crea images/ con ensureDir");
+			const rec = AppStorage.lastPersistence;
+			this.assert(
+				!!rec && rec.imagesWritten === 1,
+				`lastPersistence.imagesWritten=1 (got ${rec && JSON.stringify(rec)})`,
+			);
+			this.assert(
+				!!rec && rec.backend === "tauri" && rec.imagesFailed === 0,
+				"lastPersistence registra backend tauri sin fallos",
+			);
+			const persisted = h.data.get(key);
+			this.assert(
+				!!persisted && persisted.items[0].img === "" && !!persisted.items[0]._imageRef,
+				"el payload persistido no lleva la dataURL inline",
+			);
+			const back = await AppStorage.loadCatalog();
+			this.assert(
+				back.items.length === 1 && back.items[0].img === png,
+				"loadCatalog reconstruye item.img desde images/",
+			);
+			this.assert(back.items[0]._imageRef === undefined, "loadCatalog limpia _imageRef resuelto");
+			this.assert(back.sel["IMG-RT-001"] === 2, "loadCatalog preserva la seleccion");
+			h.data.delete(key);
+		});
+	},
+
+	async testStorageImageWriteFailure() {
+		// 5) Fallo de escritura: se CUENTA (no se traga) y el item conserva valor.
+		const png = "data:image/png;base64,AAAA";
+		const h = this._fakePersistence();
+		h.fs.writeBytes = async () => {
+			throw new Error("EACCES: permiso denegado en $APPDATA");
+		};
+		await this._withTauriBridge(h.bridge, async () => {
+			AppStorage.mode = "tauri";
+			AppStorage.storeInstance = h.store;
+			const payload = await AppStorage._serializeImagesToFiles([{ sku: "IMG-FAIL-001", img: png }], {});
+			const rec = AppStorage.lastPersistence;
+			this.assert(
+				!!rec && rec.imagesFailed === 1,
+				`lastPersistence.imagesFailed=1 (got ${rec && JSON.stringify(rec)})`,
+			);
+			this.assert(
+				!!rec && Array.isArray(rec.failedRefs) && rec.failedRefs.length === 1 && rec.failedRefs[0].indexOf("images/") === 0,
+				"lastPersistence.failedRefs lista la imagen que no se pudo escribir",
+			);
+			this.assert(!!rec && rec.imagesWritten === 0, "lastPersistence.imagesWritten=0 con escritura rota");
+			this.assert(
+				payload.items[0].img === png,
+				"el item conserva su dataURL (no hay perdida total silenciosa)",
+			);
+		});
+	},
+
+	async testStorageQuotaStripPolicy() {
+		// 6) En tauri NO se despoja nada: el error sube, accionable. Fuera de tauri
+		//    queda el strip graduado, pero REGISTRADO como degradado.
+		const png = "data:image/png;base64,AAAA";
+		const value = { items: [{ sku: "Q-1", img: png, _evaluations: [{ r: 1 }], warnings: ["w"] }], sel: {} };
+		const h = this._fakePersistence();
+		// tauri: store.set revienta -> THROWS, sin strip
+		await this._withTauriBridge(h.bridge, async () => {
+			AppStorage.mode = "tauri";
+			let stripCalls = 0;
+			const prevStrip = AppStorage._stripForQuota;
+			AppStorage._stripForQuota = function (v, deep) {
+				stripCalls++;
+				return prevStrip.call(this, v, deep);
+			};
+			AppStorage.storeInstance = {
+				get: async () => undefined,
+				set: async () => {
+					throw new Error("QuotaExceeded: disco lleno");
+				},
+				save: async () => {},
+				delete: async () => {},
+			};
+			let err = null;
+			try {
+				await AppStorage.setItem("_test_tauri_quota", value);
+			} catch (e) {
+				err = e;
+			}
+			AppStorage._stripForQuota = prevStrip;
+			this.assert(err !== null, "tauri: quota rota LANZA en vez de despojar imagenes");
+			this.assert(err !== null && err.message.includes("com.mambo.pedidos"), `el error menciona $APPDATA (got ${err && err.message})`);
+			this.assert(stripCalls === 0, "tauri: _stripForQuota NUNCA corre");
+		});
+		// localstorage: overflow -> strip nivel 1 + degraded registrado
+		await this._withTauriBridge(undefined, async () => {
+			AppStorage.mode = "localstorage";
+			AppStorage.storeInstance = null;
+			const key = "_test_ls_quota";
+			const prevSet = localStorage.setItem;
+			let first = true;
+			localStorage.setItem = function (k, v) {
+				if (first && k === key) {
+					first = false;
+					const e = new Error("QuotaExceededError");
+					e.name = "QuotaExceededError";
+					throw e;
+				}
+				return prevSet.call(this, k, v);
+			};
+			try {
+				await AppStorage.setItem(key, value);
+			} finally {
+				localStorage.setItem = prevSet;
+			}
+			const rec = AppStorage.lastPersistence;
+			this.assert(
+				!!rec && rec.degraded === true && rec.stripLevel === 1,
+				`localStorage: degraded + stripLevel=1 (got ${rec && JSON.stringify(rec)})`,
+			);
+			this.assert(!!rec && rec.backend === "localstorage", "localStorage: backend registrado");
+			const raw = JSON.parse(localStorage.getItem(key) || "null");
+			this.assert(
+				raw && raw.items[0].img === "-" && raw.items[0]._evaluations.length === 1,
+				"localStorage nivel 1: imagenes fuera, evaluaciones intactas",
+			);
+			localStorage.removeItem(key);
+			// nivel 2: sigue sin caber -> tambien caen las evaluaciones
+			let n = 0;
+			localStorage.setItem = function (k, v) {
+				n++;
+				if (k === key && n <= 2) {
+					const e = new Error("QuotaExceededError");
+					e.name = "QuotaExceededError";
+					throw e;
+				}
+				return prevSet.call(this, k, v);
+			};
+			try {
+				await AppStorage.setItem(key, value);
+			} finally {
+				localStorage.setItem = prevSet;
+			}
+			const rec2 = AppStorage.lastPersistence;
+			this.assert(
+				!!rec2 && rec2.degraded === true && rec2.stripLevel === 2,
+				`localStorage: stripLevel=2 registrado (got ${rec2 && JSON.stringify(rec2)})`,
+			);
+			const raw2 = JSON.parse(localStorage.getItem(key) || "null");
+			this.assert(
+				raw2 && raw2.items[0]._evaluations === undefined && raw2.items[0].sku === "Q-1",
+				"localStorage nivel 2: sin evaluaciones, el producto sigue ahi",
+			);
+			localStorage.removeItem(key);
+		});
+	},
+
+	testBytesToDataUrlChunked() {
+		// 7) El chunking no cambia NI UN BYTE del dataURL (regresion de perf).
+		if (typeof Buffer === "undefined") {
+			this.assert(false, "RED: Buffer no disponible para la regresion de base64");
+			return;
+		}
+		const bytes = new Uint8Array(9000);
+		for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) & 0xff;
+		const got = AppStorage._bytesToDataUrl(bytes, "jpeg");
+		const want = "data:image/jpeg;base64," + Buffer.from(bytes).toString("base64");
+		this.assert(got === want, "_bytesToDataUrl chunked reproduce el base64 exacto (>8192 bytes)");
+		const empty = AppStorage._bytesToDataUrl(new Uint8Array(0), "png");
+		this.assert(empty === "data:image/png;base64,", "_bytesToDataUrl con 0 bytes no rompe");
+		const exact = new Uint8Array(8192);
+		this.assert(
+			AppStorage._bytesToDataUrl(exact, "png") === "data:image/png;base64," + Buffer.from(exact).toString("base64"),
+			"_bytesToDataUrl en el limite del chunk (8192) es exacto",
+		);
+	},
+
+	async testImportWizardProjectPersistence() {
+		// D) El draft del wizard vive en AppStorage (store Tauri), no en localStorage crudo.
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		if (!IW || typeof IW.saveProject !== "function") {
+			this.assert(false, "RED: ImportWizard.saveProject no accesible");
+			return;
+		}
+		this.assert(
+			AppStorage.KEYS.PROJECT === "mambo_project_v1",
+			`AppStorage.KEYS.PROJECT = mambo_project_v1 (got ${JSON.stringify(AppStorage.KEYS.PROJECT)})`,
+		);
+		const prevSetItem = AppStorage.setItem;
+		const prevToast = global.window.toast;
+		const legacy = IW.PROJECT_KEY;
+		const calls = [];
+		const toasts = [];
+		localStorage.removeItem(legacy);
+		global.window.toast = (msg, type) => {
+			toasts.push({ msg, type });
+		};
+		try {
+			AppStorage.setItem = async (k, v) => {
+				calls.push({ k, v });
+			};
+			const okSave = await IW.saveProject();
+			this.assert(calls.length === 1, "saveProject() enruta por AppStorage.setItem");
+			this.assert(
+				calls.length === 1 && calls[0].k === "mambo_project_v1",
+				`saveProject() usa KEYS.PROJECT (got ${JSON.stringify(calls[0] && calls[0].k)})`,
+			);
+			this.assert(
+				calls.length === 1 && calls[0].v && typeof calls[0].v.step === "number",
+				"saveProject() persiste el paso actual",
+			);
+			this.assert(localStorage.getItem(legacy) === null, "saveProject() ya no escribe localStorage crudo");
+			this.assert(okSave !== false, "saveProject() exitosa no retorna false");
+			this.assert(toasts.some((t) => t.type === "success"), "saveProject() avisa el guardado");
+			// fallo real: toast de error, nunca exito falso
+			AppStorage.setItem = async () => {
+				throw new Error("cuota agotada");
+			};
+			toasts.length = 0;
+			let err = null;
+			try {
+				await IW.saveProject();
+			} catch (e) {
+				err = e;
+			}
+			this.assert(err === null, "saveProject() degrada a toast de error, no lanza al onclick");
+			this.assert(toasts.some((t) => t.type === "error"), "saveProject() fallida muestra toast de error");
+			this.assert(!toasts.some((t) => t.type === "success"), "saveProject() fallida NO finge exito");
+		} finally {
+			AppStorage.setItem = prevSetItem;
+			global.window.toast = prevToast;
+			localStorage.removeItem(legacy);
+		}
+	},
+
+	async testStorageRealDiskPersistence() {
+		// El fake en memoria prueba la lógica; este prueba el CAMINO COMPLETO con
+		// disco real: dataURL -> images/<hash>.png -> _imageRef -> payload JSON ->
+		// reload (arranque nuevo) -> dataURL idéntico, y que el GC borre solo lo
+		// huérfano. Es lo mas cerca que se puede llegar del runtime Tauri sin
+		// compilar la app (aca no hay toolchain Rust).
+		const nodeFs = require("fs");
+		const nodePath = require("path");
+		const nodeOs = require("os");
+		const root = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "mambo-persist-"));
+		const storeFile = nodePath.join(root, ".mambo-store.json");
+		const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+		const PNG2 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+		// Fake del puente, respaldado por fs de Node (mismas firmas que v2).
+		const makeBridge = (data) => ({
+			inTauri: true,
+			fs: {
+				baseDir: 7,
+				ensureDir: async (rel) => { nodeFs.mkdirSync(nodePath.join(root, rel), { recursive: true }); },
+				writeBytes: async (rel, bytes) => { nodeFs.writeFileSync(nodePath.join(root, rel), Buffer.from(bytes)); },
+				readBytes: async (rel) => new Uint8Array(nodeFs.readFileSync(nodePath.join(root, rel))),
+				list: async (rel) => nodeFs.readdirSync(nodePath.join(root, rel)).map((name) => ({ name, isFile: true })),
+				remove: async (rel) => { nodeFs.rmSync(nodePath.join(root, rel), { recursive: true, force: true }); },
+				exists: async (rel) => nodeFs.existsSync(nodePath.join(root, rel)),
+				appDataDir: async () => root,
+			},
+			store: {
+				load: async () => ({
+					get: async (k) => (data.has(k) ? data.get(k) : undefined),
+					set: async (k, v) => { data.set(k, JSON.parse(JSON.stringify(v))); },
+					delete: async (k) => { data.delete(k); },
+					save: async () => { nodeFs.writeFileSync(storeFile, JSON.stringify([...data.entries()])); },
+					reload: async () => {
+						data.clear();
+						if (nodeFs.existsSync(storeFile)) {
+							for (const [k, v] of JSON.parse(nodeFs.readFileSync(storeFile, "utf8"))) data.set(k, v);
+						}
+					},
+				}),
+			},
+		});
+		const data = new Map();
+
+		try {
+			await this._withTauriBridge(makeBridge(data), async () => {
+				await AppStorage.init();
+				this.assert(AppStorage.mode === "tauri", "disco real: init() resuelve modo tauri por el puente");
+
+				// Guardado 1: la imagen tiene que terminar en un archivo real.
+				const items = [{ sku: "S-1", marca: "Razer", modelo: "Viper", cat: "MOUSE", fob: 30, img: PNG }];
+				await AppStorage.saveCatalog(items, { "S-1": 2 });
+				const lp = AppStorage.lastPersistence || {};
+				this.assert(lp.imagesWritten === 1, "disco real: 1 imagen escrita (got " + lp.imagesWritten + ")");
+				this.assert(lp.imagesFailed === 0 && !lp.degraded && lp.stripLevel === 0, "disco real: sin degradado ni strip");
+				const onDisk = nodeFs.readdirSync(nodePath.join(root, "images"));
+				this.assert(onDisk.length === 1 && /^img_[a-z0-9]+\.png$/.test(onDisk[0]), "disco real: existe images/<hash>.png");
+				const raw = JSON.stringify(data.get(AppStorage.KEYS.CATALOG) || {});
+				this.assert(raw.includes("_imageRef") && !raw.includes("base64,iVBOR"), "disco real: el payload guarda la ref, no el base64 inline");
+				const bytesOnDisk = nodeFs.readFileSync(nodePath.join(root, "images", onDisk[0]));
+				this.assert(bytesOnDisk.length > 0, "disco real: el archivo de imagen no esta vacio");
+
+				// Arranque nuevo: se vacia la memoria y se recarga desde el archivo.
+				const loaded = await AppStorage.loadCatalog();
+				this.assert(loaded.items.length === 1, "disco real: loadCatalog() devuelve el item");
+				this.assert(loaded.items[0].img === PNG, "disco real: la imagen vuelve identica desde el archivo");
+				this.assert(!loaded.items[0]._imageRef, "disco real: la ref se consume al resolver");
+
+				// GC: al cambiar la imagen, la anterior queda huerfana y debe irse.
+				const prevFile = nodePath.join(root, "images", onDisk[0]);
+				await AppStorage.saveCatalog([{ sku: "S-1", marca: "Razer", modelo: "Viper", cat: "MOUSE", fob: 30, img: PNG2 }], {});
+				const after = nodeFs.readdirSync(nodePath.join(root, "images"));
+				this.assert(!nodeFs.existsSync(prevFile), "disco real: el GC borro la imagen huerfana");
+				this.assert(after.length === 1 && nodePath.join(root, "images", after[0]) !== prevFile, "disco real: la imagen vigente sigue en disco");
+				const back2 = await AppStorage.loadCatalog();
+				this.assert(back2.items[0].img === PNG2, "disco real: la imagen nueva se resuelve igual que la vieja");
+			});
+
+			// El archivo del store tiene que sobrevivir sin el objeto en memoria.
+			this.assert(nodeFs.existsSync(storeFile), "disco real: .mambo-store.json existe en $APPDATA simulado");
+			const persisted = JSON.parse(nodeFs.readFileSync(storeFile, "utf8"));
+			this.assert(Array.isArray(persisted) && persisted.some(([k]) => k === AppStorage.KEYS.CATALOG), "disco real: el catalogo esta en el archivo del store");
+		} finally {
+			try { nodeFs.rmSync(root, { recursive: true, force: true }); } catch { /* temp ya no sirve */ }
+		}
+	},
+
+	async testImportWizardStatePersistence() {
+		// persistence-fix: el state del asistente (markup, fletes, alicuotas editadas)
+		// vivia en localStorage crudo dentro de un catch{} vacio.
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		if (!IW || typeof IW._save !== "function" || typeof IW._stateKey !== "function") {
+			this.assert(false, "RED: ImportWizard._save/_stateKey no accesibles");
+			return;
+		}
+		this.assert(
+			IW._stateKey() === "mambo_wizard_v1",
+			`_stateKey() usa AppStorage.KEYS.WIZARD (got ${JSON.stringify(IW._stateKey())})`,
+		);
+
+		const prevSet = AppStorage.setItem;
+		const prevGet = AppStorage.getItem;
+		const prevToast = global.window.toast;
+		const pristine = JSON.parse(JSON.stringify(IW.state));
+		const prevWarned = IW._stateWarned;
+		const writes = [];
+		const toasts = [];
+		global.window.toast = (msg, type) => {
+			toasts.push({ msg, type });
+		};
+		try {
+			// 1) _save() enruta por AppStorage con la clave logica.
+			AppStorage.setItem = async (k, v) => {
+				writes.push({ k, v });
+			};
+			IW.state.bpPct = 7.5;
+			IW._save();
+			await new Promise((r) => setTimeout(r, 0));
+			this.assert(writes.length === 1 && writes[0].k === "mambo_wizard_v1", "_save() persiste por AppStorage.setItem(KEYS.WIZARD)");
+			this.assert(writes[0] && writes[0].v && writes[0].v.bpPct === 7.5, "_save() guarda el state actual");
+			this.assert(
+				localStorage.getItem(IW.CACHE_KEY) === null,
+				"_save() ya no escribe la clave vieja en localStorage crudo",
+			);
+
+			// 2) un fallo NO se traga: avisa una sola vez por sesion.
+			IW._stateWarned = false;
+			AppStorage.setItem = async () => {
+				throw new Error("cuota agotada");
+			};
+			IW._save();
+			await new Promise((r) => setTimeout(r, 0));
+			IW._save();
+			await new Promise((r) => setTimeout(r, 0));
+			const errs = toasts.filter((x) => x.type === "error");
+			this.assert(errs.length === 1, "_save() fallido avisa exactamente un toast de error (no spamea)");
+			this.assert(errs.length === 1 && String(errs[0].msg).includes("cuota agotada"), "el aviso incluye la causa real");
+
+			// 3) migracion: solo existe la clave vieja -> se aplica, se copia y se borra.
+			IW._stateWarned = false;
+			toasts.length = 0;
+			writes.length = 0;
+			// Ojo: hay que reponer el fake grabador; si no, sigue vigente el que lanza
+			// del paso 2 y la migracion falla por culpa del test, no del codigo.
+			AppStorage.setItem = async (k, v) => {
+				writes.push({ k, v });
+			};
+			writes.length = 0;
+			IW.state = JSON.parse(JSON.stringify(pristine));
+			localStorage.removeItem("mambo_wizard_v1");
+			localStorage.setItem(IW.CACHE_KEY, JSON.stringify({ regimen: "courier", seguro: 0.02 }));
+			AppStorage.getItem = async () => null;
+			await IW._restoreState();
+			this.assert(IW.state.regimen === "courier", "_restoreState() migra el state de la clave vieja");
+			this.assert(writes.length === 1 && writes[0].k === "mambo_wizard_v1", "la migracion copia el state a la clave nueva");
+			this.assert(localStorage.getItem(IW.CACHE_KEY) === null, "la migracion borra la clave vieja despues de copiar");
+
+			// 4) no pisa un state nuevo con uno viejo.
+			IW.state = JSON.parse(JSON.stringify(pristine));
+			IW.state.bpPct = 3;
+			localStorage.setItem(IW.CACHE_KEY, JSON.stringify({ bpPct: 99 }));
+			AppStorage.getItem = async () => ({ bpPct: 3 });
+			await IW._restoreState();
+			this.assert(IW.state.bpPct === 3, "un state nuevo vigente gana sobre la clave vieja");
+			this.assert(localStorage.getItem(IW.CACHE_KEY) !== null, "si no se migra, la vieja no se borra");
+		} finally {
+			AppStorage.setItem = prevSet;
+			AppStorage.getItem = prevGet;
+			global.window.toast = prevToast;
+			IW.state = pristine;
+			IW._stateWarned = prevWarned;
+			localStorage.removeItem(IW.CACHE_KEY);
+			localStorage.removeItem("mambo_wizard_v1");
+		}
 	},
 };
 
