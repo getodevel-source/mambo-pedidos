@@ -50,5 +50,9 @@
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.0.0",
     "@tauri-apps/plugin-updater": "^2.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "canvas@3.2.3": true
   }
 }
