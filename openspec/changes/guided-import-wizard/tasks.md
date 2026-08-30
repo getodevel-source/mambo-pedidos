@@ -20,7 +20,7 @@
 ### Pendiente (próximas iteraciones)
 - [ ] Export del resumen (PDF/CSV) desde el Paso 6. (PARCIAL: sólo CSV)
 - [x] Persistencia del proyecto completo (pedido + inputs) para retomar (paso N de 6).
-- [ ] Aviso de vencimiento de la matriz de alícuotas (fecha de vigencia).
+- [x] Aviso de vencimiento de la matriz de alícuotas (fecha de vigencia).
 - [x] Selección de jurisdicción IIBB (CABA/PBA) configurable, no hardcode 2.5%.
 - [ ] Override de NCM por producto (hoy por categoría).
 
@@ -46,3 +46,20 @@ Sigue abierto, con evidencia de que NO está:
 - **Override de NCM por producto**: `state.ncmOverrides` está indexado por
   categoría (`importWizard.js:288`) y el motor lo resuelve por categoría
   (`calculator.js:358`). Un catálogo mixto se calcula con el NCM de la categoría.
+
+## Vigencia de la matriz (cerrado 2026-08-29, `c8ba40f`)
+
+`Calculator.RATES_META` (`vigenciaHasta`, `actualizada`, `fuentes`) +
+`Calculator.ratesStatus(today)` devuelven `ok | proxima | vencida |
+desconocida` con el mensaje listo para mostrar, y `ImportWizard._ratesBanner()`
+lo pinta arriba de **todos** los pasos (un solo punto de inserción en
+`render()`, reusando `.alert-banner warning/danger` que estaban en `styles.css`
+sin usar). `proxima` also se dispara si la matriz pasó más de un año sin
+control humano, porque las alícuotas se mueven por decreto mucho antes de
+cualquier fecha de vencimiento. De las dos fechas del régimen de BIENES DE
+TECNOLOGÍA DE LA INFORMACIÓN se toma la temprana a propósito.
+
+Sigue abierto y es real: export en PDF del resumen del Paso 6 (hoy sólo CSV)
+y override de NCM por producto (el key del motor sigue indexado por categoría:
+`importWizard.js` guarda `ncmOverrides[cat]` y `calculator.js:358` lo lee por
+`ncmKey`).
