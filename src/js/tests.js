@@ -144,6 +144,7 @@ const Tests = {
 		await this.testRatesVigencia();
 		await this.testQuoteHistoryReprint();
 		await this.testNcmOverrideBySku();
+		await this.testWizardSummaryPdf();
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
@@ -8161,7 +8162,71 @@ const Tests = {
 		}
 	},
 
-		async testNcmOverrideBySku() {
+		async testWizardSummaryPdf() {
+		// guided-import-wizard: "Export del resumen (PDF/CSV) desde el Paso 6". El
+		// CSV estaba; el documento imprimible no existía. Se prueba el HTML que
+		// genera y el camino que lo abre, sin abrir una ventana real.
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		this.assert(typeof IW.summaryDocument === "function", "IW.summaryDocument existe");
+		this.assert(typeof IW.exportSummaryPdf === "function", "IW.exportSummaryPdf existe");
+		const prevPedido = global.currentPedido;
+		const prevOpen = global.window.open;
+		const prevToast = global.window.toast;
+		const written = [];
+		const toasts = [];
+		try {
+			global.window.toast = (msg, type) => {
+				toasts.push({ msg, type });
+			};
+			global.window.open = () => ({
+				document: { write: (s) => written.push(String(s)), close() {} },
+			});
+
+			// Sin pedido: avisa y no abre nada.
+			global.currentPedido = { items: [] };
+			this.assert(IW.exportSummaryPdf() === null, "sin pedido devuelve null");
+			this.assert(toasts.some((x) => x.type === "error"), "sin pedido avisa como error");
+			this.assert(written.length === 0, "sin pedido no abre ventana");
+
+			// Con pedido: el documento sale del MISMO calculo del paso 6.
+			global.currentPedido = {
+				items: [
+					{ sku: "AJA-TEC-AK820-1", marca: "ajazz", modelo: "AK820", variante: "Blue", cat: "TECLADO", fob: 50, qty: 2 },
+					{ sku: "RAZ-MOU-VIPER-9", marca: "razer", modelo: "Viper", variante: "Black", cat: "MOUSE", fob: 40, qty: 1 },
+				],
+			};
+			IW.state.iibbJurisdiccion = "cab";
+			const html = IW.exportSummaryPdf();
+			this.assert(typeof html === "string" && html.length > 200, "con pedido devuelve el documento HTML");
+			this.assert(written.length === 1, "abrió una ventana con el documento");
+			this.assert(/Resumen de importaci/.test(html), "el documento se titula como resumen de importacion");
+			this.assert(html.includes("AK820") && html.includes("Viper"), "lista los dos productos");
+			this.assert(html.includes("8471.60"), "muestra los NCM resueltos por el motor");
+			this.assert(!/\$NaN|undefined/.test(html), "no imprime NaN ni undefined en un documento de plata");
+			this.assert(html.includes(Calculator.RATES_META.vigenciaHasta), "cita hasta cuando rigen las aliquotas usadas");
+			this.assert(html.includes("declaración jurada"), "aclara que es una estimación, no una DJ");
+
+			// El boton vive en el paso 6.
+			const paso6 = IW._render_resumen();
+			this.assert(paso6.includes("Exportar resumen PDF") && paso6.includes("exportSummaryPdf()"), "el paso 6 ofrece el botón PDF");
+
+			// Escape: un modelo con HTML no se inyecta en el documento.
+			global.currentPedido = {
+				items: [{ sku: "X-1", marca: "a", modelo: "<script>alert(1)</script>", variante: "", cat: "OTRO", fob: 1, qty: 1 }],
+			};
+			const evil = IW.exportSummaryPdf();
+			this.assert(!evil.includes("<script>alert(1)"), "escapa el modelo: no se inyecta script en el documento");
+			this.assert(evil.includes("&lt;script&gt;"), "el modelo aparece escapado");
+		} finally {
+			global.currentPedido = prevPedido;
+			global.window.open = prevOpen;
+			global.window.toast = prevToast;
+		}
+	},
+
+
+	async testNcmOverrideBySku() {
 		// IT41: override de NCM/DI por producto. Antes el unico override era por
 		// categoria (ncmOverrides[ncmKeyFor(item)]), asi que un item mal clasificado
 		// pagaba el arancel de la categoria que la matriz le asignaba y la unica

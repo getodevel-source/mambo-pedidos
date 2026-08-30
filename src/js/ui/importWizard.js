@@ -82,6 +82,115 @@ const ImportWizard = {
     return `<div class="alert-banner ${kind}" style="margin:0 0 12px;">${ImportWizard._esc(st.message)}</div>`;
   },
 
+  // ── export del resumen a documento imprimible / PDF ──
+  // guided-import-wizard: "Export del resumen (PDF/CSV) desde el Paso 6". El CSV
+  // estaba; el PDF no existia. No se duplica la logica de numeros: se recalcula con
+  // el mismo Calculator.calculateDoorToDoorExactCost + _doorConfig que pinta el paso
+  // 6, asi el documento no puede desincronizarse de lo que el usuario ve. Reusa el
+  // camino del generador de cotizaciones (ventana + "Imprimir" del navegador, que
+  // ofrece Guardar como PDF) en vez de traer una libreria de PDF.
+  summaryDocument(res, sum, state) {
+    const cfg = (typeof QuoteGenerator !== 'undefined' && typeof QuoteGenerator.getConfig === 'function')
+      ? QuoteGenerator.getConfig()
+      : {};
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const money = (v) => '$' + (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const meta = (typeof Calculator !== 'undefined' && Calculator.RATES_META) ? Calculator.RATES_META : {};
+    const items = (res && Array.isArray(res.items)) ? res.items : [];
+    const totalQty = items.reduce((a, it) => a + (Number(it.qty) || 0), 0);
+    const rows = items.map((it, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(it.marca || '')} ${esc(it.modelo || it.sku)}</td>
+        <td>${esc(it.variante || '')}</td>
+        <td class="num">${esc(it.qty)}</td>
+        <td class="mono">${esc(it.ncm || '')}</td>
+        <td class="num">${money(it.fob)}</td>
+        <td class="num">${money((it.derechosUsd || 0) + (it.tasaUsd || 0) + (it.ivaAddUsd || 0) + (it.percGanUsd || 0) + (it.iibbUsd || 0) + (it.bpUsd || 0))}</td>
+        <td class="num">${money(it.costoPuertaTotalUsd != null ? it.costoPuertaTotalUsd : it.costoRealItemUsd)}</td>
+      </tr>`).join('');
+    const fila = (label, valor, extra) => `<div${extra || ''}><span>${label}</span><span>${valor}</span></div>`;
+    return `<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Resumen de importación · ${esc(cfg.companyName || 'Mambo Pedidos')}</title>
+    <style>
+      body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #111; margin: 32px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: #666; font-size: 13px; margin-bottom: 18px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+      th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+      th { background: #f5f5f5; font-weight: 600; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+      .totals { margin-top: 18px; }
+      .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+      .totals .big { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
+      .note { margin-top: 18px; font-size: 11px; color: #666; line-height: 1.5; }
+      @media print { body { margin: 0; } }
+    </style>
+  </head>
+  <body>
+    <h1>Resumen de importación</h1>
+    <div class="sub">${esc(cfg.companyName || 'Mambo Pedidos')}${cfg.clientName ? ' · cliente ' + esc(cfg.clientName) : ''} · generado ${esc(new Date().toLocaleDateString('es-AR'))}</div>
+    <table>
+      <thead><tr><th>#</th><th>Producto</th><th>Variante</th><th class="num">Cant</th><th>NCM</th><th class="num">FOB unit</th><th class="num">Tributos</th><th class="num">Costo puerta</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="totals">
+      ${fila('FOB total', money(sum.fobTotalUsd))}
+      ${fila('Flete + seguro', money((sum.fleteTotalUsd || 0) + (sum.seguroTotalUsd || 0)))}
+      ${fila('CIF', money(sum.cifTotalUsd))}
+      ${fila('Tributos de aduana (DI, TE, IVA adicional, anticipos)', money(sum.totalTributosAduanaUsd))}
+      ${fila('IVA en aduana', money(sum.totalIvaAduanaUsd))}
+      ${fila('Gastos fijos de destino', money(sum.totalGastosFijosDestinoUsd))}
+      ${fila('Certificaciones', money(sum.totalCertsCostUsd))}
+      ${fila('Caja total (con IVA)', money(sum.totalPuertaConIvaUsd), ' class="big"')}
+      ${fila('Costo neto real' + (state && state.recuperaCredito ? ' (recuperando crédito fiscal)' : ''), money(state && state.recuperaCredito ? sum.costoNetoRealUsd : sum.totalPuertaConIvaUsd))}
+      ${fila('Costo puerta por unidad', money(totalQty ? sum.totalPuertaConIvaUsd / totalQty : 0))}
+      ${fila('Crédito fiscal (ARS)', money(sum.creditoFiscalArs))}
+      ${fila('En pesos (TC ' + esc(sum.tipoCambio) + ')', money(sum.totalPuertaConIvaArs))}
+    </div>
+    <div class="note">
+      Estimación sobre la matriz de alícuotas ${esc(meta.fuentes || 'ARCA/AFIP')}, vigente hasta
+      <strong>${esc(meta.vigenciaHasta || 'sin fecha')}</strong> y verificada por última vez el
+      ${esc(meta.actualizada || 'fecha desconocida')}. Los valores de certificaciones,
+      logística y gastos de destino son los cargados en el asistente. Confirmar con el
+      despachante antes de despachar: este documento es una estimación, no una
+      declaración jurada.
+    </div>
+  </body>
+</html>`;
+  },
+
+  // Devuelve el HTML tambien cuando no hay ventana, para poder probarlo.
+  exportSummaryPdf() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    if (!items.length) {
+      if (typeof toast === 'function') toast('No hay productos en el pedido para exportar el resumen.', 'error');
+      return null;
+    }
+    if (typeof Calculator === 'undefined') return null;
+    const s = ImportWizard.state;
+    const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
+    if (!res || !res.summary) {
+      if (typeof toast === 'function') toast('El motor no devolvió un resumen para exportar.', 'error');
+      return null;
+    }
+    const html = ImportWizard.summaryDocument(res, res.summary, s);
+    if (typeof window !== 'undefined' && typeof window.open === 'function') {
+      const win = window.open('', '_blank');
+      if (!win) {
+        if (typeof toast === 'function') toast('Permití las ventanas emergentes para abrir el resumen', 'warning');
+        return html;
+      }
+      win.document.write(html);
+      win.document.close();
+      if (typeof toast === 'function') toast('Resumen abierto: usá "Imprimir → Guardar como PDF"', 'success');
+    }
+    return html;
+  },
+
   _projectKey() {
     return (typeof AppStorage !== 'undefined' && AppStorage.KEYS && AppStorage.KEYS.PROJECT) || ImportWizard.PROJECT_KEY;
   },
@@ -617,6 +726,7 @@ const ImportWizard = {
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.saveAsImport()">💾 Guardar como importación</button>
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportCsv()">⬇ Exportar resumen CSV</button>
+        <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportSummaryPdf()">🖨 Exportar resumen PDF</button>
         <button class="btn btn-secondary btn-sm" onclick="ImportWizard.saveProject()">💾 Guardar proyecto</button>
         <button class="btn btn-ghost btn-sm" onclick="ImportWizard.clearProject()">Descartar proyecto</button>
       </div>

@@ -18,7 +18,7 @@
       $2.257 → Costo neto real $1.748 + Crédito $509). 978/978 tests + lint 0/0.
 
 ### Pendiente (próximas iteraciones)
-- [ ] Export del resumen (PDF/CSV) desde el Paso 6. (PARCIAL: sólo CSV)
+- [x] Export del resumen (PDF/CSV) desde el Paso 6. (CSV: `exportCsv`. PDF: `exportSummaryPdf`)
 - [x] Persistencia del proyecto completo (pedido + inputs) para retomar (paso N de 6).
 - [x] Aviso de vencimiento de la matriz de alícuotas (fecha de vigencia).
 - [x] Selección de jurisdicción IIBB (CABA/PBA) configurable, no hardcode 2.5%.
@@ -63,6 +63,22 @@ Sigue abierto y es real: export en PDF del resumen del Paso 6 (hoy sólo CSV)
 y override de NCM por producto (el key del motor sigue indexado por categoría:
 `importWizard.js` guarda `ncmOverrides[cat]` y `calculator.js:358` lo lee por
 `ncmKey`).
+### Export del resumen en PDF (cerrado 2026-08-29)
+
+`ImportWizard.exportSummaryPdf()` + `summaryDocument(res, sum, state)`, con botón
+en el paso 6. No suma una segunda fuente de números: recibe el resultado del mismo
+`Calculator.calculateDoorToDoorExactCost(items, _doorConfig())` que pinta el paso,
+así el papel no puede desincronizarse de la pantalla. Usa la ventana de impresión
+del navegador (la misma forma que `generatePrintableQuote`) en vez de traer una
+librería de PDF. El documento imprime de dónde salieron las alícuotas y hasta
+cuándo rigen (`RATES_META`) y aclara que es una estimación, no una declaración
+jurada: un número que sale de la app en papel tiene que decir cuánto vale.
+
+16 asserts nuevos en `src/js/tests.js`, incluyendo "no imprime NaN ni undefined" —
+que agarró tres campos que yo había supuesto mal (`totalTributosUsd`,
+`totalGastosUsd`, `costoPuertaUnitUsd` no existen en el summary) y un modelo con
+`<script>` en el nombre, que tiene que salir escapado.
+
 ### Override de NCM por producto (cerrado 2026-08-29)
 
 `state.ncmBySku[sku] = { ncm?, derechos? }`, resuelto en el motor con prioridad
