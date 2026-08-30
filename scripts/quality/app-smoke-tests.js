@@ -106,6 +106,7 @@ const dom = new JSDOM(`<!DOCTYPE html><html><body>
   <!-- historyView -->
   <div id="historialSubtitle"></div>
   <div id="historialList"></div>
+  <div id="quoteHistoryList"></div>
 
   <!-- pedido (app.js) -->
   <div id="pedidoEmpty" style="display:block"></div>
@@ -844,6 +845,66 @@ async function testCatalogSaveErrorSurfaced() {
   }
 }
 
+// ── quote-to-10: bloque "Cotizaciones emitidas" dentro del Historial ──────
+// La otra mitad del feature vive en tests.js (snapshot + openFromHistory); esta es
+// la parte visible: que HistoryView renderice el bloque, distinga las entradas
+// reimprimibles de las del historial anterior, y no se inventen botones.
+async function testQuoteHistoryBlock() {
+  const cont = dom.window.document.getElementById('quoteHistoryList');
+  check('fixture con #quoteHistoryList presente', !!cont);
+  if (!cont) return;
+  const prevToast = global.toast;
+  global.toast = () => {};
+  try {
+    global.localStorage.removeItem(QuoteGenerator.HISTORY_KEY);
+    cont.innerHTML = '';
+    await ctx('HistoryView.renderQuotes()');
+    check('historial vacio: el bloque queda vacio (no inventa una seccion)',
+      cont.innerHTML.trim() === '');
+
+    // Una entrada con detalle (reimprimible) y una vieja sin snapshot.
+    QuoteGenerator.saveToHistory({
+      number: 'COT-0002',
+      clientName: 'Nueva',
+      date: new Date('2026-08-01').toISOString(),
+      currency: 'USD',
+      total: 334,
+      items: 2,
+      snapshot: { name: 'P', items: [{ sku: 'RAZ-1', qty: 1 }], totals: {} },
+    });
+    QuoteGenerator.saveToHistory({
+      number: 'COT-0001',
+      clientName: 'Vieja',
+      date: new Date('2026-07-01').toISOString(),
+      currency: 'USD',
+      total: 100,
+      items: 4,
+    });
+    await ctx('HistoryView.renderQuotes()');
+    const html = cont.innerHTML;
+    check('renderQuotes: lista las cotizaciones del historial',
+      html.includes('Cotizaciones emitidas') && html.includes('COT-0002') && html.includes('COT-0001'));
+    // El historial es LIFO: la ultima guardada (COT-0001, sin snapshot) queda
+    // en 0 y la reimprimible (COT-0002) en 1. Se comprueba el indice, no solo
+    // que exista un boton, para que el boton apunte a la entrada correcta.
+    const botones = (html.match(/Reimprimir/g) || []).length;
+    check('renderQuotes: solo la entrada con detalle ofrece reimprimir (1 boton)',
+      botones === 1 && html.includes('openFromHistory(1)'));
+    check('renderQuotes: la entrada vieja se marca sin detalle y sin boton',
+      html.includes('sin detalle'));
+    check('renderQuotes: el importe sale con su moneda', html.includes('USD 334.00'));
+    check('renderQuotes: no se inyectan scripts desde el historial', !/<script/i.test(html));
+  } finally {
+    global.toast = prevToast;
+    try {
+      global.localStorage.removeItem(QuoteGenerator.HISTORY_KEY);
+    } catch (e) {
+      // sin localStorage no hay que limpiar
+    }
+    cont.innerHTML = '';
+  }
+}
+
 function testValidationPanelDirect() {
   global.showValidationPanel(
     [{ field: 'sku', message: 'SKU inválido' }],
@@ -898,6 +959,7 @@ function testIndexHtmlImportsShell() {
   try { testUpdateProductImage(); } catch (e) { failSection('updateProductImage', e); }
   try { await testKeydownHandlers(); } catch (e) { failSection('keydown handlers', e); }
   try { await testCatalogSaveErrorSurfaced(); } catch (e) { failSection('scheduleCatalogSave persistencia'); }
+  try { await testQuoteHistoryBlock(); } catch (e) { failSection('bloque cotizaciones en Historial', e); }
   try { testValidationPanelDirect(); } catch (e) { failSection('showValidationPanel/hideValidationPanel', e); }
   try { testIndexHtmlImportsShell(); } catch (e) { failSection('index.html shell importaciones', e); }
 

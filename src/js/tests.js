@@ -142,6 +142,7 @@ const Tests = {
 		await this.testStorageRealDiskPersistence();
 		await this.testImportWizardStatePersistence();
 		await this.testRatesVigencia();
+		await this.testQuoteHistoryReprint();
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
@@ -8156,6 +8157,79 @@ const Tests = {
 			this.assert(IW._ratesBanner() === "", "con la matriz vigente no se pinta banner");
 		} finally {
 			Calculator.ratesStatus = prevStatus;
+		}
+	},
+
+	async testQuoteHistoryReprint() {
+		// quote-to-10: "Vista de historial de cotizaciones en la UI
+		// (re-abrir/re-imprimir)". El historial se escribia pero nadie lo leia, y las
+		// entradas no guardaban el detalle: no habia con que reimprimir.
+		if (typeof QuoteGenerator.historySnapshot !== "function") {
+			this.assert(false, "QuoteGenerator.historySnapshot no existe");
+			return;
+		}
+		const prevOpen = global.window.open;
+		const prevToast = global.window.toast;
+		const prevLs = global.window.localStorage;
+		const store = new Map();
+		const opened = [];
+		const toasts = [];
+		const memo = {
+			getItem: (k) => (store.has(k) ? store.get(k) : null),
+			setItem: (k, v) => { store.set(k, String(v)); },
+			removeItem: (k) => { store.delete(k); },
+		};
+		try {
+			global.window.localStorage = memo;
+			global.window.open = (a, b, c) => {
+				const w = { document: { write: (s) => opened.push(String(s)), close() {} } };
+				return w;
+			};
+			global.window.toast = (msg, type) => {
+				toasts.push({ msg, type });
+			};
+			const pedido = {
+				name: "Cotización test",
+				items: [
+					{ sku: "RAZ-MOU-A1", marca: "Razer", modelo: "Viper V3", variante: "Black", qty: 3, fob: 40, pvp: 70 },
+					{ sku: "8BI-CON-B2", marca: "8BitDo", modelo: "Ultimate", variante: "White", qty: 2, fob: 35, pvp: 62 },
+				],
+				totals: { qty: 5, facturacion: 334 },
+			};
+			QuoteGenerator.generatePrintableQuote(pedido, { clientName: "Cliente Test", companyName: "Mambo" }, {});
+			const h = QuoteGenerator.getHistory();
+			this.assert(h.length === 1, "la cotizacion emitida entro al historial");
+			const snap = h[0] && h[0].snapshot;
+			this.assert(!!snap && Array.isArray(snap.items) && snap.items.length === 2, "la entrada guarda el detalle (2 items)");
+			this.assert(snap && snap.items[0].sku === "RAZ-MOU-A1" && snap.items[0].qty === 3, "el snapshot conserva sku y cantidad");
+			this.assert(snap && snap.items[0].variante === "Black", "el snapshot guarda la variante (clave del reprint honesto)");
+			const nAbiertas = opened.length;
+			this.assert(nAbiertas === 1, "generatePrintableQuote abrio una ventana");
+
+			// Reabrir: tiene que volver a imprimir y NO duplicar la entrada.
+			const ok = QuoteGenerator.openFromHistory(0);
+			this.assert(ok === true, "openFromHistory(0) reabre la cotizacion");
+			this.assert(opened.length === nAbiertas + 1, "reabrir volvio a imprimir el documento");
+			this.assert(QuoteGenerator.getHistory().length === 1, "reabrir NO duplica la entrada del historial");
+			const doc = opened[opened.length - 1];
+			this.assert(doc.includes("RAZ-MOU-A1") && doc.includes("Cliente Test"), "el documento reimpreso trae el item y el cliente");
+
+			// Entrada vieja, sin snapshot: avisa, no abre un documento vacio.
+			store.set(QuoteGenerator.HISTORY_KEY, JSON.stringify([{ number: "COT-1", clientName: "Viejo", total: 10, items: 4 }]));
+			const antes = opened.length;
+			const r = QuoteGenerator.openFromHistory(0);
+			this.assert(r === false, "una entrada sin snapshot no se puede reimprimir");
+			this.assert(opened.length === antes, "no se abre un documento vacio");
+			this.assert(toasts.some((x) => x.type === "warning"), "avisa por que no se pudo reabrir");
+
+			// Indice inexistente.
+			toasts.length = 0;
+			this.assert(QuoteGenerator.openFromHistory(99) === false, "indice fuera del historial devuelve false");
+			this.assert(toasts.some((x) => x.type === "error"), "indice inexistente se informa como error");
+		} finally {
+			global.window.open = prevOpen;
+			global.window.toast = prevToast;
+			global.window.localStorage = prevLs;
 		}
 	},
 

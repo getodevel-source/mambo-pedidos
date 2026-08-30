@@ -52,7 +52,54 @@ const QuoteGenerator = {
       const h = QuoteGenerator.getHistory();
       h.unshift(entry);
       localStorage.setItem(QuoteGenerator.HISTORY_KEY, JSON.stringify(h.slice(0, 50))); // últimas 50
-    } catch (e) {}
+    } catch (e) {
+      // El historial no es critico, pero perderlo sin decir nada tampoco.
+      console.warn('No se pudo guardar el historial de cotizaciones:', e);
+    }
+  },
+
+  // Copia minima del pedido para poder REIMPRIMIR una cotizacion desde el
+  // historial. Antes la entrada guardaba solo numero/cliente/total, asi que el
+  // historial era write-only: quote-to-10 pedia "re-abrir/re-imprimir" y no
+  // habia con que. Se guardan solo los campos que consume el documento.
+  historySnapshot(pedido) {
+    return {
+      name: (pedido && pedido.name) || '',
+      items: ((pedido && pedido.items) || []).map((it) => ({
+        sku: it.sku,
+        marca: it.marca,
+        modelo: it.modelo,
+        variante: it.variante || it.color || '',
+        qty: it.qty || 1,
+        pvp: it.pvp != null ? it.pvp : it.fob,
+        fob: it.fob,
+      })),
+      totals: (pedido && pedido.totals) || {},
+    };
+  },
+
+  // Reabre (y por lo tanto reimprime) una cotizacion del historial. Devuelve
+  // false si no se pudo: una entrada del historial anterior a este cambio no
+  // tiene snapshot, y abrir un documento vacio que parece una cotizacion real
+  // es peor que decir que no se puede.
+  openFromHistory(index) {
+    const h = QuoteGenerator.getHistory();
+    const entry = h[Number(index)];
+    if (!entry) {
+      if (typeof toast === 'function') toast('No existe esa cotización en el historial.', 'error');
+      return false;
+    }
+    if (!entry.snapshot || !Array.isArray(entry.snapshot.items) || !entry.snapshot.items.length) {
+      if (typeof toast === 'function') toast(`La cotización ${QuoteGenerator.esc(entry.number || '')} no tiene el detalle guardado (es del historial anterior a esta versión) y no se puede reimprimir.`, 'warning');
+      return false;
+    }
+    const cfg = QuoteGenerator.getConfig();
+    cfg.clientName = entry.clientName || cfg.clientName;
+    QuoteGenerator.generatePrintableQuote(entry.snapshot, cfg, {
+      currency: entry.currency || cfg.currency || 'USD',
+      skipHistory: true,
+    });
+    return true;
   },
 
   formatCurrency(value, opts = {}) {
@@ -200,11 +247,15 @@ const QuoteGenerator = {
     </body>
     </html>`;
 
-    // Guardar en historial
-    QuoteGenerator.saveToHistory({
-      number, clientName, date: new Date().toISOString(),
-      currency, total: totalFx, items: pedido.items.length, qty: t.qty || 0
-    });
+    // Guardar en historial. skipHistory: reabrir desde el historial no es
+    // emitir una cotizacion nueva, y sin esto cada reapertura se duplicaba.
+    if (!opts.skipHistory) {
+      QuoteGenerator.saveToHistory({
+        number, clientName, date: new Date().toISOString(),
+        currency, total: totalFx, items: pedido.items.length, qty: t.qty || 0,
+        snapshot: QuoteGenerator.historySnapshot(pedido),
+      });
+    }
 
     const win = window.open('', '_blank');
     if (win) { win.document.write(htmlContent); win.document.close(); }
@@ -234,7 +285,7 @@ const QuoteGenerator = {
     a.href = url; a.download = `cotizacion-${QuoteGenerator.nextNumber()}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    QuoteGenerator.saveToHistory({ number: 'CSV', clientName: cfg.clientName || 'Cliente', date: new Date().toISOString(), currency, total: t.facturacion || 0, items: pedido.items.length });
+    QuoteGenerator.saveToHistory({ number: 'CSV', clientName: cfg.clientName || 'Cliente', date: new Date().toISOString(), currency, total: t.facturacion || 0, items: pedido.items.length, snapshot: QuoteGenerator.historySnapshot(pedido) });
   },
 
   // ---- Modal de configuración ----

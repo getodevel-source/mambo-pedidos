@@ -32,6 +32,9 @@ const HistoryView = {
   },
 
   async render() {
+    // Primero el bloque de cotizaciones: es aditivo y se maneja solo, asi
+    // que no puede romper el historial de pedidos (ya tiene tests encima).
+    await HistoryView.renderQuotes();
     const list = await AppStorage.loadHistorial();
     const cont = document.getElementById('historialList');
     document.getElementById('historialSubtitle').textContent = list.length + ' pedido' + (list.length !== 1 ? 's' : '') + ' guardado' + (list.length !== 1 ? 's' : '');
@@ -58,6 +61,52 @@ const HistoryView = {
       html += '<button class="btn btn-danger btn-sm" onclick="deleteFromHistorial(' + i + ')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>';
       html += '</div></div>';
     });
+    cont.innerHTML = html;
+  },
+
+  // quote-to-10: "Vista de historial de cotizaciones en la UI
+  // (re-abrir/re-imprimir)". QuoteGenerator guardaba las cotizaciones emitidas
+  // pero nadie las leía: el historial era write-only. Se pinta debajo de los
+  // pedidos, en un contenedor propio, sin poder tumbar el resto de la vista.
+  async renderQuotes() {
+    const cont = document.getElementById('quoteHistoryList');
+    if (!cont) return;
+    let list = [];
+    try {
+      list = (typeof QuoteGenerator !== 'undefined' && typeof QuoteGenerator.getHistory === 'function')
+        ? QuoteGenerator.getHistory()
+        : [];
+    } catch (e) {
+      console.warn('No se pudo leer el historial de cotizaciones:', e);
+    }
+    if (!Array.isArray(list) || !list.length) {
+      cont.innerHTML = '';
+      return;
+    }
+    let html = '<div class="card" style="margin-top:16px;">';
+    html += '<div class="card-title">Cotizaciones emitidas</div>';
+    html += '<div class="card-sub">' + list.length + ' registrada(s) (se guardan las 50 últimas)</div>';
+    html += '<div style="margin-top:8px;">';
+    list.forEach((q, i) => {
+      const fecha = q.date
+        ? new Date(q.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '';
+      const reprintable = !!(q.snapshot && Array.isArray(q.snapshot.items) && q.snapshot.items.length);
+      let row = '<div class="row" style="justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--border-subtle);">';
+      row += '<div><div style="font-weight:600;font-family:var(--font-mono);font-size:13px;">' + esc(String(q.number || '-')) + '</div>';
+      row += '<div class="card-sub" style="font-size:12px;">' + esc(String(q.clientName || 'Cliente'))
+        + (fecha ? ' · ' + fecha : '') + ' · ' + (q.items || 0) + ' ítems</div></div>';
+      const moneda = esc(String(q.currency || 'USD'));
+      row += '<div style="font-family:var(--font-mono);font-weight:700;">' + moneda + ' ' + Number(q.total || 0).toFixed(2) + '</div>';
+      if (reprintable) {
+        row += '<button class="btn btn-secondary btn-sm" onclick="QuoteGenerator.openFromHistory(' + i + ')">Reimprimir</button>';
+      } else {
+        row += '<span class="card-sub" style="font-size:12px;">sin detalle</span>';
+      }
+      row += '</div>';
+      html += row;
+    });
+    html += '</div></div>';
     cont.innerHTML = html;
   },
 
