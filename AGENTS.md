@@ -47,8 +47,26 @@ ground-truth gates (`scripts/ground-truth.js` vs `ground-truth/verdicts.json` y
 `scripts/measure-model-quality.js`) sin regresión. Never commit `scripts/_dbg_*`,
 `scripts/_splice*`, `scripts/_t1.js` (scratch).
 
-## Verificación estándar
-- `npm run test` (1.475 aserciones en 4 suites: 1.006 unitarias + 101 de UI
+## Corpus de catálogos (los PDFs reales)
+
+Los 13 PDFs de proveedores están en `C:\Mambo catalogos` — **con espacio, en la
+raíz de C:**, no en `C:\Mambo\Catalogos`, que es el default hardcodeado. Los
+scripts que lo leen (`audit-app.js`, `ground-truth.js`, `measure-extraction.js`,
+`export-catalog-batch.js`) aceptan `MAMBO_CATALOG_DIR`, así que alcanza con:
+
+```bash
+MAMBO_CATALOG_DIR="C:\Mambo catalogos" npm run audit:full
+MAMBO_CATALOG_DIR="C:\Mambo catalogos" node scripts/export-catalog-batch.js catalog-export.json
+npm run photo:baseline   # mide el export y escribe ground-truth/photo-baseline.json
+```
+
+Sin esa variable esos scripts avisan "no existe la carpeta" y la tarea parece
+bloqueada por entorno. Con ella, cuidado: `ground-truth.js` **regenera
+`ground-truth/manifest.json`** y hoy ese regenerado diverge del etiquetado
+(sku, variante, status y coordenadas). No lo comitees sin re-etiquetar, porque
+las 130 verdicts humanas están casadas con el manifest viejo.
+
+## Verificación estándar- `npm run test` (1.504 aserciones en 4 suites: 1.028 unitarias + 101 de UI
   smoke + 239 de lógica + 129 de `app.js` en jsdom) · `npm run lint`
   (0 errores) · `npm run check:version` · `npm run build:frontend`
 - `npm run e2e` es lo único que verifica el runtime real (Tauri + WebView2).
