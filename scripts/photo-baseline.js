@@ -23,7 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('canvas');
 
 const argv = process.argv.slice(2);
 const positional = argv.filter((a) => !a.startsWith('--') && !/^(\d|\.|C:)/i.test(a));
@@ -76,6 +76,9 @@ function percentile(sorted, p) {
   let decodeFailed = 0;
   let payloadBytes = 0;
 
+  let uniform = 0;
+  const uniformFiles = [];
+
   for (const p of products) {
     const img = p && p.img;
     if (!img || img === '-') {
@@ -98,6 +101,31 @@ function percentile(sorted, p) {
       const im = await loadImage(img);
       const short = Math.min(im.width, im.height);
       shortSides.push(short);
+      // Imagen plana = sin producto: un solo color, o casi. Se mide con la
+      // desviacion estandar de los canales RGB sobre una muestra de pixeles
+      // (una plana real da 0). Umbral 12, mismo espiritu que el stdev<15 de
+      // ImageQuality.isMarginalCrop para el recorte.
+      try {
+        const cv = createCanvas(im.width, im.height);
+        const cx = cv.getContext('2d');
+        cx.drawImage(im, 0, 0);
+        const px = cx.getImageData(0, 0, im.width, im.height).data;
+        const step = Math.max(1, Math.floor((im.width * im.height) / 4000));
+        let sr = 0; let sg = 0; let sb = 0; let cnt = 0;
+        for (let i = 0; i < im.width * im.height; i += step) {
+          const o = i * 4; sr += px[o]; sg += px[o + 1]; sb += px[o + 2]; cnt++;
+        }
+        const mr = sr / cnt; const mg = sg / cnt; const mb = sb / cnt;
+        let vr = 0; let vg = 0; let vb = 0;
+        for (let i = 0; i < im.width * im.height; i += step) {
+          const o = i * 4; vr += (px[o] - mr) ** 2; vg += (px[o + 1] - mg) ** 2; vb += (px[o + 2] - mb) ** 2;
+        }
+        const stdev = Math.sqrt(Math.max(vr, vg, vb) / cnt);
+        if (stdev < 12) {
+          uniform++;
+          if (uniformFiles.length < 20) uniformFiles.push(String(p.sku || '?') + ' ' + String(p.marca || ''));
+        }
+      } catch { /* sin stdev: no es una plana */ }
       const brand = String(p.marca || 'OTRO').toLowerCase().trim();
       const agg = byBrand.get(brand) || { n: 0, sum: 0, under150: 0, min: Infinity };
       agg.n++;
@@ -131,6 +159,9 @@ function percentile(sorted, p) {
     uniqueImages: hashes.size,
     duplicatedImages: duplicated,
     duplicatedUses: dupUses,
+    uniformImages: uniform,
+    uniformPct: n ? Math.round((uniform / n) * 1000) / 10 : 0,
+    uniformSamples: uniformFiles,
     shortSide: {
       avg,
       median: median(shortSides),
@@ -166,6 +197,7 @@ function percentile(sorted, p) {
   line('únicas / reutilizadas', `${report.uniqueImages} / ${duplicated} imgs en ${dupUses} usos`);
   line('lado menor: avg | mediana', `${avg} | ${report.shortSide.median}`);
   line('lado menor: min | p10 | p90 | max', `${report.shortSide.min} | ${report.shortSide.p10} | ${report.shortSide.p90} | ${report.shortSide.max}`);
+  line('imagenes planas/uniformes', `${uniform} (${report.uniformPct}%)${uniformFiles.length ? ' · ej: ' + report.uniformSamples.slice(0, 3).join('; ') : ''}`);
   line('< 150px', `${under150} (${report.under.lt150Pct}%)`);
   line('< 300px', `${under300} (${report.under.lt300Pct}%)`);
   line('>= 300px', `${report.under.ge300Pct}%`);

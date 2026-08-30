@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T18:06:11.918Z",
+  "generatedAt": "2026-08-30T18:42:08.941Z",
   "source": "catalog-export.json",
   "products": 2170,
   "withImage": 2147,
@@ -10,6 +10,25 @@
   "uniqueImages": 1904,
   "duplicatedImages": 196,
   "duplicatedUses": 439,
+  "uniformImages": 15,
+  "uniformPct": 0.7,
+  "uniformSamples": [
+    "ATK-TEC-V2-FD2D Atk",
+    "ATK-TEC-Z87-3309 Atk",
+    "ATK-TEC-A98-6DD5 Atk",
+    "ATK-TEC-F1-E12C Atk",
+    "ATK-TEC-A9-BEE9 Atk",
+    "ATK-TEC-A9-425A Atk",
+    "MCH-TEC-GALLOPIN-3E10 Mchose",
+    "MCH-MOU-STARBURS-2CB9 Mchose",
+    "MCH-MOU-60-5876 Mchose",
+    "MCH-TEC-68-8A01 Mchose",
+    "MCH-TEC-ICY-DF18 Mchose",
+    "MCH-TEC-CABBAGE-1A20 Mchose",
+    "MCH-TEC-V3-1716 Mchose",
+    "MCH-TEC-A7-F455 Mchose",
+    "MCH-TEC-M7-B283 Mchose"
+  ],
   "shortSide": {
     "avg": 178.8,
     "median": 169,

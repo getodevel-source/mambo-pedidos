@@ -61,7 +61,7 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
 
 - [x] 1. `npm test` + `npm run lint` + `npm run build` 🟢.
 - [ ] 2. Gates FASE 2 (ground-truth + measure-model-quality) sin regresión.
-- [ ] 3. Auditoría visual: sample de fotos a 300px, nenhua rota.
+- [x] 3. Auditoría visual: sample de fotos a 300px, ninguna rota. **Realizada, y el criterio NO se cumple**: ver hallazgo abajo.
 - [ ] 4. Commit `chore: photo-quality verified`.
 
 ## Fuera de alcance (no en esta iteración)
@@ -194,3 +194,31 @@ es re-etiquetar 65 casos contra el candidate y recién después promover con
 `--write`. Hasta entonces el recall/FP del repo mide el pasado. Lo demás sigue
 en pie: el `audit:full` PASS y la Unidad 6.1 sí se midieron sobre la extracción
 actual.
+
+## Auditoría visual U6.3 — realizada, criterio NO cumplido (2026-08-29)
+
+Se auditaron las 1.904 imágenes únicas del export con dos ojos: el muestreo
+visual directo del agente (con visión sobre archivos reales) y una medición
+mecánica de uniformidad (desviación estándar de RGB sobre una muestra de
+píxeles; una imagen plana de un solo color da stdev 0). La métrica quedó
+versionada: `uniformImages` / `uniformPct` y las primeras 20 SKUs en
+`ground-truth/photo-baseline.json`, que es el baseline de regresión de esta
+unidad.
+
+Resultado: **15 imágenes planas o casi (0,7 %)**, todas de Atk (6) y Mchose
+(9) — p. ej. Atk "Periodic Blueberry Z87", "Blazing Sky F1 V2", Mchose
+"Starburst Topographic", "Rhino contour Ace 60 PRO", "M7 Ultra". Son recortes
+de un solo color, sin producto visible (desde 567 bytes). Del mapeo por hash
+contra el export: **6 de los 9 productos afectados validan GREEN**. La foto
+está presente pero vacía, y el semáforo no la distingue — el riesgo exacto que
+el P3 (`catalog-assignment-quality-gates`) describía para los placeholders,
+ahora por el lado de la imagen vacía.
+
+Fuera del criterio pero del mismo pase de auditoría: la foto de Vgn "Dragonfly
+VXE Dongle" (cat MOUSE) muestra un mousepad naranja — un caso real de imagen
+mal asignada, de la clase que el proposal llamaba shared-image-errors.
+
+Conclusión: "ninguna rota" no se cumple. La caja queda cerrada como auditoría
+con hallazgos, y la puerta para cerrarla de verdad es una regla de
+image-uniformity en las assignment gates (hoy las imágenes planas pagan como
+si fueran fotos).
