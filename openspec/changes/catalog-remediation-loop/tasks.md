@@ -135,14 +135,24 @@ Run in order; each is a hard criterion. Full-corpus steps are env-gated (8–10 
 
 ## Reconciliación 2026-08-29
 
-A.2 sigue abierta y está bloqueada de entorno, no de diseño: el criterio es
+Cuando se escribió esta nota, A.2 parecía bloqueada de entorno: el criterio es
 `greenPct` ≥ 99.0 en `remediation-ledger.json`, y ese ledger lo produce
-`scripts/remediate-catalog.js` sobre el export de
-`scripts/export-catalog-batch.js`, que hardcodea
-`CATALOG_DIR = "C:\Mambo\Catalogos"` (línea 17). El directorio no existe en
-esta máquina y no hay ningún `remediation-ledger.json` versionado ni en disco.
-El `greenPct: 99.2` que aparece en `design.md` es un ejemplo de forma del
-archivo, no una medición.
+`scripts/remediate-catalog.js` sobre el export de `scripts/export-catalog-batch.js`,
+que hardcodeaba `CATALOG_DIR = "C:\Mambo\Catalogos"`. Resultó que el corpus estaba
+en `C:\Mambo catalogos` (con espacio) y que el único trabajo era pasar
+`MAMBO_CATALOG_DIR`. Se ejecutó el loop y el resultado está más abajo: no es un
+bloqueo, es que el número no llega a la barra.
+
+Dos aclaraciones sobre las métricas hermanas, para no citarlas de memoria:
+
+- El `greenPct: 99.2` que aparece en `design.md` es un ejemplo de forma del
+  archivo, no una medición.
+- El `recall_dirty 100% / FP 8%` que este change cita en `proposal.md:44` y
+  `:343` mide el snapshot etiquetado, no el parser actual: `measure-model-quality.js`
+  puntúa contra `ground-truth/manifest.json` + `verdicts.json`. Medido con
+  `scripts/ground-truth-diff.js`, sólo el 52,3% de los ids del re-muestreo siguen
+  apuntando al caso etiquetado. Esos números siguen valiendo para el snapshot; no
+  describen el código de hoy. Detalle en `photo-quality/tasks.md`.
 
 ## A.2 ejecutado contra el corpus real — NO CIERRA (2026-08-29)
 

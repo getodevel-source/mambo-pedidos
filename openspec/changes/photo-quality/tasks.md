@@ -67,11 +67,13 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
   aserciones en 4 suites (1.003 unitarias + 101 UI smoke + 239 lógica + 129 app
   jsdom), 0 fallos; `npm run lint` 0 errores; `npm run build:frontend` OK.
   `npm run build` (tauri) NO corre en esta máquina: no hay toolchain Rust.
-- **Unidad 6.2 PARCIAL**: `scripts/measure-model-quality.js` ejecuta y está en
-  verde contra la meta archivada (`archive/parser-to-10`: recall ≥85%, FP ≤8%) —
-  recall_dirty 100% (40/40, 0 FN), FP_rate_clean 8% (2/25). En cambio
-  `scripts/ground-truth.js` no es ejecutable acá: `ENOENT scandir
-  C:\Mambo\Catalogos`. Ese gate necesita los 13 PDFs originales.
+- **Unidad 6.2 PARCIAL, y el motivo no es el que parecía**: los dos scripts
+  corren contra el corpus (`MAMBO_CATALOG_DIR="C:\Mambo catalogos"`). Pero
+  `measure-model-quality.js` puntúa contra `ground-truth/manifest.json`, que es un
+  **snapshot de la extracción etiquetada**, no una re-medición del parser de hoy:
+  su recall_dirty 100% (40/40, 0 FN) / FP 8% describe al parser con el que se
+  tomaron las 65 etiquetas. Ver la corrección al pie de este archivo y
+  `scripts/ground-truth-diff.js`.
 - **Unidades 1 y 2 BLOQUEADAS, no pendientes a secas**: piden correr
   `scripts/_dbg_real_audit.js` / `_dbg_real_audit300.js`, que son scratch nunca
   versionados (hoy no existen) y dependen del mismo `C:\Mambo\Catalogos`
@@ -128,13 +130,37 @@ inline (`catalog-export.json`, 144 MB, gitignored), no archivos por imagen. La
 capacidad de escribir `images/` si existe y esta verificada en desktop
 (`06d083c` + el job e2e), pero el batch del corpus no la usa.
 
-Unidad 6.2: `measure-model-quality.js` en verde (recall_dirty 100%, 40/40 con 0
-FN; FP_rate_clean 8%, 2/25), pero **`ground-truth.js` no se puede pasar como
-"sin regresión"**: al correrlo contra el corpus regenera `ground-truth/manifest.json`
-y el manifest regenerado **no coincide** con el etiquetado (mismos 130 casos, pero
-cambian `sku`, `variante`, `status` YELLOW→GREEN, coordenadas `y`, y desaparece
-`cropFile`). `measure-extraction.js` muestra que la mayoria del drift es mejora
-post-FASE 2 (ej: "Flame Switch"→"Flame" + variante, "Turbo+"→"Turbo+ V9"), pero
-las verdicts humanas estan casadas con el manifest viejo: hay que re-baselinear
-(regenerar manifest + crops y re-etiquetar) o el gate queda inevaluable. No se
-comiteo ese regenerado; la copia esta en `scripts/_img_audit/manifest-regenerado.json`.
+Unidad 6.2 — **corrección de una claim que escribí yo más arriba** (mismo día,
+2026-08-29): reporté "`measure-model-quality.js` en verde (recall_dirty 100%)"
+como si eso validara al parser actual. No es lo que mide ese script. Lee
+`ground-truth/manifest.json` (la extracción congelada sobre la que un humano
+dictaminó) y `verdicts.json` (los dictámenes), así que calibra la función de
+calidad **contra el snapshot etiquetado**, no contra el código de hoy.
+
+Prueba, no intuición: `node scripts/ground-truth-diff.js` compara el manifest
+comiteado con un re-muestreo del corpus actual y da que sólo **34 de 65 ids
+(52,3%) siguen apuntando al mismo producto** (marca + FOB), y apenas 11 conservan
+el `modelo`. Con `--per-pdf 5` —la cantidad con la que se etiquetó— el candidate
+vuelve a tener 65 casos y aun así no se alinean: la semilla decide el orden sobre
+el *pool* de productos, y ese pool cambió con la reescritura del parser. El "100%"
+que también citan `catalog-remediation-loop/proposal.md` y
+`catalog-reliability-verification/verify-report.md` es del snapshot viejo; donde
+aparezca como estado actual está inflado.
+
+Qué se hizo con esto:
+
+- `ground-truth.js` **dejó de pisar el manifiesto versionado por default**: escribe
+  `ground-truth/manifest.candidate.json` y sólo promueve con `--write`. Antes,
+  correr "el gate" reescribía la referencia con la que se compara, sin flag ni
+  aviso.
+- `--per-pdf N` expone la cantidad de muestreo (estaba fija en 10; las etiquetas son
+  de 5) para poder reproducir las posiciones del set etiquetado.
+- `scripts/ground-truth-diff.js` convierte la pregunta en un número y, con
+  `--packet`, escribe `ground-truth/rebaseline-packet.json` con los 65 casos
+  (veredicto, razón, qué decía la etiqueta, qué extrae hoy, qué crop mirar).
+
+Conclusión para la caja: **U6.2 sigue abierta y no es trabajo de código**. Cerrarla
+es re-etiquetar 65 casos contra el candidate y recién después promover con
+`--write`. Hasta entonces el recall/FP del repo mide el pasado. Lo demás sigue
+en pie: el `audit:full` PASS y la Unidad 6.1 sí se midieron sobre la extracción
+actual.
