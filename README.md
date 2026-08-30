@@ -1,6 +1,6 @@
-# Mambo Pedidos (v2.1.1)
+# Mambo Pedidos (v2.2.0)
 
-[![Version](https://img.shields.io/badge/version-v2.1.1-orange.svg)](https://github.com/getodevel-source/mambo-pedidos/releases)
+[![Version](https://img.shields.io/badge/version-v2.2.0-orange.svg)](https://github.com/getodevel-source/mambo-pedidos/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tauri 2.0](https://img.shields.io/badge/Tauri-2.0-blueviolet.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
