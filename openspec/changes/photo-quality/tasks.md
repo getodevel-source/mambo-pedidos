@@ -7,7 +7,14 @@ Verificación por unidad: `npm test` (unit en `src/js/tests.js`) + gates FASE 2 
 
 - [x] 1. Correr `node scripts/_dbg_real_audit.js` y guardar el baseline (avg lado
       menor, % <150px, tamaño total) como referencia de regresión.
-- [ ] 2. Correr la variante a 300px (`_dbg_real_audit300.js`) y anotar el tamaño
+- [x] 2. Correr la variante a 300px (`_dbg_real_audit300.js`) y anotar el tamaño
+      total en filesystem equivalente. **El número previsto no se confirmó: ni
+      ~139 MB ni ~35 MB.** Medido sobre disco real con el techo de 300px hoy:
+      1904 imágenes únicas = 87,8 MB de contenido (93 MB en disco con el tamaño de
+      bloque), con 243 reutilizaciones que el dedupe evita escribir dos veces. El
+      payload inline del mismo export es 99,2 MB, porque cuenta cada uso y no cada
+      imagen. La variante a medir ya no es un script scratch: es
+      `node scripts/export-catalog-batch.js [out.json] --images DIR` (Unidad 5).
       total en filesystem equivalente. Confirmar el número de ~139MB vs 35MB.
 - [x] 3. Commit `chore: photo-quality baseline audit`. (baseline versionado)
 
@@ -44,10 +51,11 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
 
 ## Unidad 5 — Migración de catálogos existentes
 
-- [ ] 1. Script `scripts/_dbg_` (o real) que re-extrae los 13 catálogos con
+- [x] 1. Script `scripts/_dbg_` (o real) que re-extrae los 13 catálogos con
       MAX_DIM=300/400 y persiste a archivos. Correr contra `C:\Mambo\Catalogos`.
 - [ ] 2. Validar con `_dbg_real_audit.js`: avg ≥300px, `<150px` ≈ 0, storage medido.
-- [ ] 3. Commit `feat(import): re-import catalogs at 300px to image files`.
+- [x] 3. Commit `feat(import): re-import catalogs at 300px to image files`.
+      (el re-export con `--images` quedó en este commit; ver la medición abajo)
 
 ## Unidad 6 — Verificación final
 
@@ -87,7 +95,28 @@ Problema: `stdev < 15` no detecta recorte que agarra el borde (MCHOSE).
   tamaño/storage de esta unidad se miden sobre un camino que recién ahora
   funciona, así que el baseline viejo no sirve como referencia de regresión.
 
-## Medicion 2026-08-29 con el corpus real (y el criterio no se cumple)
+## Unidades 3 y 4: estaban marcadas hechas sobre código que no corría
+
+Las cajas `[x]` de "Implementar en `src/js/storage.js`: separar data URLs →
+archivos (fs plugin, permisos ya presentes)" y "GC: eliminar PNGs huérfanos. Test
+RED→GREEN" estaban checked, y los permisos del plugin efectivamente estaban
+dados en `capabilities/default.json`. Pero el camino era inalcanzable: sondeaba
+`window.__TAURI__.fs` (inexistente en Tauri v2), llamaba a
+`readBinaryFile`/`writeBinaryFile` (nombres de v1) y no pasaba `baseDir`, que v2
+exige para rutas relativas. Un `catch` con `console.warn` se comía el fallo en
+cada imagen, y los tests pasaban porque en Node el `fs` del plugin se
+stubpeaba.
+
+Es decir: hasta `06d083c` no se escribió nunca un solo archivo en
+`$APPDATA/images`, y el GC tampoco corrió jamás en la app. La caja de "Test
+RED→GREEN" era cierta en el stub y falsa en el runtime — que es el mismo patrón
+que se corrigió en `e2e-smoke-test` (un probe que existía y fallaba, marcado como
+hecho por leer el código y no ejecutarlo).
+Hoy el roundtrip de imágenes por disco está verificado contra la app compilada
+por el job `e2e-windows`, y el batch del corpus puede escribirlas con
+`--images`.
+
+## Medición 2026-08-29 con el corpus real (y el criterio no se cumple)
 
 El corpus existia todo el tiempo: `C:\Mambo catalogos` (con espacio, en la raiz
 de C:), 13 PDFs / 56 MB. `scripts/export-catalog-batch.js` ahora acepta
@@ -132,7 +161,8 @@ capacidad de escribir `images/` si existe y esta verificada en desktop
 
 Unidad 6.2 — **corrección de una claim que escribí yo más arriba** (mismo día,
 2026-08-29): reporté "`measure-model-quality.js` en verde (recall_dirty 100%)"
-como si eso validara al parser actual. No es lo que mide ese script. Lee
+como si eso validara al parser actual. No es lo que mide ese script: es una
+calibración contra el snapshot etiquetado. Lee
 `ground-truth/manifest.json` (la extracción congelada sobre la que un humano
 dictaminó) y `verdicts.json` (los dictámenes), así que calibra la función de
 calidad **contra el snapshot etiquetado**, no contra el código de hoy.

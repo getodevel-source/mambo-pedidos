@@ -3,6 +3,10 @@
  * the full catalog JSON (including image assignment) for the quality loop.
  *
  * Usage:
+ *   node scripts/export-catalog-batch.js [out.json] [--images DIR]
+ *   MAMBO_CATALOG_DIR / CATALOG_FILTER / HUNGARIAN_P4=0 siguen aplicando.
+ *   --images escribe cada imagen unica como archivo y reporta MB reales en
+ *   disco (photo-quality Unidad 2.1 y la comparacion de storage).
  *   node scripts/export-catalog-batch.js [output.json]
  *
  * Mirrors app.processPdfFile: per-page grid extraction + image extraction
@@ -13,6 +17,7 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
+const crypto = require("crypto");
 
 // Mismo knob que audit-app.js / ground-truth.js / measure-extraction.js.
 // Sin esto este era el unico script del corpus que no se podia apuntar a
@@ -416,6 +421,48 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
 		JSON.stringify({ pageStats, imageStats }, null, 2),
 		"utf-8",
 	);
+	// --images DIR: persiste cada imagen unica como archivo aparte, dedupeada por
+	// sha256 del payload (la misma regla de identidad que AppStorage.buildImageRef).
+	// Sirve para dos cosas: que el re-export de photo-quality deje de ser un solo
+	// JSON con base64 inline, y para medir storage en filesystem real en vez de
+	// estimarlo desde el payload (la pregunta ~139MB vs 35MB del proposal).
+	const imgIdx = process.argv.indexOf("--images");
+	const imgDir = imgIdx >= 0 ? process.argv[imgIdx + 1] : null;
+	if (imgDir) {
+		fs.mkdirSync(imgDir, { recursive: true });
+		const names = new Set();
+		let bytes = 0;
+		let written = 0;
+		let reused = 0;
+		let failed = 0;
+		for (const p of finalExported) {
+			const img = p && p.img;
+			if (typeof img !== "string" || !/^data:image\//i.test(img)) continue;
+			const b64 = img.slice(img.indexOf(",") + 1);
+			let name;
+			try {
+				const hash = crypto.createHash("sha256").update(b64).digest("hex");
+				name = `img_${hash.slice(0, 16)}.png`;
+			} catch {
+				failed++;
+				continue;
+			}
+			if (names.has(name)) {
+				reused++;
+				continue;
+			}
+			const buf = Buffer.from(b64, "base64");
+			fs.writeFileSync(path.join(imgDir, name), buf);
+			names.add(name);
+			bytes += buf.length;
+			written++;
+		}
+		console.log(
+			`\n🖼️  Imagenes a archivos: ${written} unicas · ${reused} reutilizaciones` +
+				`${failed ? ` · ${failed} sin hash` : ""} → ${imgDir} · ${(bytes / 1024 / 1024).toFixed(1)} MB en disco`,
+		);
+	}
+
 	console.log(`\n✅ Export: ${allExported.length} productos → ${OUTPUT}`);
 	console.log(`📊 Diagnóstico por página → ${diagFile}`);
 	console.log(
