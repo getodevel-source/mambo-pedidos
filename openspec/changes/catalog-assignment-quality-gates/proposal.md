@@ -86,5 +86,12 @@ Confirmed product decisions above; fixtures derived from the real export; existi
 - [ ] Placeholder `"-"` rate below 5% on re-import of the same catalogs, and never GREEN (minimum YELLOW with "Sin imagen").
 - [ ] Zero generic/header models importable as GREEN.
 - [ ] Truncated models repaired where evidence supports it, otherwise YELLOW with a warning.
-- [ ] Duplicates (brand + model + normalized FOB) reported in the audit with counts and concrete SKUs.
+- [x] Duplicates reported in the audit with counts and concrete SKUs. Identity key is
+  brand + category + model + variant + normalized FOB
+  (`CatalogAssignmentGates.duplicateKey`). Corrected 2026-08-29: the earlier wording
+  ("brand + model + normalized FOB", without category or variant) would flag 382
+  groups / 906 products on the real export, and every one of them is a false
+  positive — colour variants of one model at one FOB inside a single catalogue
+  (8bitdo Ultimate at 35.19 in Wireless, Black Controller Wireless, White
+  Wireless). The shipped code already used the wider key; only this prose was wrong.
 - [ ] Audit report reproduces baselines and deltas mechanically from a fixture.

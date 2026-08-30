@@ -43,7 +43,7 @@ sobre ese export, o sea de la implementación misma, no de un script aparte.
 - [x] Duplicados reales detectados por `duplicateKey` =
       `marca|cat|modelo|variante|fob`. **Medido: `duplicateGroups: 0`,
       `duplicateProducts: 0`**.
-- [ ] **Corrección al proposal**: su criterio decía "brand + model + normalized
+- [x] **Corrección al proposal** aplicada en el propio `proposal.md` (criterio de
       FOB". Con esa clave, el export de hoy daría **382 grupos / 906 productos
       flaggeados**, y son todos falsos positivos: variantes de color del mismo
       modelo al mismo FOB dentro del mismo catálogo (ej. `8bitdo Ultimate`
@@ -60,7 +60,7 @@ sobre ese export, o sea de la implementación misma, no de un script aparte.
       cambios residuales (59 `watch-model`, 2 `generic-model`) y 0 duplicados.
 - [x] Reproduce baseline y delta mecánicamente desde el export (no snapshot
       exacto, como pide la sección de riesgos).
-- [ ] Enganchar el reporte a un comando versionado: hoy hay que instanciar
+- [x] Enganchado a un comando versionado: `npm run audit:assignment`
       `CatalogAssignmentGates.runAll()` a mano. Un `npm run audit:assignment`
       que lo escriba a un JSON (gitignored, como el resto de los reportes) sería
       lo equivalente a `npm run audit:full`. No bloquea el cierre.

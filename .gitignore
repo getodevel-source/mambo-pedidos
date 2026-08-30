@@ -60,6 +60,7 @@ catalog-export.json
 catalog-export-diag.json
 catalog-export-remediated.json
 extraction-audit-report.json
+assignment-audit-report.json
 audit-app-report.json
 
 # Agent session exports
