@@ -162,7 +162,7 @@ bundler).
       (export CSV/XLSX). Cierre: index.html sin script estático de pdf/xlsx
       en el head, tests del loader (idempotencia + no duplica script), npm
       test 837+ PASS, lint 0, export 8BitDo OK (regresión pipeline).
-- [ ] WS-P4 (orquestador): re-medir húngaro OPT-IN con evidencia fresca:
+- [x] WS-P4 (orquestador): re-medir húngaro OPT-IN con evidencia fresca:
       8BitDo con HUNGARIAN_P4=1 (time + corpus G/Y/R vs sin flag). Cierre:
       pase 4 corre en segundos, corpus idéntico → P4: 6 → 8 (documentado).
 - [x] WS-P8 (subagente): cobertura de app.js (877 LOC) con jsdom —
@@ -553,3 +553,30 @@ Aclaraciones sobre lo que NO se puede cerrar acá:
   métrica.
 - **FIX REAL P19 / Cierre P19**: siguen abiertos y legítimos. Requieren ventana
   dedicada sobre `pdfParser.js` (cambia la API de pdf.js) y el corpus de PDFs.
+
+## WS-P4 medido contra el corpus real (2026-08-29)
+
+Con los 13 PDFs disponibles (`C:\Mambo catalogos`, via `MAMBO_CATALOG_DIR`) se
+pudo correr la comparacion que pedia la caja, sobre 8BitDo (el catalogo que ella
+nombraba), export + gates del import:
+
+| corrida | split | tiempo |
+|---|---|---|
+| `CATALOG_FILTER=8BitDo` (pase 4 activo) | 89 prod · 58 GREEN / 31 YELLOW / 0 RED | 5358 ms |
+| idem + `HUNGARIAN_P4=0` (pase 4 apagado) | 89 prod · 58 GREEN / 31 YELLOW / 0 RED | 5344 ms |
+
+El corpus es identico: mismas 89 claves `sku|marca|modelo|variante|cat|fob|status`,
+mismos veredictos, y comparando item por item **un solo producto cambia algo**, y
+lo que cambia son los bytes de su imagen (`8BI-CON-CLASSIC-BD71`: el pase 4 le
+asigna otra foto, de otro tamano). Cero diferencia de tiempo medible (14 ms sobre
+~5.3 s, ruido). El timeout de 90 s que registraba la caja ya no existe: el guard
+anti-ciclo en ambos `do-while` lo resolvio.
+
+Correccion importante al texto de la caja y al CIERRE: el pase 4 **ya no es
+OPT-IN**. `pdfParser.js:3550` lo aplica con `envFlag("HUNGARIAN_P4") !== "0"`, es
+decir esta encendido por defecto y se apaga con `=0`. Y como `envFlag` (linea 12)
+leo `process.env` unicamente, en el WebView2 de desktop siempre devuelve
+`undefined` => el pase corre siempre y **no hay forma de desactivarlo desde la
+app**. Si alguna vez hace falta desactivarlo por catalogo, el knob tiene que
+migrar de variable de entorno a configuracion de la app. No se toco aca: cambiar
+ese default altera la asignacion de imagenes de todos los catalogos.
