@@ -22,6 +22,8 @@ const ImportWizard = {
     recuperaCredito: true,
     iibbJurisdiccion: 'santa_fe', iibbPctCustom: 0.03,
     ncmOverrides: {},
+    // IT41: override de NCM/DI por SKU (gana sobre el de categoría).
+    ncmBySku: {},
     // Slice C (landed-cost-verdict): precio local de referencia, percepción BP y
     // seguro explícito en USD (override del %). Persisten en mamboImportWizardState.
     precioLocalUsd: null,
@@ -368,6 +370,7 @@ const ImportWizard = {
     const matrix = (typeof Calculator !== 'undefined' && Calculator.NCM_MATRIX) ? Calculator.NCM_MATRIX : {};
     const s = ImportWizard.state;
     const ii = ImportWizard._iibbPct();
+    const rm = (typeof Calculator !== 'undefined' && Calculator.RATES_META) ? Calculator.RATES_META : {};
     const rows = Object.entries(matrix).map(([k, r]) => {
           const ov = ImportWizard.state.ncmOverrides && ImportWizard.state.ncmOverrides[k];
           const di = (ov && ov.derechos != null) ? ov.derechos : r.derechos;
@@ -385,7 +388,7 @@ const ImportWizard = {
         }).join('');
     return `<div class="card" style="padding:18px;">
       <div class="page-sub" style="color:var(--text-muted);margin-bottom:8px;">Paso 4 — Tributos por NCM (matriz auditada 2026: ARCA, AFIP, Decreto 333/25)</div>
-      <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 12px;font-size:12px;color:#fde047;margin-bottom:10px;">⚠️ Alícuotas verificadas a <strong>2026</strong>. Revisá actualizaciones de ARCA antes de despachar (la matriz no se actualiza sola).</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Matriz: ${ImportWizard._esc(rm.fuentes || 'ARCA/AFIP')} · vigente hasta <strong>${ImportWizard._esc(rm.vigenciaHasta || 'sin fecha')}</strong> · última verificación ${ImportWizard._esc(rm.actualizada || '?')}. El aviso de vencimiento lo calcula Calculator.ratesStatus().</div>
       <div style="display:flex;gap:12px;align-items:end;margin-bottom:10px;">
         <div><label class="wz-lbl">Jurisdicción IIBB</label>
           <select class="select" onchange="ImportWizard.state.iibbJurisdiccion=this.value;ImportWizard.render()">
@@ -409,8 +412,99 @@ const ImportWizard = {
         <div id="iwNcmResults" style="display:none;width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow:auto;padding:6px;"></div>
       </div>
       <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>NCM</th><th>Derecho ${ImportWizard._tip('DI')}</th><th>Tasa ${ImportWizard._tip('TE')}</th><th>IVA ${ImportWizard._tip('IVA')}</th><th>IVA adic ${ImportWizard._tip('IVAD')}</th><th>Gan ${ImportWizard._tip('GAN')}</th><th>IIBB ${ImportWizard._tip('IIBB')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ${ImportWizard._renderSkuOverrides()}
     </div>`;
   },
+
+      // ── override de NCM por producto (guided-import-wizard / ncm-totality) ──
+      // Antes el único override era por categoría (state.ncmOverrides[cat]) y el
+      // motor lo resolvía por ncmKeyFor(item): en un catálogo mixto un producto
+      // clasificado mal pagaba el arancel de su categoría supuesta y no había
+      // forma de corregirlo sin romper a los demás de esa categoría. La clave por
+      // SKU gana sobre la de categoría, y ninguna de las dos cambia el resultado
+      // cuando no se usa (los números pinificados de IT23/IT33 siguen igual).
+      _skuOverrideList() {
+        const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items)
+          ? currentPedido.items
+          : [];
+        const seen = new Set();
+        const out = [];
+        for (const it of items) {
+          const sku = String((it && it.sku) || '').trim();
+          if (!sku || seen.has(sku)) continue;
+          seen.add(sku);
+          out.push(it);
+        }
+        return out;
+      },
+
+      // Indice -> sku: el markup pasa índices, no SKUs, para no armar cadenas de
+      // JS con comillas dentro de un atributo.
+      _skuByIndex(i) {
+        const it = ImportWizard._skuOverrideList()[Number(i)];
+        return it ? String(it.sku || '').trim() : null;
+      },
+
+      setSkuNcm(index, field, value) {
+        const sku = ImportWizard._skuByIndex(index);
+        if (!sku) return;
+        const s = ImportWizard.state;
+        s.ncmBySku = s.ncmBySku || {};
+        const cur = Object.assign({}, s.ncmBySku[sku] || {});
+        if (field === 'ncm') {
+          if (value) cur.ncm = String(value);
+          else delete cur.ncm;
+        } else if (field === 'di') {
+          if (value !== '' && value != null && !Number.isNaN(Number(value))) cur.derechos = Number(value) / 100;
+          else delete cur.derechos;
+        }
+        if (cur.ncm == null && cur.derechos == null) delete s.ncmBySku[sku];
+        else s.ncmBySku[sku] = cur;
+        ImportWizard._save();
+      },
+
+      clearSkuNcm(index) {
+        const sku = ImportWizard._skuByIndex(index);
+        if (!sku) return;
+        const s = ImportWizard.state;
+        if (s.ncmBySku) delete s.ncmBySku[sku];
+        ImportWizard._save();
+        ImportWizard.render();
+      },
+
+      _renderSkuOverrides() {
+        const matrix = (typeof Calculator !== 'undefined' && Calculator.NCM_MATRIX) ? Calculator.NCM_MATRIX : {};
+        const items = ImportWizard._skuOverrideList();
+        if (!items.length) {
+          return '<div style="font-size:12px;color:var(--text-muted);">Todavía no hay productos en el pedido: cargalos en el paso 2 para poder corregir el NCM de uno solo.</div>';
+        }
+        const bySku = (ImportWizard.state.ncmBySku || {});
+        const ncms = [...new Set(Object.values(matrix).map((r) => r.ncm))];
+        const rows = items.map((it, i) => {
+          const sku = String(it.sku || '').trim();
+          const autoKey = (typeof Calculator !== 'undefined' && Calculator.ncmKeyFor) ? Calculator.ncmKeyFor(it) : '';
+          const auto = matrix[autoKey] || matrix['OTRO'] || {};
+          const ov = bySku[sku] || {};
+          const ncm = ov.ncm || auto.ncm || '';
+          const di = ov.derechos != null ? ov.derechos : auto.derechos;
+          const touched = !!(ov.ncm || ov.derechos != null);
+          const opts = ['<option value="">auto (' + (auto.ncm || '-') + ')</option>']
+            .concat(ncms.map((n) => `<option value="${n}"${n === ncm && ov.ncm ? ' selected' : ''}>${n}</option>`))
+            .join('');
+          return `<tr>
+            <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.marca || '')} ${ImportWizard._esc(it.modelo || sku)}</td>
+            <td style="padding:5px 8px;font-size:12px;color:var(--text-muted);">${ImportWizard._esc(it.variante || '')}</td>
+            <td style="padding:5px 8px;font-size:12px;font-family:var(--font-mono);">${ImportWizard._esc(autoKey || '-')}</td>
+            <td style="padding:5px 8px;font-size:12px;"><select class="select" style="font-size:12px;padding:2px 6px;" onchange="ImportWizard.setSkuNcm(${i},'ncm',this.value);ImportWizard.render()">${opts}</select></td>
+            <td style="padding:5px 8px;font-size:12px;">DI <input type="number" step="0.1" style="width:64px;font-size:12px;" value="${di == null ? '' : Math.round(di * 1000) / 10}" onchange="ImportWizard.setSkuNcm(${i},'di',this.value);ImportWizard.render()">%</td>
+            <td style="padding:5px 8px;font-size:12px;">${touched ? '<span style="color:var(--yellow);">corregido</span>' : '<span style="color:var(--text-muted);">auto</span>'} <button class="btn btn-secondary btn-sm" style="padding:1px 6px;font-size:11px;" onclick="ImportWizard.clearSkuNcm(${i})"${touched ? '' : ' disabled'}>limpiar</button></td>
+          </tr>`;
+        }).join('');
+        return `<div style="margin-top:14px;">
+          <div class="page-sub" style="color:var(--text-muted);margin-bottom:6px;">Override por producto (${items.length} en el pedido) — gana sobre el de categoría; solo este ítem cambia de NCM</div>
+          <div class="table-scroll"><table><thead><tr><th>Producto</th><th>Variante</th><th>Categoría inf.</th><th>NCM</th><th>Derecho de importación</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+        </div>`;
+      },
 
   // IT23: busca NCM en la base completa y muestra resultados para reasignar.
   _ncmSearch(q) {
@@ -573,7 +667,7 @@ const ImportWizard = {
     return {
       tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
       regimen: s.regimen, bpPct: s.bpPct,
-      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides,
+      iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides, ncmBySku: s.ncmBySku || {},
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
       simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
     };

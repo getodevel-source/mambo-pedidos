@@ -20,7 +20,7 @@
       clasificación compuesta). 989/989 + lint 0/0, verificado browser.
 
 ### Pendiente (próxima iteración)
-- [ ] UI de búsqueda NCM manual + override por producto en el wizard (F4 avanzado).
+- [x] UI de búsqueda NCM manual + override por producto en el wizard (F4 avanzado).
 - [ ] Medir recall@1 del autoclasificador sobre muestra etiquetada (métrica de cierre).
 - [ ] Actualización automática de la base (re-descargar arancel.zip en update).
 
@@ -35,3 +35,10 @@ Las 3 cajas abiertas siguen abiertas: verificado por código, no están.
   65 casos de calidad de modelo, no de clasificación NCM.
 - Re-descarga de `arancel.zip`: no existe en `src/js/` ni en `scripts/`; la base
   es un snapshot congelado de 856 KB en `src/data/ncmDatabase.json`.
+## F4 avanzado (cerrado 2026-08-29)
+
+La búsqueda sobre la base ARCA completa ya estaba (`_ncmSearch` +
+`NcmDatabase.search`, aplicada a categoría con `_setNcmOverride`). Faltaba la
+mitad "por producto": ahora existe `ncmBySku` con prioridad SKU > categoría >
+matriz y su UI en el paso 4. Detalle y evidencia en
+`openspec/changes/guided-import-wizard/tasks.md`.

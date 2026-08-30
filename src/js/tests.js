@@ -143,6 +143,7 @@ const Tests = {
 		await this.testImportWizardStatePersistence();
 		await this.testRatesVigencia();
 		await this.testQuoteHistoryReprint();
+		await this.testNcmOverrideBySku();
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
@@ -8157,6 +8158,147 @@ const Tests = {
 			this.assert(IW._ratesBanner() === "", "con la matriz vigente no se pinta banner");
 		} finally {
 			Calculator.ratesStatus = prevStatus;
+		}
+	},
+
+		async testNcmOverrideBySku() {
+		// IT41: override de NCM/DI por producto. Antes el unico override era por
+		// categoria (ncmOverrides[ncmKeyFor(item)]), asi que un item mal clasificado
+		// pagaba el arancel de la categoria que la matriz le asignaba y la unica
+		// forma de corregirlo era cambiarle el arancel a todos los de esa categoria.
+		const item = () => ({
+			sku: "AK820-1",
+			marca: "ajazz",
+			modelo: "AK820",
+			variante: "Blue",
+			cat: "TECLADO",
+			fob: 50,
+			qty: 2,
+		});
+		const otro = () => ({
+			sku: "VIPER-9",
+			marca: "razer",
+			modelo: "Viper",
+			variante: "Black",
+			cat: "MOUSE",
+			fob: 40,
+			qty: 1,
+		});
+		const cfg = (extra) =>
+			Object.assign(
+				{
+					regimen: "importador",
+					pesoKg: 20,
+					costoPorKg: 8,
+					fletePct: 0.15,
+					seguroPct: 0.01,
+					tipoCambio: 1400,
+					iibbPct: 0.025,
+				},
+				extra || {},
+			);
+
+		this.assert(
+			typeof Calculator.ncmKeyFor === "function",
+			"ncmKeyFor sigue disponible (base de la resolucion por categoria)",
+		);
+
+		const uno = item();
+		const key = Calculator.ncmKeyFor(uno);
+		const base = Calculator.calculateDoorToDoorExactCost([uno], cfg());
+		this.assert(
+			base.items[0].ncm === Calculator.NCM_MATRIX[key].ncm,
+			`sin override usa la matriz de la categoria (${key})`,
+		);
+		this.assert(
+			Math.abs(base.items[0].derechosUsd - base.items[0].itemCif * Calculator.NCM_MATRIX[key].derechos) < 1e-6,
+			"sin override el DI sale de la matriz (regresion: la clave por SKU es aditiva)",
+		);
+
+		// 1) override por SKU: afecta el DI de ESE item
+		const conSku = Calculator.calculateDoorToDoorExactCost([item()], cfg({ ncmBySku: { "AK820-1": { derechos: 0.35 } } }));
+		this.assert(
+			Math.abs(conSku.items[0].derechosUsd - conSku.items[0].itemCif * 0.35) < 1e-6,
+			"ncmBySku aplica el DI solo a ese SKU",
+		);
+		this.assert(
+			conSku.summary.totalPuertaUsd > base.summary.totalPuertaUsd,
+			"el override por SKU sube la caja (no se ignora en el resumen)",
+		);
+
+		// 2) gana el SKU sobre la categoria, y solo cambia el item corregido
+		const mix = [item(), otro()];
+		const soloUno = Calculator.calculateDoorToDoorExactCost(mix, cfg({ ncmBySku: { "AK820-1": { derechos: 0.35 } } }));
+		const baseMix = Calculator.calculateDoorToDoorExactCost(mix, cfg());
+		this.assert(Math.abs(soloUno.items[1].derechosUsd - baseMix.items[1].derechosUsd) < 1e-9, "el otro item del pedido no se toca");
+		this.assert(soloUno.items[0].derechosUsd > baseMix.items[0].derechosUsd, "el item corregido paga mas DI");
+		const ambos = Calculator.calculateDoorToDoorExactCost(
+			[item()],
+			cfg({ ncmOverrides: { [key]: { derechos: 0.05 } }, ncmBySku: { "AK820-1": { derechos: 0.35 } } }),
+		);
+		this.assert(
+			Math.abs(ambos.items[0].derechosUsd - ambos.items[0].itemCif * 0.35) < 1e-6,
+			"el override por SKU gana sobre el de categoria",
+		);
+
+		// 3) NCM por SKU: reasigna el codigo y, si mapea a otra fila, trae sus rates
+		const conNcm = Calculator.calculateDoorToDoorExactCost([item()], cfg({ ncmBySku: { "AK820-1": { ncm: "3926.90.90" } } }));
+		this.assert(conNcm.items[0].ncm === "3926.90.90", "ncmBySku puede reasignar el NCM del producto");
+		this.assert(
+			conNcm.items[0].derechosUsd > 0,
+			"el NCM reasignado arrastra los rates de su fila de la matriz (IT40 por item)",
+		);
+
+		// 4) el wizard: lista, escribe y limpia por indice estable
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		const prevPedido = global.currentPedido;
+		const prevSku = IW.state.ncmBySku;
+		const prevOverrides = IW.state.ncmOverrides;
+		try {
+			global.currentPedido = { items: [item(), { ...item(), sku: "AK820-1-dup" , qty: 3 }, otro()] };
+			IW.state.ncmBySku = {};
+			IW.state.ncmOverrides = {};
+			const lista = IW._skuOverrideList();
+			this.assert(lista.length === 3, `_skuOverrideList() devuelve los 3 productos del pedido (got ${lista.length})`);
+			IW.setSkuNcm(0, "di", "35");
+			this.assert(
+				IW.state.ncmBySku["AK820-1"] && Math.abs(IW.state.ncmBySku["AK820-1"].derechos - 0.35) < 1e-9,
+				"setSkuNcm(i,'di',35) guarda 0.35 (porcentaje a fraccion)",
+			);
+			IW.setSkuNcm(2, "ncm", "8471.60.53");
+			this.assert(IW.state.ncmBySku["VIPER-9"].ncm === "8471.60.53", "setSkuNcm(i,'ncm') guarda el codigo del item correcto");
+			const html = IW._renderSkuOverrides();
+			this.assert(
+				html.includes("Override por producto") && html.includes("AK820") && html.includes("Viper"),
+				"_renderSkuOverrides() muestra el pedido completo",
+			);
+			this.assert(html.includes("corregido") && (html.match(/corregido/g) || []).length === 2, "marca los dos items corregidos");
+			IW.setSkuNcm(0, "di", "");
+			this.assert(!IW.state.ncmBySku["AK820-1"], "vaciar el DI elimina la entrada (no queda un override fantasma)");
+			IW.clearSkuNcm(2);
+			this.assert(Object.keys(IW.state.ncmBySku).length === 0, "clearSkuNcm limpia el item");
+			const door = IW._doorConfig();
+			this.assert(door && door.ncmBySku, "la config que recibe el motor incluye ncmBySku");
+			const vacio = global.currentPedido;
+			global.currentPedido = { items: [] };
+			this.assert(IW._skuOverrideList().length === 0, "sin pedido no hay lista de productos");
+			this.assert(
+				IW._renderSkuOverrides().includes("Todavía no hay productos"),
+				"sin pedido explica que hace falta cargar el paso 2",
+			);
+			global.currentPedido = vacio;
+			// 5) la nota fija del paso 4 ya no hardcodea el anio: sale de RATES_META
+			const paso4 = IW._render_impuestos();
+			this.assert(!paso4.includes("Alícuotas verificadas a"), "desaparece la nota con el anio hardcodeado");
+			this.assert(
+				paso4.includes(Calculator.RATES_META.vigenciaHasta),
+				"el paso 4 muestra la vigencia real de la matriz",
+			);
+		} finally {
+			global.currentPedido = prevPedido;
+			IW.state.ncmBySku = prevSku;
+			IW.state.ncmOverrides = prevOverrides;
 		}
 	},
 

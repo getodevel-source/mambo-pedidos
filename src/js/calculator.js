@@ -406,7 +406,11 @@ const Calculator = {
       const ncmKey = this.ncmKeyFor(item)
 
       const baseRule = this.NCM_MATRIX[ncmKey] || this.NCM_MATRIX['OTRO'];
-      const ov = doorConfig.ncmOverrides && doorConfig.ncmOverrides[ncmKey];
+      // IT41: override por producto. Gana el de SKU sobre el de categoria para
+      // poder corregir un item mal clasificado sin cambiarle el arancel a todos
+      // los de su categoria. Sin ncmBySku la resolucion es la de siempre.
+      const ovSku = doorConfig.ncmBySku && item.sku ? doorConfig.ncmBySku[String(item.sku)] : null;
+      const ov = ovSku || (doorConfig.ncmOverrides && doorConfig.ncmOverrides[ncmKey]);
 
       // IT40: override NCM con utilidad real — el código elegido por el usuario
       // reemplaza al de la matriz en el resultado y, si mapea a OTRA entrada de

@@ -22,7 +22,7 @@
 - [x] Persistencia del proyecto completo (pedido + inputs) para retomar (paso N de 6).
 - [x] Aviso de vencimiento de la matriz de alícuotas (fecha de vigencia).
 - [x] Selección de jurisdicción IIBB (CABA/PBA) configurable, no hardcode 2.5%.
-- [ ] Override de NCM por producto (hoy por categoría).
+- [x] Override de NCM por producto — cerrado 2026-08-29 (ver nota abajo).
 
 ## Reconciliación 2026-08-29 (por evidencia de código)
 
@@ -63,3 +63,18 @@ Sigue abierto y es real: export en PDF del resumen del Paso 6 (hoy sólo CSV)
 y override de NCM por producto (el key del motor sigue indexado por categoría:
 `importWizard.js` guarda `ncmOverrides[cat]` y `calculator.js:358` lo lee por
 `ncmKey`).
+### Override de NCM por producto (cerrado 2026-08-29)
+
+`state.ncmBySku[sku] = { ncm?, derechos? }`, resuelto en el motor con prioridad
+**SKU > categoría > matriz** (IT41 en `calculator.js`). El paso 4 lista los
+productos del pedido con su NCM automático y deja reasignar el código o el DI de
+uno solo, marcado `corregido`, con `limpiar` por fila; vaciar el campo elimina la
+entrada en vez de dejar un override fantasma. Reusa el camino IT40 (si el NCM
+elegido mapea a otra fila de la matriz, trae sus rates), pero por ítem.
+
+Sin override el resultado es idéntico al anterior (regresión pinneada), y solo
+cambia el ítem corregido: el otro producto del mismo pedido conserva su base.
+22 asserts nuevos en `src/js/tests.js`.
+
+De paso: la nota fija del paso 4 decía "Alícuotas verificadas a **2026**", un año
+hardcodeado que se deprecia solo. Ahora lee `Calculator.RATES_META`.
