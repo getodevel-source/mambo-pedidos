@@ -177,6 +177,13 @@ bundler).
 - [ ] P6: Ollama NO instalado en esta máquina (binario ausente, :11434 vacío).
       Pendiente de infraestructura (decisión usuario: instalar Ollama +
       modelo ~1GB). Documentar; no es bloqueante del loop.
+
+      Update 2026-08-29: el ultimo rastro que quedaba en el codigo era un
+      comentario en `pdfParser.js` que describia una "Capa A: LLM vision (si
+      Ollama corre)" pegado a `isValidImageDataUrl`, que solo valida el formato
+      del data URL (y hasta decia que devolvia `{ valid, score, warnings }`, que
+      tampoco es cierto). Corregido. No queda nada en `src/js/` que dependa de
+      Ollama: la decision de instalarlo sigue siendo solo de infraestructura.
 - [x] **HALLAZGO baseline corregido (23:1x)**: el "G=2251 Y=63" era del audit
       17:02 PRE-fix-bilinear. Export fresco post-CIERRE (tree limpio, 23:11):
       G=2248 Y=66 R=0 (2314 prod, 97% GREEN). Los 3 extra son cross-brand-image

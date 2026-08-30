@@ -912,9 +912,12 @@ const PdfParser = {
 	},
 
 	/**
-	 * Valida si una imagen es coherente con un producto.
-	 * Capa B: Canvas puro (siempre disponible). Capa A: LLM visión (si Ollama corre).
-	 * Retorna { valid, score, warnings } donde score 0-100.
+	 * Valida que el payload sea un data URL de imagen con un mime soportado.
+	 * Es solo forma: no decide si la foto corresponde al producto (eso lo hacen
+	 * ImageQuality e ImageTextGates). No existe ninguna capa de visión con LLM:
+	 * la app no trae modelo ni endpoint y Ollama nunca fue parte del producto (la
+	 * claim del README se borró en e6b2470; este comentario era lo único que lo
+	 * mencionaba). Retorna true/false.
 	 */
 	isValidImageDataUrl(value) {
 		if (typeof value !== "string") return false;
