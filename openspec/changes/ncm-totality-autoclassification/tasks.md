@@ -23,6 +23,13 @@
 - [x] UI de búsqueda NCM manual + override por producto en el wizard (F4 avanzado).
 - [ ] Medir recall@1 del autoclasificador sobre muestra etiquetada (métrica de cierre).
 - [ ] Actualización automática de la base (re-descargar arancel.zip en update).
+      Estado 2026-08-29: **bloqueada por falta de fuente y de política, no por
+      código.** En el repo no hay ninguna URL de descarga, ni script de
+      bootstrap del arancel, ni mención a qué archivo/URL consumir (`grep` de
+      "arancel" + "http" en src/ y scripts/ = 0 candidatos; la base dice
+      "ARCA/AFIP" como procedencia, punto). Implementar el mecanismo de update
+      es lo fácil; lo que no existe es la decisión de qué descargar, de dónde y
+      con qué política (red desde la app + verificación).
 
 ## Reconciliación 2026-08-29
 
