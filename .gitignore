@@ -61,6 +61,11 @@ catalog-export-diag.json
 catalog-export-remediated.json
 extraction-audit-report.json
 assignment-audit-report.json
+
+# Re-baseline de ground-truth: derivados locales del corpus, no referencia
+# versionada (la referencia es manifest.json + verdicts.json, casadas entre si).
+ground-truth/manifest.candidate.json
+ground-truth/rebaseline-packet.json
 audit-app-report.json
 
 # Agent session exports

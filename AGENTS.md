@@ -61,10 +61,16 @@ npm run photo:baseline   # mide el export y escribe ground-truth/photo-baseline.
 ```
 
 Sin esa variable esos scripts avisan "no existe la carpeta" y la tarea parece
-bloqueada por entorno. Con ella, cuidado: `ground-truth.js` **regenera
-`ground-truth/manifest.json`** y hoy ese regenerado diverge del etiquetado
-(sku, variante, status y coordenadas). No lo comitees sin re-etiquetar, porque
-las 130 verdicts humanas están casadas con el manifest viejo.
+bloqueada por entorno. Dos cosas para no perder tiempo:
+
+- `ground-truth.js` escribe `manifest.candidate.json` y **no toca el
+  `manifest.json` versionado** salvo que pases `--write`. La referencia es el par
+  `manifest.json` + `verdicts.json`, y están casados por posición de muestreo.
+- `measure-model-quality.js` puntúa contra ese snapshot etiquetado, así que su
+  recall/FP describe la extracción que se etiquetó, **no el parser actual**. Para
+  saber si todavía sirve, `node scripts/ground-truth-diff.js` (hoy: 52,3% de los
+  ids coinciden; hace falta re-etiquetar 65 casos con
+  `node scripts/ground-truth-diff.js --packet`).
 
 ## Verificación estándar- `npm run test` (1.504 aserciones en 4 suites: 1.028 unitarias + 101 de UI
   smoke + 239 de lógica + 129 de `app.js` en jsdom) · `npm run lint`

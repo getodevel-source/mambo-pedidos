@@ -3,6 +3,15 @@
  * Ground-truth sampler: extracts products with the REAL pipeline, takes a seeded
  * random sample, renders the source PDF pages to PNG (with numbered markers at each
  * sampled product's anchor), and writes a manifest for visual verification.
+ *
+ * Usage:
+ *   MAMBO_CATALOG_DIR="C:\Mambo catalogos" node scripts/ground-truth.js
+ *   ... --per-pdf 5    # reproducir las 65 posiciones de verdicts.json
+ *   ... --write        # promover a manifest.json (revisando antes)
+ *
+ * Por default NO pisa manifest.json: ese archivo esta casado con las etiquetas
+ * humanas, y reescribirlo como efecto secundario de "correr el gate" rompe la
+ * correlacion id -> caso sin avisar.
  */
 'use strict';
 const fs = require('fs');
@@ -25,7 +34,22 @@ const PdfParser = require('../src/js/pdfParser.js');
 
 const CATALOG_DIR = process.env.MAMBO_CATALOG_DIR || 'C:\\Mambo\\Catalogos';
 const OUT_DIR = path.join(__dirname, '..', 'ground-truth');
-const SAMPLE_PER_PDF = 10;
+// El muestreo queda definido por la semilla Y por cuanto se toma por PDF: las
+// dos cosas deciden que el id N siga senalando el mismo caso. Las verdicts
+// humanas (verdicts.json, n=65) se tomaron con 5 por PDF; con el default de 10
+// los ids desde el 6 apuntan a otro producto y las etiquetas quedan huerfanitas
+// sin ninguna advertencia. Por eso se puede forzar con --per-pdf / GT_PER_PDF.
+const argv = process.argv.slice(2);
+const flagValue = (name) => {
+  const i = argv.indexOf("--" + name);
+  return i >= 0 && argv[i + 1] != null ? Number(argv[i + 1]) : null;
+};
+const SAMPLE_PER_PDF = flagValue("per-pdf") ?? Number(process.env.GT_PER_PDF ?? 10);
+// --write es la unica forma de pisar el manifest versionado. Sin esa bandera el
+// muestreo se escribe a manifest.candidate.json para poder revisarlo contra las
+// crops antes de promoverlo.
+const PROMOTE = argv.includes('--write');
+const MANIFEST_NAME = PROMOTE ? 'manifest.json' : 'manifest.candidate.json';
 const KEEP_FIRST = 5;
 const SCALE = 1.7;
 const SEED = 42;
@@ -143,7 +167,13 @@ async function main() {
     }
   }
 
-  fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(sampled, null, 2));
+  fs.writeFileSync(path.join(OUT_DIR, MANIFEST_NAME), JSON.stringify(sampled, null, 2));
+  if (!PROMOTE) {
+    console.log("");
+    console.log("📝 Muestreo escrito en " + MANIFEST_NAME + " (candidato).");
+    console.log("   El manifest.json versionado -la pareja de verdicts.json- no se toco.");
+    console.log("   Promover despues de revisar las crops: node scripts/ground-truth.js --write");
+  }
   console.log(`\n✅ ${sampled.length} productos muestreados en ${byPage.size} páginas → ${OUT_DIR}`);
 }
 
