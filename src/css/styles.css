@@ -1054,7 +1054,8 @@ select option, .select option {
   gap: 20px;
   font-size: 13px;
   color: #FFF;
-  animation: fadeInUp 0.3s var(--ease-out) both;
+  /* Sin animation: el fill-mode 'both' de fadeInUp pisa translateX(-50%)
+     y descentra la barra (los keyframes fijan transform: translateY(0)). */
 }
 
 /* ===============================================================
@@ -1973,3 +1974,97 @@ select option, .select option {
   pointer-events: none;
 }
 .info-tooltip:hover::after { opacity: 1; visibility: visible; }
+
+/* ===============================================================
+   RESPONSIVE 14" / VENTANAS ANGOSTAS — drawer nav + tablas que comprimen
+   (complementa el bloque RESPONSIVE LAYOUT de arriba; va despues a proposito)
+   =============================================================== */
+
+/* Entre 901 y 1240px la sidebar cede 40px al contenido */
+@media (min-width: 901px) and (max-width: 1240px) {
+  body { grid-template-columns: 230px 1fr; }
+}
+
+/* Boton hamburguesa + backdrop (solo visibles bajo 900px) */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 1002;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 16, 24, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.menu-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease-out);
+}
+
+@media (max-width: 900px) {
+  /* Drawer: la sidebar desliza en vez de ocultarse (el bloque RESPONSIVE
+     LAYOUT de arriba la ponía en display:none; este viene después y gana) */
+  .sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 270px;
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--ease-out);
+    z-index: 1001;
+    box-shadow: none;
+  }
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 40px rgba(0, 0, 0, 0.6);
+  }
+  .menu-toggle { display: inline-flex; }
+  .menu-backdrop { display: block; }
+  body.sidebar-open .menu-backdrop { opacity: 1; pointer-events: auto; }
+  /* El toggle flota sobre el header: separar el contenido */
+  .main { padding-top: 64px; }
+}
+
+/* Columnas secundarias que se ocultan cuando no entran */
+@media (max-width: 1240px) {
+  #view-catalogo table th:nth-child(7),
+  #view-catalogo table td:nth-child(7) { display: none; } /* Categoria */
+}
+@media (max-width: 1100px) {
+  #view-catalogo table th:nth-child(2),
+  #view-catalogo table td:nth-child(2) { display: none; } /* Foto */
+  #view-pedido table th:nth-child(5),
+  #view-pedido table td:nth-child(5),
+  #view-pedido table th:nth-child(8),
+  #view-pedido table td:nth-child(8) { display: none; } /* Color + Sub FOB */
+}
+@media (max-width: 1040px) {
+  #view-catalogo table th:nth-child(6),
+  #view-catalogo table td:nth-child(6) { display: none; } /* Color / Var. */
+}
+@media (max-width: 900px) {
+  #view-pedido table th:nth-child(9),
+  #view-pedido table td:nth-child(9) { display: none; } /* PVP */
+}
+@media (max-width: 700px) {
+  #view-pedido table th:nth-child(1),
+  #view-pedido table td:nth-child(1) { display: none; } /* Foto */
+  /* Celdas compactas: la tabla entra completa sin scroll interno */
+  #view-catalogo table th, #view-catalogo table td,
+  #view-pedido table th, #view-pedido table td { padding: 9px 10px; }
+}
