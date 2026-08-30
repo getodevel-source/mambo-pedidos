@@ -141,6 +141,7 @@ const Tests = {
 		this.testScriptGlobalLexicalCollisions();
 		await this.testStorageRealDiskPersistence();
 		await this.testImportWizardStatePersistence();
+		await this.testRatesVigencia();
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
@@ -8104,6 +8105,57 @@ const Tests = {
 			this.assert(Array.isArray(persisted) && persisted.some(([k]) => k === AppStorage.KEYS.CATALOG), "disco real: el catalogo esta en el archivo del store");
 		} finally {
 			try { nodeFs.rmSync(root, { recursive: true, force: true }); } catch { /* temp ya no sirve */ }
+		}
+	},
+
+	async testRatesVigencia() {
+		// guided-import-wizard: "Aviso de vencimiento de la matriz de alícuotas
+		// (fecha de vigencia)". NCM_MATRIX sostiene los DI 0% de teclados, mouse,
+		// monitores y celulares dentro de un régimen con fecha de vencimiento. Sin
+		// fecha, la app sigue calculando presupuestos con alícuotas viejas y nadie se
+		// entera: el número sale igual y esta app habla de plata.
+		if (typeof Calculator.ratesStatus !== "function") {
+			this.assert(false, "RED: Calculator.ratesStatus no existe");
+			return;
+		}
+		this.assert(
+			typeof Calculator.RATES_META === "object" && !!Calculator.RATES_META.vigenciaHasta,
+			"RATES_META tiene vigenciaHasta",
+		);
+		const lejos = Calculator.ratesStatus("2026-09-01");
+		this.assert(
+			lejos.severity === "ok" && lejos.message === null,
+			`lejos del vencimiento: ok (${lejos.days} dias)`,
+		);
+		const cerca = Calculator.ratesStatus("2027-12-01");
+		this.assert(cerca.severity === "proxima" && /vence/.test(cerca.message), "vence proximo: avisa con la fecha");
+		const vencia = Calculator.ratesStatus("2028-02-01");
+		this.assert(vencia.severity === "vencida" && /venc/.test(vencia.message), "vencida: avisa que la matriz expiro");
+		this.assert(typeof lejos.stale === "boolean", "ratesStatus informa si la matriz esta vieja");
+
+		// El wizard tiene que mostrarlo; un helper que nadie pinta no avisa nada.
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		this.assert(typeof IW._ratesBanner === "function", "el wizard expone _ratesBanner()");
+		if (typeof IW._ratesBanner !== "function") return;
+		const prevStatus = Calculator.ratesStatus;
+		try {
+			Calculator.ratesStatus = () => ({
+				severity: "vencida",
+				days: -10,
+				vence: "2027-12-31",
+				stale: false,
+				message: "La matriz de alícuotas vencio el 2027-12-31.",
+			});
+			const html = IW._ratesBanner();
+			this.assert(
+				/alert-banner/.test(html) && /danger/.test(html) && /alícuotas vencio/.test(html),
+				"el banner de matriz vencida usa alert-banner danger",
+			);
+			Calculator.ratesStatus = () => ({ severity: "ok", days: 900, vence: "2027-12-31", stale: false, message: null });
+			this.assert(IW._ratesBanner() === "", "con la matriz vigente no se pinta banner");
+		} finally {
+			Calculator.ratesStatus = prevStatus;
 		}
 	},
 

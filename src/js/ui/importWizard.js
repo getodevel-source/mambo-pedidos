@@ -64,6 +64,22 @@ const ImportWizard = {
   // ── draft del proyecto de importacion (persistence-fix) ──
   // Clave logica: KEYS.PROJECT en AppStorage (store en $APPDATA dentro de Tauri,
   // localStorage fuera). PROJECT_KEY queda solo como origen de la migracion.
+  // Aviso de vigencia de la matriz de alícuotas. Devuelve '' cuando está
+  // vigente, para que no ocupe espacio en ningún paso.
+  _ratesBanner() {
+    if (typeof Calculator === 'undefined' || typeof Calculator.ratesStatus !== 'function') return '';
+    let st;
+    try {
+      st = Calculator.ratesStatus();
+    } catch (e) {
+      console.warn('No se pudo leer la vigencia de la matriz:', e);
+      return '<div class="alert-banner warning" style="margin:0 0 12px;">No se pudo verificar la vigencia de la matriz de alícuotas.</div>';
+    }
+    if (!st || st.severity === 'ok' || !st.message) return '';
+    const kind = st.severity === 'vencida' ? 'danger' : 'warning';
+    return `<div class="alert-banner ${kind}" style="margin:0 0 12px;">${ImportWizard._esc(st.message)}</div>`;
+  },
+
   _projectKey() {
     return (typeof AppStorage !== 'undefined' && AppStorage.KEYS && AppStorage.KEYS.PROJECT) || ImportWizard.PROJECT_KEY;
   },
@@ -242,7 +258,9 @@ const ImportWizard = {
       return `<button class="${cls}" onclick="ImportWizard.goTo(${i})" title="${ImportWizard._esc(s.desc)}">${done ? '✓ ' : ''}${ImportWizard._esc(s.title)}</button>`;
     }).join('');
 
-    body.innerHTML = ImportWizard['_render_' + ImportWizard.steps[ImportWizard.step].id]();
+    // Un solo punto de inserción: la vigencia aplica a todos los pasos, y
+    // duplicar el banner en cada _render_ garantiza que alguno se olvide.
+    body.innerHTML = ImportWizard._ratesBanner() + ImportWizard['_render_' + ImportWizard.steps[ImportWizard.step].id]();
 
     const isLast = ImportWizard.step === ImportWizard.steps.length - 1;
     prevBtn.style.visibility = ImportWizard.step === 0 ? 'hidden' : 'visible';

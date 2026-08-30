@@ -59,6 +59,57 @@ const Calculator = {
     'LITIO_DG': { title: '🔋 Recargo Batería de Litio (IATA Dangerous Goods)', costUsd: 75, description: 'Recargo de transporte aéreo por materiales peligrosos (Li-Ion)' }
   },
 
+  // Vigencia de la matriz de alícuotas (guided-import-wizard: "aviso de
+  // vencimiento de la matriz"). Los DI 0% de teclados, mouse, monitores y
+  // celulares no son un hecho físico: viven dentro del régimen de Bienes de
+  // Tecnología de la Información (Decreto 557/23 + Decreto 1140/24), que tiene
+  // alcance temporal. Cuando vence, el 0% deja de ser 0% y el cálculo sigue
+  // devolviendo un número "bien". La matriz no puede vencer en silencio.
+  RATES_META: {
+    // De las dos fechas del régimen se toma la temprana a propósito: avisar
+    // antes de tiempo molesta, avisar tarde manda un presupuesto mal hecho.
+    vigenciaHasta: '2027-12-31',
+    // Último control humano de la matriz contra el Boletín Oficial.
+    actualizada: '2026-08-01',
+    fuentes: 'Decreto 557/23 + Decreto 1140/24 (Bienes de Tecnología de la Información)',
+  },
+
+  // Estado de vigencia, para que la UI avise. `today` se puede forzar (tests y
+  // reproducción de un informe viejo). Severidades: ok | proxima | vencida |
+  // desconocida.
+  ratesStatus(today) {
+    const meta = this.RATES_META || {};
+    const now = today instanceof Date ? today : today ? new Date(today) : new Date();
+    if (Number.isNaN(now.getTime())) {
+      return { severity: 'desconocida', days: null, vence: meta.vigenciaHasta || null, stale: false, message: 'No se pudo leer la fecha actual: verificá la vigencia de las alícuotas antes de confiar en este cálculo.' };
+    }
+    const end = new Date(String(meta.vigenciaHasta || '') + 'T23:59:59');
+    const days = Number.isNaN(end.getTime())
+      ? null
+      : Math.ceil((end.getTime() - now.getTime()) / 86400000);
+    const from = new Date(String(meta.actualizada || '') + 'T23:59:59');
+    const stale = !Number.isNaN(from.getTime()) && (now.getTime() - from.getTime()) / 86400000 > 365;
+    if (days === null) {
+      return { severity: 'desconocida', days: null, vence: null, stale, message: 'La matriz de alícuotas no tiene fecha de vigencia: confirmala antes de usar estos números.' };
+    }
+    if (days < 0) {
+      return {
+        severity: 'vencida',
+        days,
+        vence: meta.vigenciaHasta,
+        stale,
+        message: `La matriz de alícuotas venció el ${meta.vigenciaHasta} (hace ${Math.abs(days)} días). Los aranceles pueden haber cambiado: revisá los números antes de cotizar.`,
+      };
+    }
+    if (days <= 90 || stale) {
+      const porque = days <= 90
+        ? `vence el ${meta.vigenciaHasta} (quedan ${days} días)`
+        : `está sin actualizar desde ${meta.actualizada}`;
+      return { severity: 'proxima', days, vence: meta.vigenciaHasta, stale, message: `Chequeá la matriz de alícuotas: ${porque}.` };
+    }
+    return { severity: 'ok', days, vence: meta.vigenciaHasta, stale, message: null };
+  },
+
   // IT33: márgenes de referencia por categoría (markup sobre costo neto real).
   // Valores realistas del rubro: accesorios baratos (cables, pads) llevan markup
   // mayor; hardware (teclados, mouse) menos. Override por configuración del usuario.
