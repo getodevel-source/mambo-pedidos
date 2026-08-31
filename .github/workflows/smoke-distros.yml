@@ -20,7 +20,7 @@ jobs:
             pkg: "xvfb imagemagick python3 python3-pil libwebkit2gtk-4.1-0 libgtk-3-0"
             install: apt-get update && apt-get install -y
           - image: fedora:41
-            pkg: "xvfb imagemagick python3 python3-pillow webkit2gtk4.1 gtk3"
+            pkg: "xorg-x11-server-Xvfb ImageMagick python3 python3-pillow webkit2gtk4.1 gtk3"
             install: dnf install -y
     container:
       image: ${{ matrix.image }}
