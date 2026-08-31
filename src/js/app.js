@@ -772,6 +772,7 @@ function loadDemoCatalog() {
   scheduleCatalogSave();
   showCatalogContent();
   renderCatalog();
+        bootMark("boot:first-render");
   toast(catalog.length + ' productos demo cargados', 'success');
 }
 
@@ -796,16 +797,19 @@ window.addEventListener("pointerdown", bootInteractiveOnce);
 window.addEventListener("keydown", bootInteractiveOnce);
 
 document.addEventListener('DOMContentLoaded', async () => {
+  bootMark("boot:dom-ready");
   // Layer 1: Install global error boundary
   if (typeof Reliability !== 'undefined') Reliability.installErrorBoundary();
 
   fetchLiveDolarRates(false);
   await AppStorage.init();
+  bootMark("boot:store-loaded");
   // IT37: la restauración de datos NUNCA debe matar el wiring de botones —
   // un throw acá (datos corruptos) dejaría la app renderizada pero muerta.
   // Los listeners de abajo SIEMPRE se adjuntan.
   try {
     const saved = await AppStorage.loadCatalog();
+        bootMark("boot:catalog-loaded");
     if (saved && saved.items && saved.items.length) {
     // Layer 2: Validate integrity on load
     if (typeof Reliability !== 'undefined') {
@@ -876,6 +880,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (files.length) processFiles(files);
   });
 
+  bootMark("boot:listeners");
   // Verificación silenciosa de actualizaciones al inicio
   setTimeout(() => {
     if (typeof AppUpdater !== 'undefined') {

@@ -7,7 +7,7 @@
 // Dependencia del scope module de pdfParser (helper puro, mismo código).
 const rowEnvFlag = (name) => { try { return typeof process !== "undefined" && process.env ? process.env[name] : undefined; } catch { return undefined; } };
 
-module.exports = {
+const RowMatch = {
 extractPageProductsByTableRows(
 		rawElements,
 		priceAnchors,
@@ -1352,3 +1352,5 @@ matchImagesToProductsGlobal(products, allImages) {
 		}
 	}
 };
+if (typeof window !== 'undefined') window.RowMatch = RowMatch;
+if (typeof module !== 'undefined') module.exports = RowMatch;
