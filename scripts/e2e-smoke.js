@@ -158,6 +158,7 @@ async function main() {
 
   // 1) excepciones/errores al load
   const consoleClean = !client.logs.some(l => l.type === 'exception' || l.type === 'console.error');
+  const bootOkFinal = bootOk !== false; // undefined si no medible → no falla
   if (!consoleClean) bugs.push('excepciones/errores de consola al load: ' + JSON.stringify(client.logs.slice(0, 5)));
 
   // 2) botones de navegación vivos + cambio de vista
@@ -228,8 +229,29 @@ async function main() {
   if (!rows) bugs.push('catálogo: 0 filas tras cargar demo');
 
   // reporte
+  // boot-interactivity: marcas de arranque (performance.mark de app.js)
+  let boot = null;
+  try {
+    boot = await rc(client, `(() => {
+      const marks = (performance.getEntriesByType && performance.getEntriesByType('mark') || [])
+        .filter(m => m.name && m.name.indexOf('boot:') === 0)
+        .map(m => [m.name, Math.round(m.startTime)]);
+      const map = {};
+      for (const [n, t] of marks) map[n] = t;
+      return { marks, map };
+    })()`);
+  } catch (e) { boot = null; }
+  const bootTimes = boot && boot.map;
+  const bootOk = bootTimes && !!bootTimes['boot:store-loaded'] &&
+    bootTimes['boot:store-loaded'] <= 3000 &&
+    (!bootTimes['boot:first-render'] || bootTimes['boot:first-render'] <= 3500);
+
   console.log('\n🔬 E2E SMOKE (Tauri/WebView2 vía CDP)');
   console.log('  consola limpia al load ........ ' + (consoleClean ? '✅' : '❌'));
+  console.log('  boot dom-ready .............. ' + (bootTimes && 'boot:dom-ready' in bootTimes ? bootTimes['boot:dom-ready'] + 'ms' : '—'));
+  console.log('  boot store-loaded ............ ' + (bootTimes && 'boot:store-loaded' in bootTimes ? bootTimes['boot:store-loaded'] + 'ms' : '—') + (bootOk ? ' ✅' : ' ❌'));
+  console.log('  boot first-render ............ ' + (bootTimes && 'boot:first-render' in bootTimes ? bootTimes['boot:first-render'] + 'ms' : '— (sin catálogo restaurado)'));
+
   for (const v of Object.keys(navStatus)) {
     const s = navStatus[v];
     console.log(`  nav "${v}" ........................ ${s.click.clicked ? '✅' : '❌'} (${s.before}→${s.after})`);
@@ -244,6 +266,7 @@ async function main() {
   console.log('  catálogo carga filas ........... ' + (rows ? `✅ (${rows})` : '❌ 0'));
   if (logSkips.length) console.log('  (detalle: ' + logSkips.join('; ') + ')');
 
+  if (bootOkFinal === false) bugs.push('boot fuera de umbral: store-loaded >3s o first-render >3,5s (' + JSON.stringify(bootTimes) + ')');
   if (bugs.length) fail(bugs);
   console.log('\n✅ E2E PASS — 0 bugs de integración.');
   process.exit(0);

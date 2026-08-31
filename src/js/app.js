@@ -776,6 +776,25 @@ function loadDemoCatalog() {
 }
 
 // Setup Event Listeners
+// boot-interactivity (repo-improvement-sprint): marcas de arranque para el
+// e2e con CDP (Windows) — la interactividad completa no es medible en Linux.
+const bootMark = (name) => {
+  if (typeof performance === "undefined" || !performance.mark) return;
+  try {
+    performance.mark(name);
+    if (typeof process !== "undefined" && process.env && process.env.MAMBO_PROFILE_APP) {
+      console.log("[boot]", name, performance.now().toFixed(1) + "ms");
+    }
+  } catch {}
+};
+const bootInteractiveOnce = () => {
+  bootMark("boot:interactive");
+  window.removeEventListener("pointerdown", bootInteractiveOnce);
+  window.removeEventListener("keydown", bootInteractiveOnce);
+};
+window.addEventListener("pointerdown", bootInteractiveOnce);
+window.addEventListener("keydown", bootInteractiveOnce);
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Layer 1: Install global error boundary
   if (typeof Reliability !== 'undefined') Reliability.installErrorBoundary();
