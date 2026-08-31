@@ -73,3 +73,33 @@ verificación OCR de los renders.
 
 Los 23 FN restantes son pérdida de EXTRACCIÓN (código correcto pero incompleto
 en la celda) — trabajo del parser, próxima iteración.
+
+
+## Iteraciones 3-4 — Hoja de specs de switch + código duplicado (2026-08-31)
+
+Iteración 3 (medición estable de la iteración 2): los FN #36-40 eran páginas
+de HOJA DE SPECS DE SWITCH sueltos (raw: "Total stroke / Upper cover material")
+— ruido de catálogo importado como producto. Reglas en `textSanitizer.js`:
+- raw con plantilla de specs de switch → YELLOW (no importable)
+- modelo sin código ni dígitos + "switch/axis" en la celda cruda → YELLOW
+  (Flame/Serpent/Midnight Blue: el switch quedó como modelo)
+
+Iteración 4: código del producto duplicado en el modelo (celda
+nombre+descripción: "AK980V2PRO Lychee AK980 Transparent") → YELLOW. Se
+normaliza el código al núcleo alfanumérico (AK980V → AK980) antes de buscar la
+duplicación para no falsar con sufijos V2/PRO.
+
+9 tests nuevos (7 PIL3 + 2 PIL4), anti-overfit verificado en los 65 casos.
+
+| Métrica | Iter 0 | Iter 2 | Iter 3 | Ahora |
+|---|---|---|---|---|
+| recall_dirty | 23% | 30% | 52% / 55%* | **55% (18/33)** |
+| FP_rate_clean | 6% | 0% | 0% | **0% (0/32)** |
+| *52% con la regla afinada (sin dígitos) para eliminar 1 FP | | | | |
+
+Los 15 FN restantes: celdas nombre+descripción con UN solo código ("A87 Plum
+Pro Sea Salt"), nombres de serie sin código ("Serpent" sin switch en raw),
+"V3 Tri Mode" (spec de modo) — requieren trabajo de EXTRACCIÓN en pdfParser.js
+(separar variante de modelo), no reglas de gate. Siguiente iteración (5):
+parser: partir el modelo en código + resto cuando la celda trae más de 2
+palabras después del código.

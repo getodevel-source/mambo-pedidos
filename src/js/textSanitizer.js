@@ -802,10 +802,25 @@ const TextSanitizer = {
         "El modelo incluye el tipo de switch/axis (debería ir aparte)",
       );
     }
-        // YELLOW: truncated model with an unclosed bracket.
-        if (/[({[]/.test(m) && !/[)}\]]/.test(m)) {
-          reasons.push("Modelo truncado (paréntesis/llave sin cerrar)");
-        }
+
+
+          // PIL iteración 3: páginas de HOJA DE SPECS de switch (el PDF trae
+          // switches sueltos con plantilla "Total stroke / Upper cover") y modelos
+          // que perdieron su código quedando el switch/axis solo en la celda cruda.
+          const rLow = String(raw || '').toLowerCase();
+          if (/total stroke|upper cover|bottom housing|stem material/.test(rLow)) {
+            reasons.push("Fila de hoja de specs de switch (no importable)");
+          } else if (!this.MODEL_CODE_RE.test(m) && !/\d/.test(m) && /\b(switch|axis)\b/.test(rLow)) {
+            reasons.push("El switch/axis quedó en el modelo sin el código del producto");
+          }
+          // PIL iteración 4: el código del producto DUPLICADO dentro del modelo
+          // ("AK980V2PRO Lychee AK980 Transparent" — celda nombre+descripción).
+          const hit = (m.match(this.MODEL_CODE_RE) || [])[0];
+          const core = hit ? (hit.match(/^[A-Za-z]{1,6}\d{1,4}/) || [hit])[0] : null;
+          const dupCode = core && new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(m.slice(m.indexOf(hit) + hit.length));
+          if (dupCode) {
+            reasons.push("Código del producto duplicado en el modelo (celda nombre+descripción)");
+          }
         // YELLOW (PIL iteración 1): any bracket in the model is merged-cell
         // residue — "F87 (dark )", "dark )", "F75 Glacier (Light". Product
         // codes never carry brackets, so this is safe (the only bracketed

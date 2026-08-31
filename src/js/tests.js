@@ -468,6 +468,18 @@ const Tests = {
     		// anti-overfit PIL1: modelos limpios NO se tocan
     		g("F87", "PIL1: F87 limpio → GREEN");
     		g("V75X", "PIL1: V75X limpio → GREEN");
+    		// PIL iteración 3 (2026-08-31): hojas de specs de switch y modelo sin
+    		// código con switch/axis en la celda cruda (+4 FN del baseline 30%).
+    		const qr = (m, cat, raw) => (TextSanitizer.assessModelQuality(m, "", cat, raw) || {}).level;
+    		this.assert(qr("SeaSalt Switch Silent", "SWITCH", "SeaSalt Switch Silent Total stroke: 3.60 Upper cover") === "YELLOW", "PIL3: hoja de specs de switch → YELLOW");
+    		this.assert(qr("Midnight Blue", "SWITCH", "Midnight Blue Switch Total stroke: 3.5 Upper cover") === "YELLOW", "PIL3: switch suelto con specs → YELLOW");
+    		this.assert(qr("Flame", "TECLADO", "Flame Switch Orange Black pink") === "YELLOW", "PIL3: switch en celda cruda sin código → YELLOW");
+    		this.assert(qr("Serpent", "TECLADO", "Serpent Axis White Black") === "YELLOW", "PIL3: axis en celda cruda sin código → YELLOW");
+    		this.assert(qr("Turbo+ V9", "TECLADO", "MCHOSE V9 Turbo+ Magnetic Wireless") === "GREEN", "PIL3 anti-overfit: con código → GREEN");
+    		this.assert(qr("Ace68GT", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch") === "GREEN", "PIL3 anti-overfit: código + switch en raw → GREEN");
+    		// PIL iteración 4: código duplicado dentro del modelo (celda nombre+descripción)
+    		this.assert(qr("AK980V2PRO Lychee AK980 Transparent", "TECLADO", "row") === "YELLOW", "PIL4: código duplicado → YELLOW");
+    		this.assert(qr("A87 Plum Pro Sea Salt", "TECLADO", "row") === "GREEN", "PIL4 anti-overfit: 1 código + descripción → GREEN");
 		// SLICE 3 (tasks 3.3/3.5): the measured false negatives (design §IT17
 		// resolution rules 1-3) + clean guard that must NOT be flagged.
 		y(
