@@ -52,7 +52,7 @@ def measure(path):
     # 2) texto: bloques de mancha en la franja superior [30, 45% de la altura],
     #    separados por gaps de 8px; el TÍTULO es el bloque más alto que ronde
     #    los 20-30px: falla si todo bloque es <14 o si el más alto es >44
-    ink = [[y for y in range(30, int(h * 0.45), 2) if sum(px[x, y]) > 420] for x in range(0, w, 8)]
+    ink = [[y for y in range(30, int(h * 0.45), 2) if sum(px[x, y]) > 300] for x in range(0, w, 8)]
     blocks = []
     for col in ink:
         if not col:
