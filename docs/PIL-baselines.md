@@ -23,3 +23,23 @@ Primer paso recomendado: re-etiquetar el snapshot (`node scripts/ground-truth-di
 65 casos) para que las métricas vuelvan a describir el parser actual.
 
 ## Iteración 1 — (pendiente)
+## Iteración 1 — Residuos de celda y genéricas en el gate (2026-08-30)
+
+Patrón: paréntesis residuales en modelo ("F87 (dark )", "dark )", "F75 Glacier (Light")
+y palabras genéricas sin código ("Printed", "Dust Printed", "Screen").
+
+Cambio: `src/js/textSanitizer.js` — regla de brackets (cualquier paréntesis/llave en
+el modelo → YELLOW) + `GENERIC_WORD_RE` ampliada (printed, dust printed, screen).
+7 tests nuevos (5 YELLOW + 2 anti-overfit GREEN). Gate runtime confirmado por tests.
+
+Medición: el recall NO pudo leerse — hallazgo de la iteración: el muestreo RNG
+(`ground-truth.js`) re-ancla los ids a OTROS productos cuando la extracción cambia
+(el #31 saltó de "F87 (dark )" a "EDCX" entre corridas con el mismo parser), así
+que `measure-model-quality` compara etiquetas contra productos distintos.
+
+**Iteración 2 (plan)**: anclar los ids por posición física (pdf+página+x+y) en
+`ground-truth.js` para que el snapshot sea estable ante cambios de extracción;
+después re-medir recall/FP de verdad y atacar el próximo patrón (pérdida de
+sufijos V2/V9 / switch names en modelo — 2 de cada 3 críticos del diff).
+
+Deuda registrada: `ponytail:` la medición actual no es confiable hasta anclar ids.

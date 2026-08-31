@@ -458,6 +458,16 @@ const Tests = {
 		// Mouse (código real + conexión + categoría) ahora es YELLOW. "F75 Gasket
 		// Keyboard" sigue GREEN (Gasket es material, no conexión).
 		y("M720 Wireless Mouse", "SLICE3: M720 (conexión+categoría) → YELLOW");
+    		// PIL iteración 1 (2026-08-30): residuos de celda y palabras genéricas
+    		// detectables — 4 de los 24 falsos negativos del baseline (recall 23%).
+    		y("F87 (dark )", "PIL1: paréntesis residual (ambos presentes) → YELLOW");
+    		y("dark )", "PIL1: paréntesis huérfano sin abrir → YELLOW");
+    		y("Printed", "PIL1: palabra genérica printed → YELLOW");
+    		y("Dust Printed", "PIL1: genérica compuesta sin código → YELLOW");
+    		y("Screen", "PIL1: spec screen como modelo → YELLOW");
+    		// anti-overfit PIL1: modelos limpios NO se tocan
+    		g("F87", "PIL1: F87 limpio → GREEN");
+    		g("V75X", "PIL1: V75X limpio → GREEN");
 		// SLICE 3 (tasks 3.3/3.5): the measured false negatives (design §IT17
 		// resolution rules 1-3) + clean guard that must NOT be flagged.
 		y(

@@ -802,10 +802,17 @@ const TextSanitizer = {
         "El modelo incluye el tipo de switch/axis (debería ir aparte)",
       );
     }
-    // YELLOW: truncated model with an unclosed bracket.
-    if (/[({[]/.test(m) && !/[)}\]]/.test(m)) {
-      reasons.push("Modelo truncado (paréntesis/llave sin cerrar)");
-    }
+        // YELLOW: truncated model with an unclosed bracket.
+        if (/[({[]/.test(m) && !/[)}\]]/.test(m)) {
+          reasons.push("Modelo truncado (paréntesis/llave sin cerrar)");
+        }
+        // YELLOW (PIL iteración 1): any bracket in the model is merged-cell
+        // residue — "F87 (dark )", "dark )", "F75 Glacier (Light". Product
+        // codes never carry brackets, so this is safe (the only bracketed
+        // model in the 65-case snapshot was real residue too).
+        if (/[()[\]{}]/.test(m)) {
+          reasons.push("Residuo de celda en el modelo (paréntesis/llaves)");
+        }
     // YELLOW: model has no alphanumeric code but the source row DID carry one
     // (EAN-13 or a code with digits) -> the real code was lost (merged cell / matrix).
     const r = raw || "";
@@ -829,7 +836,7 @@ const TextSanitizer = {
     //     válido. El tipo-inflado va a la COLA HUMANA (P4), no al gate.
     // (b) "Rose", "Standard", "Zero", "Ultimate" — palabra genérica sin código.
     const GENERIC_WORD_RE =
-      /^(?:rose|zero|standard|ultimate|long|high\s+resolution|transparent|charging\s*dock|contour|contours|turbo\+?|business|new|item|product)$/i;
+      /^(?:rose|zero|standard|ultimate|long|high\s+resolution|transparent|charging\s*dock|contour|contours|turbo\+?|business|new|item|product|printed|dust\s+printed|screen)$/i;
     if (!mHasCode && GENERIC_WORD_RE.test(m.trim())) {
       reasons.push(
         "El modelo es una palabra genérica (no un código de producto) — requiere revisión",
