@@ -2015,29 +2015,19 @@ select option, .select option {
 }
 
 @media (max-width: 900px) {
-  /* Drawer: la sidebar desliza en vez de ocultarse (el bloque RESPONSIVE
-     LAYOUT de arriba la ponía en display:none; este viene después y gana) */
-  .sidebar {
-    display: flex;
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 270px;
-    transform: translateX(-100%);
-    transition: transform 0.25s var(--ease-out);
-    z-index: 1001;
-    box-shadow: none;
-  }
-  body.sidebar-open .sidebar {
-    transform: translateX(0);
-    box-shadow: 8px 0 40px rgba(0, 0, 0, 0.6);
-  }
-  .menu-toggle { display: inline-flex; }
-  .menu-backdrop { display: block; }
-  body.sidebar-open .menu-backdrop { opacity: 1; pointer-events: auto; }
-  /* El toggle flota sobre el header: separar el contenido */
-  .main { padding-top: 64px; }
+  /* Sidebar SIEMPRE visible: es una app de escritorio, no una web. En
+     ventanas angostas (tile de notebook) se achica en vez de ocultarse
+     tras una hamburguesa. */
+  body { grid-template-columns: 180px 1fr; }
+  .sidebar { padding: 16px 0; }
+  .sidebar-logo { padding: 0 14px 12px; gap: 8px; }
+  .sidebar-logo img { height: 26px; }
+  .sidebar-logo .name { font-size: 13px; }
+  .sidebar-label { padding: 0 14px 5px; font-size: 9px; }
+  .nav-item { padding: 7px 14px; font-size: 12px; gap: 8px; }
+  .sidebar-section { padding: 10px 0; }
+  .main { padding: 18px 16px; }
+  .page-title { font-size: 17px; }
 }
 
 /* Columnas secundarias que se ocultan cuando no entran */
@@ -2117,8 +2107,6 @@ select option, .select option {
   .empty-icon { font-size: 30px; }
 }
 
-/* el drawer necesita espacio para el toggle: respetar el padding-top */
-@media (max-width: 900px) {
-  body { grid-template-columns: 1fr; }
-  .main { padding: 64px 18px 16px; }
-}
+
+/* sin drawer: el toggle y el backdrop no se muestran nunca */
+.menu-toggle, .menu-backdrop { display: none !important; }
