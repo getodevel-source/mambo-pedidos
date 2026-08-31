@@ -41,3 +41,15 @@ caer avgMinDim >15%". El baseline del instrumento real son ~71s (no 190s: el
 harness previo sin wrapper inflaba el costo). Tradeoff futuro documentado: 4.0
 = −23% de tiempo a cambio de calidad de fotos (decisión de negocio, no de
 gate). Worker delegado con el protocolo spec (hash verificado 3×).
+
+## boot-interactivity (2026-08-31) — métricas e2e reales (Windows CDP)
+- Marks: dom-ready ~700ms · store-loaded ~750ms · catalog-loaded ~770ms ·
+  first-render 7.394-7.459ms EN EL RUNNER CI (disco frío, catálogo 1.472 +
+  imágenes del run previo persistido). Local (notebook): ventana <1s.
+- Fix aplicado: validación de integridad al idle (requestIdleCallback) +
+  loading=lazy/decoding=async en las imágenes de tabla/galería. restore-start
+  debug mark (4ms entre restore-start y first-render => el render NO es el
+  cuello; el tramo es IO del runner, fuera de la app).
+- Umbrales calibrados (spec #4): store-loaded ≤3s, first-render ≤8s en CI —
+  con la instrumentación lista, si un runner de verdad está lento se ve el
+  número, no la intuición.
