@@ -1,3 +1,4 @@
+/* eslint-env node, browser */
 // layout-audit.mjs — auditoría geométrica del frontend por viewport (tiers CSS).
 // Sirve dist/ localmente y mide con Playwright+chromium: overflow horizontal,
 // ancho del sidebar por tier, título por tier, toggle oculto, sticky bar
@@ -9,7 +10,7 @@
 
 import { chromium } from 'playwright-core';
 import http from 'http';
-import { readFile, stat } from 'fs/promises';
+import { stat } from 'fs/promises';
 import { createReadStream } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
