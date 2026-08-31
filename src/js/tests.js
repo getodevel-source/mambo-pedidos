@@ -480,7 +480,9 @@ const Tests = {
     		// PIL iteración 4: código duplicado dentro del modelo (celda nombre+descripción)
     		this.assert(qr("AK980V2PRO Lychee AK980 Transparent", "TECLADO", "row") === "YELLOW", "PIL4: código duplicado → YELLOW");
     		this.assert(qr("A87 Plum Pro Sea Salt", "TECLADO", "row") === "GREEN", "PIL4 anti-overfit: 1 código + descripción → GREEN");
-    		// PIL5 (repo-improvement-sprint): celda con información sin extraer
+		// U4 (repo-improvement-sprint): overlay de diagnóstico (sandbox jsdom)
+		this.testDiagnosticsOverlay();
+		// PIL5 (repo-improvement-sprint): celda con información sin extraer
     		this.assert(qr("MAD V2", "MOUSE", "MAD V2 Snowlight HE Switch Black Ice Carbon Fiber Dual Light RGB") === "YELLOW", "PIL5: celda con exceso de tokens → YELLOW");
     		this.assert(TextSanitizer.assessModelQuality("Ace68GT", "Mount Tai Pink Magnetic Switch", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch GT Translucent powder").level === "GREEN", "PIL5 anti-overfit: corte completo → GREEN");
     		this.assert(TextSanitizer.assessModelQuality("G502 X", "Wired Mouse Black", "MOUSE", "Logitech G502 X Wired Mouse Black").level === "GREEN", "PIL5 anti-overfit: exceso < 4 → GREEN");
@@ -7987,6 +7989,26 @@ const Tests = {
 			global.window.toast = prevToast;
 			localStorage.removeItem(legacy);
 		}
+	},
+
+	testDiagnosticsOverlay() {
+		const { JSDOM } = require("jsdom");
+		const fs = require("fs");
+		const path = require("path");
+		const code = fs.readFileSync(path.join(__dirname, "diagnostics.js"), "utf8");
+		const dom = new JSDOM("<!doctype html><html><body></body></html>", { runScripts: "outside-only", pretendToBeVisual: true, url: "http://localhost/" });
+		const win = dom.window;
+		win.eval(code);
+		const dg = win.Diagnostics;
+		this.assert(typeof dg.handle === "function", "U4: Diagnostics.handle existe");
+		dg.handle("test-error", "boom", "", 0, 0, null, "stack-test");
+		this.assert((win.localStorage.getItem("mambo_last_error") || "").includes("boom"), "U4: la última caída se persiste");
+		const overlay = win.document.getElementById("mamboErrorOverlay");
+		this.assert(overlay !== null, "U4: el overlay se monta en el DOM");
+		this.assert((overlay.querySelector("pre").textContent || "").includes("boom"), "U4: el mensaje se muestra en el overlay");
+		this.assert(overlay.querySelector('[data-act="copy"]') !== null, "U4: botón copiar presente");
+		this.assert(overlay.querySelector('[data-act="close"]') !== null, "U4: botón cerrar presente");
+		overlay.remove();
 	},
 
 	testScriptGlobalLexicalCollisions() {

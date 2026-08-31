@@ -138,10 +138,17 @@ async function auditPdf(pdfPath) {
     const r = (p.qualityReason || p.warnings?.[0] || 'unknown').slice(0, 60);
     redReasons[r] = (redReasons[r] || 0) + 1;
   }
+  // PIL7: las razones YELLOW por producto (además de RED) para poder atacar
+  // las razones dominantes del semáforo (antes solo quedaba el conteo).
+  const yellowReasons = {};
+  for (const p of products.filter(p => p.status === 'YELLOW')) {
+    const r = (p.qualityReason || p.warnings?.[0] || 'unknown').slice(0, 60);
+    yellowReasons[r] = (yellowReasons[r] || 0) + 1;
+  }
 
   return {
     name, products: products.length, green, yellow, red, withImage, inherited,
-    mismatches, redReasons, ms: Date.now() - t0,
+    mismatches, redReasons, yellowReasons, ms: Date.now() - t0,
     _products: products
   };
 }
@@ -231,7 +238,7 @@ async function main() {
       totals: { products: tP, green: tG, yellow: tY, red: tR, withImage: tImg, mismatches: tMism },
       topRedReasons: topRed.map(([reason, count]) => ({ reason, count })),
       mismatches: allMism,
-      perFile: results.map(({ _products, redReasons, ...r }) => ({ ...r, redReasons }))
+      perFile: results.map(({ _products, redReasons, yellowReasons, ...r }) => ({ ...r, redReasons, yellowReasons }))
     };
     fs.writeFileSync(args.json, JSON.stringify(report, null, 2));
     console.log(`  📄 Report escrito en ${args.json}\n`);

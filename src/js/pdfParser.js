@@ -41,7 +41,9 @@ const PdfParser = {
 				}
 				try {
 					const page = await pdf.getPage(pageNum);
-					const content = await page.getTextContent();
+const PROFILE = typeof process !== 'undefined' && process.env && process.env.MAMBO_PROFILE_PARSE;
+if (PROFILE) console.time('p' + pageNum + '.text');
+const content = await page.getTextContent();
 					const viewport = page.getViewport({ scale: 1.0 });
 
 					// #9: Track per-page text density for scanned PDF detection
@@ -63,24 +65,26 @@ const PdfParser = {
 							: this.detectBrandFromContent(fullTextForBrand, customBrands) ||
 								filenameBrand;
 
-					// Extraer imágenes de la página
-					const pageImages = await this.extractImagesFromPage(
-						page,
-						viewport,
-						pageNum,
-					);
-					allImages.push(...pageImages);
-
-					// EXTRAER PRODUCTOS (detecta automáticamente TABLA vs GRILLA)
+					// PIL6 (repo-improvement-sprint): las imágenes de página SON la fase
+					// dominante del parse (37,6s de 69,5s medidos) y se decodifican SOLO
+					// en páginas que producen productos: primero se detecta con imágenes
+					// vacías (solo texto, ~2,3s) y las portadas/índices/specs sin
+					// productos no gastan decodificación.
 					const pageProducts = this.extractPageProductsByCellGrid(
-						content.items,
-						viewport.height,
-						pageNum,
-						pageImages,
-						currentBrand,
-						customBrands,
-						allProducts,
+						content.items, viewport.height, pageNum, [],
+						currentBrand, customBrands, allProducts,
 					);
+					if (pageProducts.length > 0) {
+						const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
+						allImages.push(...pageImages);
+						if (pageImages.length > 0) {
+							const withImages = this.extractPageProductsByCellGrid(
+								content.items, viewport.height, pageNum, pageImages,
+								currentBrand, customBrands, allProducts,
+							);
+							if (withImages.length) { pageProducts.length = 0; pageProducts.push(...withImages); }
+						}
+					}
 
 					if (pageProducts.length > 0) {
 						allProducts.push(...pageProducts);
@@ -88,6 +92,7 @@ const PdfParser = {
 					// #9: Flag pages with almost no text and no products as likely scanned
 					if (pageTextLen < 10 && pageProducts.length === 0) {
 						imageOnlyPages++;
+if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 					}
 				} catch (pageErr) {
 					failedPages.push({
