@@ -1,4 +1,3 @@
-/* eslint-env node, browser */
 // layout-audit.mjs — auditoría geométrica del frontend por viewport (tiers CSS).
 // Sirve dist/ localmente y mide con Playwright+chromium: overflow horizontal,
 // ancho del sidebar por tier, título por tier, toggle oculto, sticky bar

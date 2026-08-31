@@ -140,6 +140,24 @@ module.exports = [
 		},
 	},
 	{
+		// Herramientas QA ESM (layout-audit, ...) que mezclan node (servidor/
+		// playwright) y browser (código dentro de page.evaluate).
+		files: ["scripts/**/*.mjs"],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: "module",
+			globals: {
+				...globals.browser,
+				...globals.node,
+			},
+		},
+		rules: {
+			"no-unused-vars": ["warn", { args: "none" }],
+			"no-undef": "error",
+			"no-empty": ["error", { allowEmptyCatch: true }],
+		},
+	},
+	{
 		files: ["scripts/quality/**/*.js"],
 		languageOptions: {
 			globals: {
