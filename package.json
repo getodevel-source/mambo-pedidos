@@ -16,6 +16,9 @@
     "e2e": "node scripts/e2e-smoke.js",
     "e2e:build": "tauri build --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
+    "layout-audit": "node scripts/layout-audit.mjs",
+    "verify-latest": "node scripts/verify-latest.js",
+    "visual-smoke": "python3 scripts/visual-smoke.py",
     "audit": "node scripts/quality-pipeline.js --verbose",
     "audit:quick": "node scripts/quality-pipeline.js",
     "audit:full": "node scripts/audit-app.js --json audit-app-report.json",
@@ -42,7 +45,8 @@
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "jsdom": "^29.1.1",
-    "pdfjs-dist": "^3.11.174"
+    "pdfjs-dist": "^3.11.174",
+    "playwright-core": "^1.62.1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

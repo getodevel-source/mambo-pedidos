@@ -2019,7 +2019,7 @@ select option, .select option {
      ventanas angostas (tile de notebook) se achica en vez de ocultarse
      tras una hamburguesa. */
   body { grid-template-columns: 180px 1fr; }
-  .sidebar { padding: 16px 0; }
+  .sidebar { display: flex; padding: 16px 0; }
   .sidebar-logo { padding: 0 14px 12px; gap: 8px; }
   .sidebar-logo img { height: 26px; }
   .sidebar-logo .name { font-size: 13px; }
@@ -2027,7 +2027,6 @@ select option, .select option {
   .nav-item { padding: 7px 14px; font-size: 12px; gap: 8px; }
   .sidebar-section { padding: 10px 0; }
   .main { padding: 18px 16px; }
-  .page-title { font-size: 17px; }
 }
 
 /* Columnas secundarias que se ocultan cuando no entran */
