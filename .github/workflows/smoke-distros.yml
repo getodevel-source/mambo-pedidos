@@ -40,7 +40,7 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG="$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest'))['tag_name'])" 2>/dev/null || echo v2.2.6)"
           fi
-          curl -fL -o mambo.AppImage \
+          curl -fL --retry 6 --retry-delay 30 --retry-all-errors -o mambo.AppImage \
             "https://github.com/getodevel-source/mambo-pedidos/releases/download/${TAG}/Mambo.Pedidos_${TAG#v}_amd64.AppImage"
           chmod +x mambo.AppImage
           echo "TAG=$TAG" >> "$GITHUB_ENV"
