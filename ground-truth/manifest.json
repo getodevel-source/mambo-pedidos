@@ -13,6 +13,7 @@
     "sku": "8BI-CON-ZERO-F007",
     "status": "GREEN",
     "raw": "8Bitdo Zero Gamepad Bluetooth Yellow",
+    "anclado": true,
     "markerFile": "page_01_8BitDo_2026__pdf_p6.png"
   },
   {
@@ -29,6 +30,7 @@
     "sku": "8BI-CON-CLASSIC-77B3",
     "status": "GREEN",
     "raw": "Classic 8BitDo Pro Gamepad Bluetooth",
+    "anclado": true,
     "markerFile": "page_02_8BitDo_2026__pdf_p5.png"
   },
   {
@@ -45,6 +47,7 @@
     "sku": "8BI-CON-LONG-1389",
     "status": "GREEN",
     "raw": "Long Edition",
+    "anclado": true,
     "markerFile": "page_03_8BitDo_2026__pdf_p8.png"
   },
   {
@@ -61,6 +64,7 @@
     "sku": "8BI-TEC-87-BEE5",
     "status": "YELLOW",
     "raw": "8BitDo Retro 87 Mechanical Keyboard Xbox Edition Green",
+    "anclado": true,
     "markerFile": "page_04_8BitDo_2026__pdf_p7.png"
   },
   {
@@ -77,6 +81,7 @@
     "sku": "8BI-CON-2C-C968",
     "status": "GREEN",
     "raw": "Ultimate 2C Orange Green",
+    "anclado": true,
     "markerFile": "page_05_8BitDo_2026__pdf_p2.png"
   },
   {
@@ -93,6 +98,7 @@
     "sku": "AJA-TEC-AF98-3966",
     "status": "GREEN",
     "raw": "mixed light AF98 wired Wired White",
+    "anclado": true,
     "markerFile": "page_06_AJAZZ_LIST_20260605__p9.png"
   },
   {
@@ -109,6 +115,7 @@
     "sku": "AJA-TEC-AK980V2P-6BC3",
     "status": "GREEN",
     "raw": "AK980V2PRO Lychee AK980 V2 Transparent mode switch gradient Wired+2.4G+BT PRO DIY (8K+8K) ",
+    "anclado": true,
     "markerFile": "page_07_AJAZZ_LIST_20260605__p5.png"
   },
   {
@@ -125,6 +132,7 @@
     "sku": "AJA-MOU-AJ139P-94E5",
     "status": "GREEN",
     "raw": "AJ139P V3 AJ139P V3 model PAW3395 Mc Wired+2.4G+BT Black",
+    "anclado": true,
     "markerFile": "page_08_AJAZZ_LIST_20260605__p11.png"
   },
   {
@@ -141,6 +149,7 @@
     "sku": "AJA-TEC-NJ08-9600",
     "status": "GREEN",
     "raw": "model NJ08 MC Paw33113 Wired+2.4G+BT Pink",
+    "anclado": true,
     "markerFile": "page_09_AJAZZ_LIST_20260605__p15.png"
   },
   {
@@ -157,6 +166,7 @@
     "sku": "AJA-TEC-NK61-EDB5",
     "status": "GREEN",
     "raw": "DIY NK61 Switch RGB wired Wired Red Black",
+    "anclado": true,
     "markerFile": "page_10_AJAZZ_LIST_20260605__p8.png"
   },
   {
@@ -173,6 +183,7 @@
     "sku": "ATK-TEC-A87-6419",
     "status": "GREEN",
     "raw": "A87 Plum Pro Sea Salt axis",
+    "anclado": true,
     "markerFile": "page_11_ATK_Price_list_2607__p4.png"
   },
   {
@@ -189,6 +200,7 @@
     "sku": "ATK-TEC-ULTIMATE-0F95",
     "status": "GREEN",
     "raw": "Ultimate White",
+    "anclado": true,
     "markerFile": "page_12_ATK_Price_list_2607__p14.png"
   },
   {
@@ -205,6 +217,7 @@
     "sku": "ATK-TEC-A9-1852",
     "status": "GREEN",
     "raw": "A9 SE White",
+    "anclado": true,
     "markerFile": "page_13_ATK_Price_list_2607__p12.png"
   },
   {
@@ -221,6 +234,7 @@
     "sku": "ATK-TEC-ANYA-D5DC",
     "status": "GREEN",
     "raw": "Anya Pink",
+    "anclado": true,
     "markerFile": "page_14_ATK_Price_list_2607__p5.png"
   },
   {
@@ -237,6 +251,7 @@
     "sku": "ATK-TEC-V2-FDD5",
     "status": "GREEN",
     "raw": "V2 Ultra Crystalblade Gleam Shadow",
+    "anclado": true,
     "markerFile": "page_11_ATK_Price_list_2607__p4.png"
   },
   {
@@ -253,6 +268,7 @@
     "sku": "AUL-TEC-XINGHE-B424",
     "status": "GREEN",
     "raw": "Xinghe Dream",
+    "anclado": true,
     "markerFile": "page_15_AULA_Catalogue_20260_p15.png"
   },
   {
@@ -269,6 +285,7 @@
     "sku": "AUL-TEC-STAR-FA47",
     "status": "GREEN",
     "raw": "Star Printed Side Purple",
+    "anclado": true,
     "markerFile": "page_16_AULA_Catalogue_20260_p18.png"
   },
   {
@@ -285,6 +302,7 @@
     "sku": "AUL-TEC-PRINTED-7499",
     "status": "GREEN",
     "raw": "Printed Side Black",
+    "anclado": true,
     "markerFile": "page_17_AULA_Catalogue_20260_p17.png"
   },
   {
@@ -301,6 +319,7 @@
     "sku": "AUL-TEC-F75-CBFE",
     "status": "GREEN",
     "raw": "F75 Glacier Blue (Light Ice Vein switch",
+    "anclado": true,
     "markerFile": "page_18_AULA_Catalogue_20260_p1.png"
   },
   {
@@ -317,6 +336,7 @@
     "sku": "AUL-TEC-CYBER-6254",
     "status": "GREEN",
     "raw": "Cyber Emperor Yellow Black",
+    "anclado": true,
     "markerFile": "page_19_AULA_Catalogue_20260_p14.png"
   },
   {
@@ -333,6 +353,7 @@
     "sku": "ATT-MOU-CONTOUR-3DAB",
     "status": "GREEN",
     "raw": "Contour White",
+    "anclado": true,
     "markerFile": "page_20_Attack_Shark_Catalog_p12.png"
   },
   {
@@ -349,6 +370,7 @@
     "sku": "ATT-MOU-V3-0E4B",
     "status": "GREEN",
     "raw": "V3 Tri Mode Rose Red",
+    "anclado": true,
     "markerFile": "page_21_Attack_Shark_Catalog_p1.png"
   },
   {
@@ -365,6 +387,7 @@
     "sku": "ATT-MOU-X820ULTR-FF41",
     "status": "GREEN",
     "raw": "X820Ultra +Gift Gradient+Gift Switch Black",
+    "anclado": true,
     "markerFile": "page_22_Attack_Shark_Catalog_p9.png"
   },
   {
@@ -381,6 +404,7 @@
     "sku": "ATT-MOU-V6-F784",
     "status": "GREEN",
     "raw": "V6 White",
+    "anclado": true,
     "markerFile": "page_21_Attack_Shark_Catalog_p1.png"
   },
   {
@@ -397,6 +421,7 @@
     "sku": "ATT-MOU-X5-80CA",
     "status": "GREEN",
     "raw": "X5 2.4Ghz/USB C Wired/Bluetooth Black",
+    "anclado": true,
     "markerFile": "page_23_Attack_Shark_Catalog_p4.png"
   },
   {
@@ -413,6 +438,7 @@
     "sku": "MAR-TEC-MARS68-D352",
     "status": "GREEN",
     "raw": "Mar 68 SE wired White keyboard",
+    "anclado": true,
     "markerFile": "page_24_Irok_Mars_IYX_Catalo_p1.png"
   },
   {
@@ -429,6 +455,7 @@
     "sku": "IRO-TEC-MER68-B4F7",
     "status": "GREEN",
     "raw": "MER68 Pink",
+    "anclado": true,
     "markerFile": "page_25_Irok_Mars_IYX_Catalo_p2.png"
   },
   {
@@ -445,6 +472,7 @@
     "sku": "IRO-TEC-MG68-A109",
     "status": "GREEN",
     "raw": "Irok MG68 ACE White",
+    "anclado": true,
     "markerFile": "page_26_Irok_Mars_IYX_Catalo_p8.png"
   },
   {
@@ -461,6 +489,7 @@
     "sku": "IRO-TEC-SERPENT-B089",
     "status": "GREEN",
     "raw": "Serpent Axis White Black",
+    "anclado": true,
     "markerFile": "page_27_Irok_Mars_IYX_Catalo_p6.png"
   },
   {
@@ -477,6 +506,7 @@
     "sku": "MAR-TEC-MARS75-0508",
     "status": "GREEN",
     "raw": "Mar 75 Pro White",
+    "anclado": true,
     "markerFile": "page_24_Irok_Mars_IYX_Catalo_p1.png"
   },
   {
@@ -493,6 +523,7 @@
     "sku": "KZ-AUR-EDCX-0A6B",
     "status": "YELLOW",
     "raw": "EDCX Transparent 18.40",
+    "anclado": true,
     "markerFile": "page_28_KZ_Catalog_Zhenzhou__p3.png"
   },
   {
@@ -509,6 +540,7 @@
     "sku": "KZ-AUR-DECET-CDEC",
     "status": "YELLOW",
     "raw": "KZ Decet Black Without Mic 132.25",
+    "anclado": true,
     "markerFile": "page_29_KZ_Catalog_Zhenzhou__p14.png"
   },
   {
@@ -525,6 +557,7 @@
     "sku": "KZ-AUR-LIBRA-3C0E",
     "status": "YELLOW",
     "raw": "Libra 33.35",
+    "anclado": true,
     "markerFile": "page_30_KZ_Catalog_Zhenzhou__p7.png"
   },
   {
@@ -541,6 +574,7 @@
     "sku": "KZ-AUR-ED9-D5AF",
     "status": "YELLOW",
     "raw": "KZ ED9 PRO HIFI Silver Without Mic 35 40.25",
+    "anclado": true,
     "markerFile": "page_31_KZ_Catalog_Zhenzhou__p13.png"
   },
   {
@@ -557,6 +591,7 @@
     "sku": "KZ-AUR-EDX-C17B",
     "status": "YELLOW",
     "raw": "EDX PRO 29.90",
+    "anclado": true,
     "markerFile": "page_32_KZ_Catalog_Zhenzhou__p5.png"
   },
   {
@@ -573,6 +608,7 @@
     "sku": "HAI-SWI-SEASALT-14F0",
     "status": "GREEN",
     "raw": "SeaSalt Switch Silent Total stroke: 3.60 0.30mm Upper cover material: PC Working stroke: 2",
+    "anclado": true,
     "markerFile": "page_33_Keyboard_Switch_Cata_p2.png"
   },
   {
@@ -589,6 +625,7 @@
     "sku": "HAI-SWI-MIDNIGHT-BBEF",
     "status": "GREEN",
     "raw": "Midnight Blue Switch Total stroke: 3.5 0.30mm Upper cover material: POM Working stroke: 2.",
+    "anclado": true,
     "markerFile": "page_34_Keyboard_Switch_Cata_p1.png"
   },
   {
@@ -605,6 +642,7 @@
     "sku": "HAI-SWI-FLAMINGO-F1AD",
     "status": "GREEN",
     "raw": "Flamingo Switch Total stroke: 3.6 0.30mm Upper cover material: PC Working stroke: 2.00 0.5",
+    "anclado": true,
     "markerFile": "page_34_Keyboard_Switch_Cata_p1.png"
   },
   {
@@ -621,6 +659,7 @@
     "sku": "HAI-SWI-SEASALT-7C6C",
     "status": "GREEN",
     "raw": "Brown Switch Total stroke: 3.60 0.40mm Upper cover material: PC Working stroke: 2.0 0.50mn",
+    "anclado": true,
     "markerFile": "page_35_Keyboard_Switch_Cata_p3.png"
   },
   {
@@ -637,6 +676,7 @@
     "sku": "HAI-SWI-SEASALT-02E1",
     "status": "GREEN",
     "raw": "Blue Switch Total stroke: 3.60 0.40mm Upper cover material: PC Working stroke: 2.0 0.50mn ",
+    "anclado": true,
     "markerFile": "page_35_Keyboard_Switch_Cata_p3.png"
   },
   {
@@ -653,6 +693,7 @@
     "sku": "LOG-MOU-MASTER-84D4",
     "status": "GREEN",
     "raw": "Logitech Master Wireless Mouse Grey",
+    "anclado": true,
     "markerFile": "page_36_Logitech_Catalogue_2_p4.png"
   },
   {
@@ -669,6 +710,7 @@
     "sku": "LOG-MOU-MK200-0853",
     "status": "GREEN",
     "raw": "Logitech MK200 Mouse Keyboard Combo Black",
+    "anclado": true,
     "markerFile": "page_37_Logitech_Catalogue_2_p9.png"
   },
   {
@@ -685,6 +727,7 @@
     "sku": "LOG-MOU-M750-01F8",
     "status": "GREEN",
     "raw": "M750 M Wireless Mouse Black",
+    "anclado": true,
     "markerFile": "page_38_Logitech_Catalogue_2_p3.png"
   },
   {
@@ -701,6 +744,7 @@
     "sku": "LOG-MOU-G502-66EA",
     "status": "GREEN",
     "raw": "Logitech G502 X Wired Mouse Black",
+    "anclado": true,
     "markerFile": "page_36_Logitech_Catalogue_2_p4.png"
   },
   {
@@ -717,6 +761,7 @@
     "sku": "LOG-CAM-CC2900EP-31CF",
     "status": "GREEN",
     "raw": "Logitech CC2900EP Webcam Black",
+    "anclado": true,
     "markerFile": "page_39_Logitech_Catalogue_2_p10.png"
   },
   {
@@ -733,6 +778,7 @@
     "sku": "MAD-TEC-68-8755",
     "status": "GREEN",
     "raw": "68 Keys Magnetic Esport Switch Silver White",
+    "anclado": true,
     "markerFile": "page_40_Madlions__20260629_p_p4.png"
   },
   {
@@ -749,6 +795,7 @@
     "sku": "MAD-TEC-68-54AB",
     "status": "GREEN",
     "raw": "Flagship PRO 68 Keys Switch White",
+    "anclado": true,
     "markerFile": "page_41_Madlions__20260629_p_p3.png"
   },
   {
@@ -765,6 +812,7 @@
     "sku": "MAD-MOU-V2-5D4D",
     "status": "GREEN",
     "raw": "MAD V2 Snowlight HE Switch Black Ice Carbon Fiber Dual Light RGB",
+    "anclado": true,
     "markerFile": "page_42_Madlions__20260629_p_p1.png"
   },
   {
@@ -781,6 +829,7 @@
     "sku": "MAD-TEC-POLAR-BE3B",
     "status": "GREEN",
     "raw": "Polar Magnetic RGB White",
+    "anclado": true,
     "markerFile": "page_43_Madlions__20260629_p_p2.png"
   },
   {
@@ -797,6 +846,7 @@
     "sku": "MAD-TEC-HUANO-05E5",
     "status": "GREEN",
     "raw": "Huano Black",
+    "anclado": true,
     "markerFile": "page_43_Madlions__20260629_p_p2.png"
   },
   {
@@ -813,6 +863,7 @@
     "sku": "RAZ-MOU-COBRA-19F9",
     "status": "GREEN",
     "raw": "Razer Cobra ",
+    "anclado": true,
     "markerFile": "page_44_Razer_Catalogue_2026_p1.png"
   },
   {
@@ -829,6 +880,7 @@
     "sku": "RAZ-HEA-OPUS-4518",
     "status": "GREEN",
     "raw": "Razer Opus Quartz Wireless Headset",
+    "anclado": true,
     "markerFile": "page_45_Razer_Catalogue_2026_p8.png"
   },
   {
@@ -845,6 +897,7 @@
     "sku": "RAZ-HEA-KAIRA-6045",
     "status": "GREEN",
     "raw": "Razer Kaira Pro HyperSpeed PlayStation Wireless Headset",
+    "anclado": true,
     "markerFile": "page_45_Razer_Catalogue_2026_p8.png"
   },
   {
@@ -861,6 +914,7 @@
     "sku": "RAZ-SPE-2-DB24",
     "status": "GREEN",
     "raw": "Speaker Razer Nommo Chroma 2.0 ",
+    "anclado": true,
     "markerFile": "page_45_Razer_Catalogue_2026_p8.png"
   },
   {
@@ -877,6 +931,7 @@
     "sku": "RAZ-ACC-0500-B33F",
     "status": "GREEN",
     "raw": "0500 Backpack Razer Tactical V2 Backpack 15.6\" ",
+    "anclado": true,
     "markerFile": "page_46_Razer_Catalogue_2026_p11.png"
   },
   {
@@ -893,6 +948,7 @@
     "sku": "ROY-TEC-S98-8B97",
     "status": "GREEN",
     "raw": "S98 Universe Glacier Axis White",
+    "anclado": true,
     "markerFile": "page_47_Royal_Kludge_RK_cata_p1.png"
   },
   {
@@ -909,6 +965,7 @@
     "sku": "ROY-TEC-R98-9762",
     "status": "GREEN",
     "raw": "V2 R98 Misty Axis Green",
+    "anclado": true,
     "markerFile": "page_48_Royal_Kludge_RK_cata_p5.png"
   },
   {
@@ -925,6 +982,7 @@
     "sku": "ROY-TEC-R87-BF0B",
     "status": "GREEN",
     "raw": "R87 axis silver",
+    "anclado": true,
     "markerFile": "page_49_Royal_Kludge_RK_cata_p2.png"
   },
   {
@@ -941,6 +999,7 @@
     "sku": "ROY-TEC-R98-8EFA",
     "status": "GREEN",
     "raw": "R98 Kaihua Speed Axis Cyan blue",
+    "anclado": true,
     "markerFile": "page_48_Royal_Kludge_RK_cata_p5.png"
   },
   {
@@ -957,6 +1016,7 @@
     "sku": "ROY-TEC-S75-4939",
     "status": "GREEN",
     "raw": "S75 Cloud Axis Colorful",
+    "anclado": true,
     "markerFile": "page_47_Royal_Kludge_RK_cata_p1.png"
   },
   {
@@ -973,6 +1033,7 @@
     "sku": "MCH-HEA-V9-2D97",
     "status": "GREEN",
     "raw": "MCHOSE V9 Turbo+ White Gold",
+    "anclado": true,
     "markerFile": "page_50___MCHOSE__2607_pdf_p2.png"
   },
   {
@@ -989,6 +1050,7 @@
     "sku": "MCH-TEC-ACE68GT-88E0",
     "status": "GREEN",
     "raw": "Ace68GT Mount Tai Pink Magnetic Switch GT Translucent powder",
+    "anclado": true,
     "markerFile": "page_51___MCHOSE__2607_pdf_p1.png"
   },
   {
@@ -1005,6 +1067,7 @@
     "sku": "MCH-TEC-68-E3CF",
     "status": "GREEN",
     "raw": "MCHOSE Ace 68 Air Hall Effect Switch Pink",
+    "anclado": true,
     "markerFile": "page_52___MCHOSE__2607_pdf_p4.png"
   },
   {
@@ -1021,6 +1084,7 @@
     "sku": "MCH-TEC-K99-9AC2",
     "status": "GREEN",
     "raw": "MCHOSE K99 V3 Mountains Icy Creamsicle Switch Gradient",
+    "anclado": true,
     "markerFile": "page_53___MCHOSE__2607_pdf_p6.png"
   },
   {
@@ -1037,6 +1101,7 @@
     "sku": "MCH-TEC-FLAME-BBEE",
     "status": "GREEN",
     "raw": "Flame Switch Orange Black pink",
+    "anclado": true,
     "markerFile": "page_54___MCHOSE__2607_pdf_p7.png"
   }
 ]

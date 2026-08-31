@@ -185,36 +185,36 @@
   },
   {
    "id": 17,
-   "veredicto": "OK",
-   "razon": "OCR p18: \"Red Side Printed\" $27.92 (variante Side Purple del NEW no confirmada por OCR; color Red)",
+   "veredicto": "CAMPO",
+   "razon": "OCR p18: serie \"Side Printed\" con color; extraído \"Star Printed\" mezcla filas",
    "marca": "Aula",
-   "modelo": "Star Printed",
+   "modelo": "Side Printed",
    "variante": "Red",
    "cat": "TECLADO",
    "fob": 27.92,
-   "status": "GREEN"
+   "status": "YELLOW"
   },
   {
    "id": 18,
-   "veredicto": "OK",
-   "razon": "OCR p17: \"Black Side Printed\" $15.28",
+   "veredicto": "CAMPO",
+   "razon": "OCR p17: \"Black Side Printed\"; extraído \"Printed\" incompleto",
    "marca": "Aula",
-   "modelo": "Printed",
-   "variante": "Side Black",
+   "modelo": "Side Printed",
+   "variante": "Black",
    "cat": "TECLADO",
    "fob": 15.28,
-   "status": "GREEN"
+   "status": "YELLOW"
   },
   {
    "id": 19,
-   "veredicto": "MENOR",
-   "razon": "modelo truncado con paréntesis abierto",
+   "veredicto": "CAMPO",
+   "razon": "OCR p1: \"Glacier Blue (Light\" es el color; extraído lo deja en el modelo",
    "marca": "Aula",
-   "modelo": "F75 Glacier (Light",
-   "variante": "Ice Vein switch Blue",
+   "modelo": "F75",
+   "variante": "Glacier Blue (Light",
    "cat": "TECLADO",
    "fob": 32.61,
-   "status": "GREEN"
+   "status": "YELLOW"
   },
   {
    "id": 20,
@@ -669,14 +669,14 @@
   },
   {
    "id": 61,
-   "veredicto": "CRITICO",
-   "razon": "modelo=\"Turbo+\" sin V9 (ambiguo); variante ruidosa",
+   "veredicto": "OK",
+   "razon": "OCR p2: \"MCHOSE V9 Turbo+ Magnetic Wireless Black Gold\" $60.58; el parser ahora extrae el V9 correcto",
    "marca": "Mchose",
-   "modelo": "Turbo+",
-   "variante": "Magnetic Wireless Headset Black Gold",
+   "modelo": "Turbo+ V9",
+   "variante": "Black Gold",
    "cat": "HEADSET",
    "fob": 60.58,
-   "status": "YELLOW"
+   "status": "GREEN"
   },
   {
    "id": 62,

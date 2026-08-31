@@ -120,29 +120,65 @@ async function main() {
     } catch (e) { console.error('skip', f, e.message); continue; }
     // Only products with a usable anchor position
     const withPos = products.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.pageNum);
-    // Seeded random sample
+    // PIL iteración 2 (anclaje estable): si ground-truth/anchors.json existe, las
+    // muestras se re-extraen POR POSICIÓN FÍSICA (pdf+página+x+y) en vez de
+    // re-pickear por RNG. Así el id N siempre apunta al mismo punto del PDF y las
+    // etiquetas humanas siguen describiendo el mismo caso aunque la extracción
+    // cambie (el pool RNG re-anclaba ids a otros productos). Sin anchors (primera
+    // corrida) se usa el muestreo RNG semillado histórico y se ESCRIBEN los
+    // anchors para las corridas siguientes.
+    const ANCHORS = path.join(OUT_DIR, 'anchors.json');
     const pool = [...withPos];
     const picks = [];
-    // First pass: KEEP_FIRST picks per PDF reuse the SAME RNG sequence as the
-    // original 65-case sample, so ids 1-65 stay identical and existing human
-    // verdicts keep matching. Second pass adds the remaining picks (ids 66+).
-    for (let i = 0; i < KEEP_FIRST && pool.length; i++) {
-      const idx = Math.floor(rand() * pool.length);
-      picks.push(pool.splice(idx, 1)[0]);
+    const pdfAnchors = fs.existsSync(ANCHORS)
+      ? JSON.parse(fs.readFileSync(ANCHORS, 'utf8')).filter(a => a.pdf === f)
+      : null;
+    if (pdfAnchors && pdfAnchors.length) {
+      for (const a of pdfAnchors) {
+        const pagePool = pool.filter(p => p.pageNum === a.pageNum);
+        let best = null, bestD = 40; // tolerancia 40px manhattan
+        for (const p of pagePool) {
+          const d = Math.abs(p.x - a.x) + Math.abs(p.y - a.y);
+          if (d < bestD) { bestD = d; best = p; }
+        }
+        if (best) {
+          picks.push(best);
+          pool.splice(pool.indexOf(best), 1);
+        } else {
+          picks.push({ id: null, pdf: f, pageNum: a.pageNum, x: a.x, y: a.y, huerfano: true });
+        }
+      }
+    } else {
+      // First pass: KEEP_FIRST picks per PDF reuse the SAME RNG sequence as the
+      // original 65-case sample, so ids 1-65 stay identical and existing human
+      // verdicts keep matching. Second pass adds the remaining picks (ids 66+).
+      for (let i = 0; i < KEEP_FIRST && pool.length; i++) {
+        const idx = Math.floor(rand() * pool.length);
+        picks.push(pool.splice(idx, 1)[0]);
+      }
+      for (let i = 0; i < SAMPLE_PER_PDF - KEEP_FIRST && pool.length; i++) {
+        const idx = Math.floor(rand() * pool.length);
+        picks.push(pool.splice(idx, 1)[0]);
+      }
     }
-    for (let i = 0; i < SAMPLE_PER_PDF - KEEP_FIRST && pool.length; i++) {
-      const idx = Math.floor(rand() * pool.length);
-      picks.push(pool.splice(idx, 1)[0]);
-    }
-    for (const p of picks) {
+        for (const p of picks) {
+          if (p.huerfano) {
+            sampled.push({
+              id: id++, pdf: p.pdf, pageNum: p.pageNum, x: Math.round(p.x), y: Math.round(p.y),
+              marca: null, modelo: null, variante: '', cat: '', fob: null, sku: null,
+              status: 'MISSING', raw: '', anclado: true
+            });
+            continue;
+          }
       sampled.push({
         id: id++, pdf: f, pageNum: p.pageNum, x: Math.round(p.x), y: Math.round(p.y),
         marca: p.marca, modelo: p.modelo, variante: p.variante || '', cat: p.cat,
         fob: p.fob, sku: p.sku, status: p.status,
-        raw: (p.rawText || p.cellRawText || '').slice(0, 90)
+            raw: (p.rawText || p.cellRawText || '').slice(0, 90),
+            anclado: true
       });
     }
-    console.log(`${f}: ${withPos.length} con posición, ${picks.length} muestreados`);
+        console.log(`${f}: ${withPos.length} con posición, ${picks.length} muestreados${pdfAnchors ? ' (anclados)' : ''}`);
   }
 
   // Group by pdf+page and render

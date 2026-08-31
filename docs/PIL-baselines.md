@@ -43,3 +43,33 @@ después re-medir recall/FP de verdad y atacar el próximo patrón (pérdida de
 sufijos V2/V9 / switch names en modelo — 2 de cada 3 críticos del diff).
 
 Deuda registrada: `ponytail:` la medición actual no es confiable hasta anclar ids.
+
+
+## Iteración 2 — Estabilización de la medición (2026-08-31)
+
+Problema: el muestreo RNG re-anclaba los ids a otros productos cuando la
+extracción cambia (el pool cambia) → `measure-model-quality` comparaba etiquetas
+contra productos distintos → recall ilegible.
+
+Cambio:
+- `ground-truth/anchors.json` (nuevo, versionado): 65 posiciones físicas
+  (pdf+página+x+y) ancladas.
+- `scripts/ground-truth.js`: si existen anchors, re-extrae POR POSICIÓN (match
+  manhattan <40px); huérfanos → `status: MISSING` (cobertura perdida, se
+  reporta aparte). Sin anchors: RNG histórico + escribe anchors.
+- `scripts/measure-model-quality.js`: los casos MISSING se cuentan aparte
+  (missing=0 hoy); guard doble: 2 corridas ancladas → manifests idénticos.
+
+Re-etiquetado de cierre: #17/#18/#19 (modelos parciales: "Side Printed"×2 y
+F75+color) → CAMPO; #61 "Turbo+ V9" → OK (la página lo confirma). Todos con
+verificación OCR de los renders.
+
+**Resultado (medición estable, n=65, missing=0):**
+| Métrica | Iter 0 | Iter 1 | Ahora |
+|---|---|---|---|
+| recall_dirty | 23% (7/31) | 23%* | **30% (10/33)** |
+| FP_rate_clean | 6% | 9%* | **0% (0/32)** |
+| *no legible: ids re-anclados | | | |
+
+Los 23 FN restantes son pérdida de EXTRACCIÓN (código correcto pero incompleto
+en la celda) — trabajo del parser, próxima iteración.
