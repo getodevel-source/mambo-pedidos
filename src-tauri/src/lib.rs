@@ -38,6 +38,17 @@ fn get_app_version() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK (motor Linux de Tauri) solo soporta escalas ENTERAS: con un
+    // monitor a escala fraccionaria (p.ej. 1.4 en una laptop 14"), Hyprland
+    // anuncia round-up -> escala 2 y la app renderiza a la mitad del ancho
+    // logico y se ve desproporcionada ("todo gigante"). Forzar 1 deja que el
+    // compositor haga el escalado fraccionario (que si soporta). Se puede
+    // pisar con GDK_SCALE en el entorno.
+    #[cfg(target_os = "linux")]
+    if std::env::var("GDK_SCALE").is_err() {
+        std::env::set_var("GDK_SCALE", "1");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
