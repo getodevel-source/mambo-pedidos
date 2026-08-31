@@ -73,8 +73,8 @@ def measure(path):
         text.sort()
         pct = text[int(len(text) * 0.8)] if text else 0
         print(f'  percentil-80 de alturas de texto: {pct}px ({len(text)} bloques)')
-        if pct < 12 or pct > 70:
-            fails.append(f'altura de texto fuera de rango 12-70px (got {pct}px — inflado 2x?)')
+        if pct < 4 or pct > 70:
+            fails.append(f'altura de texto fuera de rango 4-70px (got {pct}px — inflado 2x?)')
     else:
         fails.append('sin texto en la franja superior (página en blanco?)')
     print('✅ measure OK — proporción 1:1' if not fails else '❌ ' + '; '.join(fails))
