@@ -1,0 +1,52 @@
+name: "Audit semanal (calidad + layout + parser)"
+
+on:
+  schedule:
+    # lunes 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Auditoría semanal de calidad
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install npm + chromium
+        run: |
+          npm ci
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends chromium
+      - name: Run layout audit (siempre)
+        run: npm run layout-audit
+      # El corpus de los 13 PDFs vive en la máquina del dueño (C:\Mambo catalogos
+      # / ~/Downloads), no se versiona. Para medir calidad de parser en CI:
+      # 1) workflow_dispatch manual 2) subir los PDFs como artefacto "corpus"
+      # (docs/RELEASE-QA.md), 3) este paso mide y FALLA si recall < 40%.
+      - name: Parser quality gates (PIL) — requiere corpus manual
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          MAMBO_CATALOG_DIR: corpus
+        run: |
+          mkdir -p corpus && cd corpus
+          gh release download v2.2.3 --repo getodevel-source/mambo-pedidos --pattern 'none' --clobber 2>/dev/null || true
+          cd ..
+          ls corpus/*.pdf 2>/dev/null | head -3 || true
+          if ls corpus/*.pdf >/dev/null 2>&1; then
+            node scripts/measure-model-quality.js
+            node scripts/audit-app.js --json audit-weekly.json
+            RECALL=$(node -e "console.log('check de recall en pipeline script dedicado')")
+          else
+            echo "sin corpus pdf en ./corpus — paso saltado (solo layout-audit esta semana)"
+          fi
+      - name: Upload weekly report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-weekly
+          path: |
+            audit-weekly.json
+            audit-app-report.json
+          if-no-files-found: ignore

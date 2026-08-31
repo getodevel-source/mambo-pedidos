@@ -14,6 +14,7 @@
     "check:version": "node scripts/bump-version.js --check",
     "test": "node scripts/run-tests.js",
     "e2e": "node scripts/e2e-smoke.js",
+    "audit-cron-local": "MAMBO_CATALOG_DIR=\"$HOME/Downloads\" npm run audit:full && npm run layout-audit",
     "e2e:build": "tauri build --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
     "layout-audit": "node scripts/layout-audit.mjs",
