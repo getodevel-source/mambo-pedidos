@@ -99,8 +99,8 @@ def main():
         shot = f'/tmp/visual-smoke-{int(time.time())}.png'
         try:
             capture(shot, seconds)
-        except subprocess.CalledProcessError:
-            # sin captura (macOS sin permiso de pantalla): el smoke se limita a
+        except (subprocess.CalledProcessError, OSError):
+            # sin captura (macOS sin permiso de pantalla o sin import/ImageMagick): el smoke se limita a
             # "el binario sigue vivo N segundos sin morir"
             print('⚠️  sin captura disponible — solo assert de proceso vivo')
             proc.kill()
