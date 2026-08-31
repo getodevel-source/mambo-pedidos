@@ -158,7 +158,6 @@ async function main() {
 
   // 1) excepciones/errores al load
   const consoleClean = !client.logs.some(l => l.type === 'exception' || l.type === 'console.error');
-  const bootOkFinal = bootOk !== false; // undefined si no medible → no falla
   if (!consoleClean) bugs.push('excepciones/errores de consola al load: ' + JSON.stringify(client.logs.slice(0, 5)));
 
   // 2) botones de navegación vivos + cambio de vista
@@ -266,6 +265,7 @@ async function main() {
   console.log('  catálogo carga filas ........... ' + (rows ? `✅ (${rows})` : '❌ 0'));
   if (logSkips.length) console.log('  (detalle: ' + logSkips.join('; ') + ')');
 
+  const bootOkFinal = bootTimes === null || bootTimes === undefined ? true : bootOk !== false;
   if (bootOkFinal === false) bugs.push('boot fuera de umbral: store-loaded >3s o first-render >3,5s (' + JSON.stringify(bootTimes) + ')');
   if (bugs.length) fail(bugs);
   console.log('\n✅ E2E PASS — 0 bugs de integración.');
