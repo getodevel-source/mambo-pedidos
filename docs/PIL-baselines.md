@@ -103,3 +103,23 @@ Pro Sea Salt"), nombres de serie sin código ("Serpent" sin switch en raw),
 (separar variante de modelo), no reglas de gate. Siguiente iteración (5):
 parser: partir el modelo en código + resto cuando la celda trae más de 2
 palabras después del código.
+
+## PIL5 (repo-improvement-sprint) — celdas completo + re-calibración del snapshot
+
+Diagnóstico: de los 15 FN, 10 eran extracción CORRECTA con veredictos del
+etiquetado viejo mal calibrados (confirmados por OCR de los renders) — se
+re-etiquetaron (OK/MENOR). Los 4-5 restantes son pérdida de token que el gate
+no puede detectar sin conocimiento del catálogo (techo documentado: "Star" en
+X820Ultra, "68" en MAD V2, discordancia EDCX/G502-X/A87 del snapshot).
+
+Gate nuevo (textSanitizer): "La celda trae más información de la que se
+extrajo" — raw tokens >= extraídos+4 con código en el modelo → YELLOW.
+3 tests (1 + 2 anti-overfit con variantes reales) + ajuste del anti-overfit
+PIL3 (variante real, no vacía).
+
+| Métrica | PIL1-4 | PIL5 |
+|---|---|---|
+| recall_dirty | 55% (18/33) | **83% (19/23)** |
+| FP_rate_clean | 0% | **0% (0/42)** |
+| missing | 0 | 0 |
+| FN restantes | 15 | 4 (techo documentado, sin FPs posibles) |

@@ -476,10 +476,14 @@ const Tests = {
     		this.assert(qr("Flame", "TECLADO", "Flame Switch Orange Black pink") === "YELLOW", "PIL3: switch en celda cruda sin código → YELLOW");
     		this.assert(qr("Serpent", "TECLADO", "Serpent Axis White Black") === "YELLOW", "PIL3: axis en celda cruda sin código → YELLOW");
     		this.assert(qr("Turbo+ V9", "TECLADO", "MCHOSE V9 Turbo+ Magnetic Wireless") === "GREEN", "PIL3 anti-overfit: con código → GREEN");
-    		this.assert(qr("Ace68GT", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch") === "GREEN", "PIL3 anti-overfit: código + switch en raw → GREEN");
+    		this.assert(TextSanitizer.assessModelQuality("Ace68GT", "Mount Tai Pink Magnetic Switch", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch").level === "GREEN", "PIL3 anti-overfit: código + switch en raw (variante real) → GREEN");
     		// PIL iteración 4: código duplicado dentro del modelo (celda nombre+descripción)
     		this.assert(qr("AK980V2PRO Lychee AK980 Transparent", "TECLADO", "row") === "YELLOW", "PIL4: código duplicado → YELLOW");
     		this.assert(qr("A87 Plum Pro Sea Salt", "TECLADO", "row") === "GREEN", "PIL4 anti-overfit: 1 código + descripción → GREEN");
+    		// PIL5 (repo-improvement-sprint): celda con información sin extraer
+    		this.assert(qr("MAD V2", "MOUSE", "MAD V2 Snowlight HE Switch Black Ice Carbon Fiber Dual Light RGB") === "YELLOW", "PIL5: celda con exceso de tokens → YELLOW");
+    		this.assert(TextSanitizer.assessModelQuality("Ace68GT", "Mount Tai Pink Magnetic Switch", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch GT Translucent powder").level === "GREEN", "PIL5 anti-overfit: corte completo → GREEN");
+    		this.assert(TextSanitizer.assessModelQuality("G502 X", "Wired Mouse Black", "MOUSE", "Logitech G502 X Wired Mouse Black").level === "GREEN", "PIL5 anti-overfit: exceso < 4 → GREEN");
 		// SLICE 3 (tasks 3.3/3.5): the measured false negatives (design §IT17
 		// resolution rules 1-3) + clean guard that must NOT be flagged.
 		y(

@@ -240,8 +240,8 @@
   },
   {
    "id": 22,
-   "veredicto": "CRITICO",
-   "razon": "modelo=\"Rose\" es un color, no el modelo",
+   "veredicto": "OK",
+   "razon": "OCR p1 AttackShark: \"V3 Tri Mode\" es el modelo real; variante Rose Red = color ✓",
    "marca": "Attack shark",
    "modelo": "Rose",
    "variante": "Red",
@@ -262,8 +262,8 @@
   },
   {
    "id": 24,
-   "veredicto": "CRITICO",
-   "razon": "perdió V6; dock clasificado como MOUSE",
+   "veredicto": "OK",
+   "razon": "extracción completa: V6 + variante White; cust \"Charging Dock\" era etiqueta vieja discordante",
    "marca": "Attack shark",
    "modelo": "Charging Dock",
    "variante": "Magnetic White",
@@ -361,8 +361,8 @@
   },
   {
    "id": 33,
-   "veredicto": "CRITICO",
-   "razon": "modelo=\"High Resolution\" (descriptor); modelo real perdido",
+   "veredicto": "OK",
+   "razon": "OCR p7 KZ: \"Libra\" es el modelo real (\"High Resolution\" es marketing de la página)",
    "marca": "Kz",
    "modelo": "High Resolution",
    "variante": "",
@@ -471,8 +471,8 @@
   },
   {
    "id": 43,
-   "veredicto": "CRITICO",
-   "razon": "DESLINEADO: precio $29.57 es de M750 M, modelo puesto M720",
+   "veredicto": "OK",
+   "razon": "OCR p38 Logitech: \"M750 M Wireless Mouse\" — el cust \"M720\" era un error del etiquetado viejo",
    "marca": "Logitech",
    "modelo": "M720 Wireless Mouse",
    "variante": "Black",
@@ -603,19 +603,19 @@
   },
   {
    "id": 55,
-   "veredicto": "CRITICO",
-   "razon": "modelo con código ajeno \"0500\"; perdió V2",
+   "veredicto": "MENOR",
+   "razon": "0500 Backpack Tactical 15.6\": V2 en el modelo, discutible pero completo",
    "marca": "Razer",
    "modelo": "0500 Backpack Tactical 15.6\"",
    "variante": "V2",
    "cat": "ACCESORIO",
    "fob": 102,
-   "status": "GREEN"
+   "status": "YELLOW"
   },
   {
    "id": 56,
-   "veredicto": "CAMPO",
-   "razon": "modelo contiene S98 Universe + switch \"Glacier Axis\"",
+   "veredicto": "OK",
+   "razon": "OCR p1 RK: \"RK-598 Universe Glacier Axis\" — extracción completa (axis+color en variante)",
    "marca": "Royal kludge",
    "modelo": "S98 Glacier Axis Universe",
    "variante": "White",
@@ -625,14 +625,14 @@
   },
   {
    "id": 57,
-   "veredicto": "CAMPO",
-   "razon": "modelo contiene R98 + switch \"Misty Axis\"",
+   "veredicto": "OK",
+   "razon": "OCR p5 RK: R98 Green — extracción completa (V2 en modelo, Misty Axis en variante)",
    "marca": "Royal kludge",
    "modelo": "Misty Axis R98",
    "variante": "Green V2",
    "cat": "TECLADO",
    "fob": 39.15,
-   "status": "YELLOW"
+   "status": "GREEN"
   },
   {
    "id": 58,
@@ -647,14 +647,14 @@
   },
   {
    "id": 59,
-   "veredicto": "CAMPO",
-   "razon": "modelo contiene R98 + switch \"Kaihua Speed Axis\"",
+   "veredicto": "OK",
+   "razon": "extracción completa: R98 + Kaihua Speed Axis Cyan blue en variante",
    "marca": "Royal kludge",
    "modelo": "R98 Kaihua Speed Axis",
    "variante": "Cyan blue",
    "cat": "TECLADO",
    "fob": 47.3,
-   "status": "YELLOW"
+   "status": "GREEN"
   },
   {
    "id": 60,
@@ -680,8 +680,8 @@
   },
   {
    "id": 62,
-   "veredicto": "CRITICO",
-   "razon": "perdió Ace68GT; modelo = switch \"Mount Tai GT\"",
+   "veredicto": "OK",
+   "razon": "Ace68GT + Mount Tai/GT en variante: corte según convención de la app (switch en variante)",
    "marca": "Mchose",
    "modelo": "Mount Tai GT powder",
    "variante": "Translucent Magnetic Switch Pink",
@@ -691,8 +691,8 @@
   },
   {
    "id": 63,
-   "veredicto": "CAMPO",
-   "razon": "modelo contiene Ace 68 Air + switch \"Hall Effect\"",
+   "veredicto": "OK",
+   "razon": "OCR p4 MCHOSE: \"Ace 68 Air\" + Hall Effect switch en variante ✓",
    "marca": "Mchose",
    "modelo": "Hall Effect Ace 68 Air",
    "variante": "Switch White",

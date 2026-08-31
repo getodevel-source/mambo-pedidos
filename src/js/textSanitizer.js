@@ -813,14 +813,23 @@ const TextSanitizer = {
           } else if (!this.MODEL_CODE_RE.test(m) && !/\d/.test(m) && /\b(switch|axis)\b/.test(rLow)) {
             reasons.push("El switch/axis quedó en el modelo sin el código del producto");
           }
-          // PIL iteración 4: el código del producto DUPLICADO dentro del modelo
-          // ("AK980V2PRO Lychee AK980 Transparent" — celda nombre+descripción).
-          const hit = (m.match(this.MODEL_CODE_RE) || [])[0];
-          const core = hit ? (hit.match(/^[A-Za-z]{1,6}\d{1,4}/) || [hit])[0] : null;
-          const dupCode = core && new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(m.slice(m.indexOf(hit) + hit.length));
-          if (dupCode) {
-            reasons.push("Código del producto duplicado en el modelo (celda nombre+descripción)");
-          }
+              // PIL iteración 4: el código del producto DUPLICADO dentro del modelo
+              // ("AK980V2PRO Lychee AK980 Transparent" — celda nombre+descripción).
+              const hit = (m.match(this.MODEL_CODE_RE) || [])[0];
+              const core = hit ? (hit.match(/^[A-Za-z]{1,6}\d{1,4}/) || [hit])[0] : null;
+              const dupCode = core && new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(m.slice(m.indexOf(hit) + hit.length));
+              if (dupCode) {
+                reasons.push("Código del producto duplicado en el modelo (celda nombre+descripción)");
+              }
+              // PIL5 (repo-improvement-sprint): la celda cruda tiene MÁS tokens
+              // de los que se extrajeron a modelo+variante — señal de recorte de
+              // celda (p.ej. "MAD V2 ... Carbon Fiber Dual Light RGB" con variante
+              // corta). Solo con código presente y exceso >= 4 tokens.
+              const tokRaw = String(raw || '').trim().split(/\s+/).length;
+              const tokOut = String(m + ' ' + variante).trim().split(/\s+/).length;
+              if (this.MODEL_CODE_RE.test(m) && tokRaw >= tokOut + 4) {
+                reasons.push("La celda trae más información de la que se extrajo (revisar corte modelo/variante)");
+              }
         // YELLOW (PIL iteración 1): any bracket in the model is merged-cell
         // residue — "F87 (dark )", "dark )", "F75 Glacier (Light". Product
         // codes never carry brackets, so this is safe (the only bracketed
