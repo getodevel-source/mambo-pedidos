@@ -770,6 +770,7 @@ function loadDemoCatalog() {
   catalog = demo.map(d => ({...d}));
   selection = {};
   scheduleCatalogSave();
+        bootMark("boot:restore-start");
   showCatalogContent();
   renderCatalog();
         bootMark("boot:first-render");
