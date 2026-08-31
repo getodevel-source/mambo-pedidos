@@ -76,17 +76,11 @@ jobs:
           node-version: 22
       - name: Install npm dependencies
         run: npm ci
-      # 'apt-get install chromium' en runners ubuntu-24.04 instala el wrapper de
-      # snap, cuyo backend (api.snapcraft.io) falla en CI con HTTP 408/timeout
-      # (visto en el gate CI del release v2.2.4). Playwright baja su propio
-      # Chromium con las libs del sistema incluidas (--with-deps).
-      - name: Install Chromium for layout audit (Playwright, no snap)
-        run: npx -y playwright@1.62.1 install --with-deps chromium
+      - name: Install chromium (layout audit)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends chromium
       - name: Build frontend
         run: npm run build:frontend
       - name: Run layout audit
         run: |
-          CHROME=$(ls -d "$HOME/.cache/ms-playwright"/chromium-*/chrome-linux/chrome 2>/dev/null | head -1)
-          [ -n "$CHROME" ] || { echo "chromium no encontrado en ~/.cache/ms-playwright"; exit 1; }
-          echo "chromium: $CHROME"
-          PLAYWRIGHT_CHROMIUM="$CHROME" npm run layout-audit
+          [ -x /usr/bin/chromium ] || { echo "no /usr/bin/chromium"; exit 1; }
+          npm run layout-audit
