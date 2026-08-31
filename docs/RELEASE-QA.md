@@ -50,3 +50,21 @@ npm run layout-audit        # geometría de los tiers (necesita chromium del sis
 npm run verify-latest       # valida el latest.json del último release
 npm run visual-smoke measure <captura.png>   # pipeline de píxeles sobre una captura
 ```
+## Lecciones del primer release con gates reales (v2.2.10, 2026-08-31)
+
+1. **GITHUB_TOKEN no puede CREAR releases** (org policy): tauri-action falla
+   con "Resource not accessible by integration". Workaround: `gh release
+   create <tag>` manual ANTES del run (el bot SÍ actualiza/subirá assets).
+   El default de Actions puede volver a `read`: restaurar con el PUT de
+   actions/permissions/workflow.
+2. **visual-smoke en Xvfb del runner pinta en negro** (sin GL): el script
+   degrada a "proceso vivo" cuando la captura está vacía; el render real se
+   valida en macOS (screencapture) y en local.
+3. **Texto con antialias débil en contenedores** (fedora < 300 de tinta):
+   el guard real anti-2x es el sidebar (borde 145-335px); el texto solo
+   falla si está inflado (>70px), lo débil es warning.
+4. **Corrida de publicación**: los distros que se disparan con
+   `release: published` pueden descargar ANTES de que el action suba los
+   assets → curl con `--retry 6 --retry-delay 30 --retry-all-errors`.
+5. Los releases del bot usan el código del TAG: un fix de los scripts de QA
+   requiere bump + tag nuevo (no rerun) — por eso 2.2.5→2.2.10.
