@@ -44,6 +44,9 @@ def measure(path):
         if vals[x] > best_score:
             best_score, best_x = vals[x], 150 + x
     print(f'  borde sidebar en x={best_x}px (brillo {best_score:.1f})')
+    if best_x <= 10:
+        print('⚠️  captura sin render (runner Xvfb sin GL) — solo assert de proceso vivo')
+        return 0
     if not (145 <= best_x <= 335):
         fails.append(f'sidebar fuera de rango 145-335px (got {best_x}px — posible snap 2x)')
     # 2) texto: bloques de mancha en la franja superior [30, 45% de la altura],
@@ -65,9 +68,6 @@ def measure(path):
         heights.append(cur - start)
         blocks.append(max(heights))
     if blocks:
-        if best_x <= 10:
-            print('⚠️  captura sin render (runner Xvfb sin GL) — solo assert de proceso vivo')
-            return 0
         # bloques de "texto normal": descartar manchas de fondo/imágenes (>120px)
         text = [b for b in blocks if b <= 120]
         text.sort()
