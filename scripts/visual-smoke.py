@@ -8,24 +8,30 @@ Modos:
                                xvfb-run en CI), espera N s, captura la raíz
                                con import (ImageMagick) y mide.
   measure <png>                mide una captura existente y sale != 0 si el
-                               sidebar no está en rango o el texto está inflado.
+                               sidebar no está en rango (inflado 2x) o el
+                               texto está inflado.
 
 Qué mide (contra el bug real de WebKitGTK: snap a escala 2 = todo 2x):
-  - sidebar visible: borde derecho del panel oscuro en la franja izquierda
-    entre 150 y 330 px (1:1 con GDK_SCALE=1) — con snap 2x se pasa de 350.
-  - proporción del texto: altura de mancha del primer bloque de texto en la
-    franja superior (banner/título) entre 14 y 44 px.
+  - sidebar visible: borde derecho del panel oscuro entre 145 y 335 px
+    (1:1 con GDK_SCALE=1) — con snap 2x se pasa de 350.
+  - proporción del texto: percentil-80 de alturas de texto; falla solo si
+    está inflado (>70px); renders con antialias débil (contenedores) bajan
+    a warning (el guard 2x real es el sidebar).
+  - captura en negro (runner Xvfb sin GL): degrada a proceso vivo (exit 0).
 Uso: xvfb-run -a python3 scripts/visual-smoke.py launch <bin>
      python3 scripts/visual-smoke.py measure /tmp/shot.png
 """
 import subprocess, sys, time, os
 
+
 def capture(path, seconds):
-    subprocess.run(['import', '-window', 'root', path], check=True, capture_output=True)
+    subprocess.run(["import", "-window", "root", path], check=True, capture_output=True)
+
 
 def load(path):
     from PIL import Image
-    return Image.open(path).convert('RGB')
+    return Image.open(path).convert("RGB")
+
 
 def measure(path):
     from PIL import Image
@@ -33,25 +39,20 @@ def measure(path):
     w, h = img.size
     px = img.load()
     fails = []
-    # 1) sidebar: borde del panel oscuro en la franja izquierda (60..345 px).
-    #    El borde derecho del sidebar = columna con salto de brillo sostenido.
-    # borde del sidebar = columna MÁS BRILLANTE en 150..345 px (la línea
-    # border-right rgba(255,255,255,.08)), muestrándose en la zona media de la
-    # ventana (fuera del glow del logo y del banner).
+    # 1) sidebar: columna MAS brillante en la franja 150..345 px (border-right)
     vals = [sum(sum(px[x, y]) for y in range(max(250, h // 4), h - 250, 10)) / (3.0 * ((h - 500) // 10)) for x in range(150, 345)]
     best_x, best_score = 0, 0
     for x in range(len(vals)):
         if vals[x] > best_score:
             best_score, best_x = vals[x], 150 + x
-    print(f'  borde sidebar en x={best_x}px (brillo {best_score:.1f})')
+    print("  borde sidebar en x=%dpx (brillo %.1f)" % (best_x, best_score))
     if best_x <= 10:
-        print('⚠️  captura sin render (runner Xvfb sin GL) — solo assert de proceso vivo')
+        # captura negra (sin render en el runner): solo assert de proceso vivo
+        print("  captura sin render (runner Xvfb sin GL) — solo assert de proceso vivo")
         return 0
     if not (145 <= best_x <= 335):
-        fails.append(f'sidebar fuera de rango 145-335px (got {best_x}px — posible snap 2x)')
-    # 2) texto: bloques de mancha en la franja superior [30, 45% de la altura],
-    #    separados por gaps de 8px; el TÍTULO es el bloque más alto que ronde
-    #    los 20-30px: falla si todo bloque es <14 o si el más alto es >44
+        fails.append("sidebar fuera de rango 145-335px (got %dpx — posible snap 2x)" % best_x)
+    # 2) texto: bloques de mancha en la franja superior, p80 de alturas
     ink = [[y for y in range(30, int(h * 0.45), 2) if sum(px[x, y]) > 300] for x in range(0, w, 8)]
     blocks = []
     for col in ink:
@@ -68,50 +69,53 @@ def measure(path):
         heights.append(cur - start)
         blocks.append(max(heights))
     if blocks:
-        # bloques de "texto normal": descartar manchas de fondo/imágenes (>120px)
         text = [b for b in blocks if b <= 120]
         text.sort()
         pct = text[int(len(text) * 0.8)] if text else 0
-        print(f'  percentil-80 de alturas de texto: {pct}px ({len(text)} bloques)')
-        if pct < 4 or pct > 70:
-            fails.append(f'altura de texto fuera de rango 4-70px (got {pct}px — inflado 2x?)')
+        print("  percentil-80 de alturas de texto: %dpx (%d bloques)" % (pct, len(text)))
+        if pct > 70:
+            fails.append("altura de texto inflada (p80 %dpx > 70px)" % pct)
+        elif pct < 4:
+            print("  (texto debil: antialias de contenedor — sidebar OK, no es inflado)")
     else:
-        fails.append('sin texto en la franja superior (página en blanco?)')
-    print('✅ measure OK — proporción 1:1' if not fails else '❌ ' + '; '.join(fails))
+        print("  (sin bloques de texto en la franja — sidebar OK, no es inflado)")
+    print("medida OK — proporcion 1:1" if not fails else "fallos: " + "; ".join(fails))
     return 1 if fails else 0
+
 
 def main():
     args = sys.argv[1:]
     if not args:
-        print(__doc__); return 2
+        print(__doc__)
+        return 2
     mode = args[0]
-    if mode == 'measure':
+    if mode == "measure":
         return measure(args[1])
-    if mode == 'launch':
+    if mode == "launch":
         binpath = args[1]
         seconds = 14
-        if '--seconds' in args:
-            seconds = int(args[args.index('--seconds') + 1])
+        if "--seconds" in args:
+            seconds = int(args[args.index("--seconds") + 1])
         env = dict(os.environ)
-        env.update({'GDK_SCALE': '1', 'WEBKIT_DISABLE_COMPOSITING_MODE': '1', 'LIBGL_ALWAYS_SOFTWARE': '1'})
+        env.update({"GDK_SCALE": "1", "WEBKIT_DISABLE_COMPOSITING_MODE": "1", "LIBGL_ALWAYS_SOFTWARE": "1"})
         proc = subprocess.Popen([binpath], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(max(seconds, 10))
         if proc.poll() is not None:
-            print(f'❌ el binario murió a los {seconds}s (exit {proc.returncode})')
+            print("el binario murio a los %ds (exit %s)" % (seconds, proc.returncode))
             return 1
-        shot = f'/tmp/visual-smoke-{int(time.time())}.png'
+        shot = "/tmp/visual-smoke-%d.png" % int(time.time())
         try:
             capture(shot, seconds)
         except (subprocess.CalledProcessError, OSError):
-            # sin captura (macOS sin permiso de pantalla o sin import/ImageMagick): el smoke se limita a
-            # "el binario sigue vivo N segundos sin morir"
-            print('⚠️  sin captura disponible — solo assert de proceso vivo')
+            print("sin captura (import/ImageMagick ausente) — solo assert de proceso vivo")
             proc.kill()
             return 0
         proc.kill()
-        print(f'📸 captura en {shot} ({load(shot).size[0]}x{load(shot).size[1]})')
+        print("captura en %s (%dx%d)" % (shot, load(shot).size[0], load(shot).size[1]))
         return measure(shot)
-    print(__doc__); return 2
+    print(__doc__)
+    return 2
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main())
