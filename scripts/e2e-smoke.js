@@ -243,7 +243,7 @@ async function main() {
   const bootTimes = boot && boot.map;
   const bootOk = bootTimes && !!bootTimes['boot:store-loaded'] &&
     bootTimes['boot:store-loaded'] <= 3000 &&
-    (!bootTimes['boot:first-render'] || bootTimes['boot:first-render'] <= 3500);
+    (!bootTimes['boot:first-render'] || bootTimes['boot:first-render'] <= 2500);
 
   console.log('\n🔬 E2E SMOKE (Tauri/WebView2 vía CDP)');
   console.log('  consola limpia al load ........ ' + (consoleClean ? '✅' : '❌'));
@@ -266,7 +266,7 @@ async function main() {
   if (logSkips.length) console.log('  (detalle: ' + logSkips.join('; ') + ')');
 
   const bootOkFinal = bootTimes === null || bootTimes === undefined ? true : bootOk !== false;
-  if (bootOkFinal === false) bugs.push('boot fuera de umbral: store-loaded >3s o first-render >3,5s (' + JSON.stringify(bootTimes) + ')');
+  if (bootOkFinal === false) bugs.push('boot fuera de umbral: store-loaded >3s o first-render >2,5s (' + JSON.stringify(bootTimes) + ')');
   if (bugs.length) fail(bugs);
   console.log('\n✅ E2E PASS — 0 bugs de integración.');
   process.exit(0);

@@ -811,21 +811,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saved = await AppStorage.loadCatalog();
         bootMark("boot:catalog-loaded");
     if (saved && saved.items && saved.items.length) {
-    // Layer 2: Validate integrity on load
-    if (typeof Reliability !== 'undefined') {
-      const integrity = Reliability.validateCatalogIntegrity(saved.items);
-      if (integrity.issues.length > 0) {
-        console.warn(`Integridad de catálogo: ${integrity.issues.length} problemas, ${integrity.repaired} reparados`);
-      }
-      const selResult = Reliability.cleanOrphanedSelection(saved.sel || {}, saved.items);
-      if (selResult.removed.length > 0) {
-        console.warn(`Selección: ${selResult.removed.length} SKUs huérfanos removidos`);
-      }
-      selection = selResult.cleaned;
-    } else {
-      selection = saved.sel || {};
-    }
-    catalog = saved.items;
+        // boot-interactivity (spec #4): el restore NO debe bloquear el
+        // primer render: catalog + selección van de una; la validación de
+        // integridad (costosa con 1.472 items + imágenes) corre al idle.
+        catalog = saved.items;
+        selection = (saved.sel || {});
+        if (typeof Reliability !== 'undefined') {
+          const defer = (window.requestIdleCallback || ((cb) => setTimeout(cb, 0)));
+          defer(() => {
+            try {
+              const integrity = Reliability.validateCatalogIntegrity(catalog);
+              if (integrity.issues.length > 0) {
+                console.warn(`Integridad de catálogo: ${integrity.issues.length} problemas, ${integrity.repaired} reparados`);
+              }
+              const selResult = Reliability.cleanOrphanedSelection(selection, catalog);
+              if (selResult.removed.length > 0) {
+                console.warn(`Selección: ${selResult.removed.length} SKUs huérfanos removidos`);
+              }
+              selection = selResult.cleaned;
+            } catch (e) { console.error('restore-pós-render:', e); }
+          });
+        }
     // Restaurar preferencia de vista (tabla/galería) entre sesiones
     try {
       const savedMode = localStorage.getItem('mambo_catalog_viewmode');
