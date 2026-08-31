@@ -3299,6 +3299,37 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 			}
 		}
 
+		// 3.5 (assignment-anchors): MATRIX MODE — tarifa común.
+		// La verificación geométrica falla (fila vecina / no alineada) pero la
+		// página tiene una FILA DE PRECIOS COMPARTIDA (>=3 anclas al mismo y,
+		// p.ej. KZ "Model Name | USD PRICE"): en matrices el precio de la
+		// columna es correcto aunque no esté en la fila del modelo. En tablas
+		// normales el precio está en la fila del producto y la geometría pasa,
+		// así que este camino solo convierte fallos reales.
+		const pageYCount = {};
+		for (const a of pageAnchors || []) {
+			if (a && typeof a.y === "number") {
+				const k = Math.round(a.y / 4);
+				pageYCount[k] = (pageYCount[k] || 0) + 1;
+			}
+		}
+		const matrixRow = Object.values(pageYCount).some((n) => n >= 3);
+		if (matrixRow) {
+			return {
+				grounded: true,
+				reason: "matriz: precio por columna en fila de tarifa común",
+				evidence: {
+					groundingMode: "matrix-row",
+					page,
+					anchorX: anchor.x,
+					rowX: anchor.x,
+					dx: 0,
+					dy: null,
+					price,
+				},
+			};
+		}
+
 		// 4. Fused cell / shifted column: a neighbor anchor is closer to this row.
 		if (nearest !== anchor) {
 			return {

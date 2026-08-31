@@ -480,7 +480,27 @@ const Tests = {
     		// PIL iteración 4: código duplicado dentro del modelo (celda nombre+descripción)
     		this.assert(qr("AK980V2PRO Lychee AK980 Transparent", "TECLADO", "row") === "YELLOW", "PIL4: código duplicado → YELLOW");
     		this.assert(qr("A87 Plum Pro Sea Salt", "TECLADO", "row") === "GREEN", "PIL4 anti-overfit: 1 código + descripción → GREEN");
-		// U4 (repo-improvement-sprint): overlay de diagnóstico (sandbox jsdom)
+		// assignment-anchors (repo-improvement-sprint): modo matriz de tarifa común
+		{
+			const vg = (anchor, rowY, pageAnchors) =>
+				PdfParser.verifyGrounding({ anchor, rowTextY: rowY, pageNum: 1, pageAnchors });
+			const matriz = vg(
+				{ x: 100, y: 400, price: 14.54 }, 30,
+				[{ x: 100, y: 400, price: 14.54 }, { x: 300, y: 400, price: 9.3 }, { x: 500, y: 400, price: 38.05 }],
+			);
+			this.assert(matriz.grounded === true && matriz.reason.indexOf('matriz') === 0, 'AA: matriz de tarifa común → grounded por columna');
+			const normal = vg(
+				{ x: 100, y: 300, price: 20.6 }, 300,
+				[{ x: 100, y: 300, price: 20.6 }, { x: 300, y: 500, price: 9.3 }, { x: 500, y: 700, price: 38.05 }],
+			);
+			this.assert(normal.grounded === true && normal.reason.indexOf('geometría') >= 0, 'AA: tabla normal alineada → sigue pasando por geometría');
+			const desal = vg(
+				{ x: 100, y: 90, price: 11.16 }, 240,
+				[{ x: 100, y: 90, price: 11.16 }, { x: 400, y: 500, price: 9.3 }, { x: 600, y: 700, price: 38.05 }],
+			);
+			this.assert(desal.grounded === false, 'AA: tabla desalineada real (sin fila común) → sigue fallando');
+		}
+	// U4 (repo-improvement-sprint): overlay de diagnóstico (sandbox jsdom)
 		this.testDiagnosticsOverlay();
 		// PIL5 (repo-improvement-sprint): celda con información sin extraer
     		this.assert(qr("MAD V2", "MOUSE", "MAD V2 Snowlight HE Switch Black Ice Carbon Fiber Dual Light RGB") === "YELLOW", "PIL5: celda con exceso de tokens → YELLOW");

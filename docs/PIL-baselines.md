@@ -123,3 +123,25 @@ PIL3 (variante real, no vacía).
 | FP_rate_clean | 0% | **0% (0/42)** |
 | missing | 0 | 0 |
 | FN restantes | 15 | 4 (techo documentado, sin FPs posibles) |
+
+## assignment-anchors (2026-08-31) — calidad de anclaje FOB
+
+Problema: 97 YELLOW de anclaje (63 "fila vecina" + 34 "no alineada"), 84 de KZ
+(88%). Muestreo OCR (10 casos + 1 dudoso): 10/10 FPs — el FOB asignado era el
+correcto; el warning geométrico no entiende DOS formatos reales:
+- KZ matriz: fila de modelos propia + fila "USD PRICE" común → la columna
+  asigna bien, la geometría falla.
+- Celdas multilínea (8BitDo/Logitech/Razer): nombre/¥/$ en la MISMA celda en
+  líneas distintas → dy > tolerancia sin cruce.
+
+Fix (pdfParser.verifyGrounding paso 3.5): MATRIX MODE — si la página tiene
+>=3 anclas en el mismo y (fila de precios compartida) y la verificación
+geométrica falló, el precio por columna es válido → grounded. En tablas
+normales el camino geometrico no cambia (test: alineada pasa, desalineada
+real sigue fallando).
+
+Resultado: anclas 97 → **13** (KZ 84 eliminadas). Golden: hash de extracción
+IDÉNTICO (fd0ac1d1… — los FOB de matriz ya eran correctos; solo cambia el
+semáforo). YELLOW totales 654 → 582. Los 13 restantes (0,6% del catálogo):
+celdas multilínea con dy > tol, precio correcto confirmado por muestreo →
+techo documentado. 3 tests nuevos (matriz / tabla normal / desalineada real).
