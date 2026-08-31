@@ -24,3 +24,20 @@
 - 654 YELLOW: 224 switch suelto sin código (diseño), 81 celda con info sin
   extraer (PIL5), 94 anclas de fila/alineación (asignación SKU — fuera del
   gate, observación para sprint futuro), resto residuos/marketing/genéricas.
+
+## image-render-cap (2026-08-31) — A/B completo
+
+Harness con contador de imágenes (wrapper extractImagesFromPage en el scratch;
+el pool pre-dedup = 2634 en las 3 corridas). 13 PDFs reales, una corrida por cap.
+
+| cap | tiempo | <=150px | avgMinDim | hash |
+|-----|--------|---------|-----------|------|
+| 6.0 | 71,3s | 978 | 177px | fd0ac1d1… ✓ |
+| 4.0 | 55,2s (−22,7%) | 1823 (+845) | 145px (−18%) | ✓ |
+| 3.0 | 51,3s (−28,1%) | 2199 (+1221) | 121px (−32%) | ✓ |
+
+DECISIÓN: se mantiene RENDER_CAP 6.0 — ningún cap cumple "sin subir <=150px ni
+caer avgMinDim >15%". El baseline del instrumento real son ~71s (no 190s: el
+harness previo sin wrapper inflaba el costo). Tradeoff futuro documentado: 4.0
+= −23% de tiempo a cambio de calidad de fotos (decisión de negocio, no de
+gate). Worker delegado con el protocolo spec (hash verificado 3×).
