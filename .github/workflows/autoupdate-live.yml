@@ -1,0 +1,182 @@
+# autoupdate-live
+#
+# Prueba END-TO-END del auto-update real en Windows y macOS, usando los
+# runners de GitHub como hardware: instala el release ANTERIOR con el
+# instalador nativo, lanza la app, y verifica que se actualiza SOLA a la
+# version publicada (descarga firmada + instalacion + relanzado).
+#
+# Se dispara manualmente (workflow_dispatch) o con cada release publicado.
+# Sostenible en el tiempo: siempre hay un release anterior con auto-update
+# (>= v2.2.13) que lleva a la app al release actual.
+#
+# Lo que NO puede probar: versiones != a la ultima publicada (la app
+# siempre se actualiza a lo que diga latest.json), ni el truco "N-1":
+# el CI instala N-1 cuando N existe y deja que la app haga el resto.
+
+name: autoupdate-live
+
+on:
+  workflow_dispatch: {}
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autoupdate-live
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      cur: ${{ steps.r.outputs.cur }}
+      prev: ${{ steps.r.outputs.prev }}
+    steps:
+      - name: Resolve current and previous release
+        id: r
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tags=$(gh api repos/getodevel-source/mambo-pedidos/releases \
+            --jq '.[].tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -5)
+          cur=$(printf '%s\n' "$tags" | sed -n '1p')
+          prev=""
+          for t in $(printf '%s\n' "$tags" | tail -n +2); do
+            n=$(gh api repos/getodevel-source/mambo-pedidos/releases/tags/"$t" \
+              --jq '.assets | length')
+            if [ "$n" -gt 0 ]; then prev=$t; break; fi
+          done
+          if [ -z "$prev" ]; then echo "::error::no previous release with assets"; exit 1; fi
+          echo "current=$cur previous=$prev"
+          echo "cur=$cur" >> "$GITHUB_OUTPUT"
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: resolve
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CUR: ${{ needs.resolve.outputs.cur }}
+      PREV: ${{ needs.resolve.outputs.prev }}
+    steps:
+      - name: Wait until latest.json advertises current release
+        shell: pwsh
+        run: |
+          $target = $env:CUR.TrimStart('v')
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $j = Invoke-RestMethod -Uri "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json" -TimeoutSec 20
+              if ($j.version -eq $target) { Write-Host "latest.json ready: $($j.version)"; break }
+              Write-Host "waiting for latest.json=$target (now $($j.version))"
+            } catch { Write-Host "poll $i: $($_.Exception.Message)" }
+            Start-Sleep -Seconds 20
+          }
+      - name: Download previous NSIS installer
+        shell: pwsh
+        run: |
+          $v = $env:PREV.TrimStart('v')
+          $url = "https://github.com/getodevel-source/mambo-pedidos/releases/download/$env:PREV/Mambo.Pedidos_${v}_x64-setup.exe"
+          Write-Host "downloading $url"
+          curl.exe -sL -o install-prev.exe $url
+          Get-Item install-prev.exe | Select-Object Name, Length
+      - name: Install previous version (silent)
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "$PWD\install-prev.exe" -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 15
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "app exe not found after silent install" }
+          Write-Host "installed app: $exe"
+          (Get-Item $exe).VersionInfo.ProductVersion
+      - name: Launch app (auto-update must kick in ~5s later)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          Write-Host "launching $exe"
+          Start-Process -FilePath $exe
+      - name: Poll installed version until auto-update applies
+        shell: pwsh
+        run: |
+          $target = $env:CUR.TrimStart('v')
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          $ok = $false
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Seconds 10
+            try {
+              $v = (Get-Item $exe).VersionInfo.ProductVersion
+              Write-Host "poll $i -> installed version: $v (target $target)"
+              if ($v -eq $target) { $ok = $true; break }
+            } catch { Write-Host "poll $i: $($_.Exception.Message)" }
+            $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $ok) { throw "AUTO-UPDATE FAILED: installed version never reached $target" }
+          $proc = Get-Process | Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1
+          Write-Host "running process: $($proc.Name) pid=$($proc.Id)"
+          Write-Host "::notice::AUTO-UPDATE OK on Windows: $env:PREV -> $env:CUR"
+      - name: Leave evidence on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'Mambo' } | ForEach-Object {
+              Write-Host "$($_.FullName): $((Get-Item $_).VersionInfo.ProductVersion)"
+            }
+          Get-Process | Where-Object { $_.Name -match 'Mambo' } | Select-Object Name, Id
+
+  macos:
+    needs: resolve
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      CUR: ${{ needs.resolve.outputs.cur }}
+      PREV: ${{ needs.resolve.outputs.prev }}
+    steps:
+      - name: Wait until latest.json advertises current release
+        run: |
+          target="${CUR#v}"
+          for i in $(seq 1 60); do
+            v=$(curl -sL --connect-timeout 20 https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json | python3 -c "import json,sys;print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
+            if [ "$v" = "$target" ]; then echo "latest.json ready: $v"; break; fi
+            echo "waiting for latest.json=$target (now $v)"
+            sleep 20
+          done
+      - name: Download previous app bundle
+        run: |
+          url="https://github.com/getodevel-source/mambo-pedidos/releases/download/${PREV}/Mambo.Pedidos_aarch64.app.tar.gz"
+          echo "downloading $url"
+          curl -sL -o prev.app.tar.gz "$url"
+          ls -la prev.app.tar.gz
+      - name: Replace /Applications bundle with previous version
+        run: |
+          rm -rf "/Applications/Mambo Pedidos.app"
+          tar -xzf prev.app.tar.gz -C /Applications
+          defaults read "/Applications/Mambo Pedidos.app/Contents/Info" CFBundleShortVersionString
+      - name: Launch previous app (auto-update must kick in ~5s later)
+        run: |
+          "/Applications/Mambo Pedidos.app/Contents/MacOS/mambo-pedidos" &
+          echo "launched pid $!"
+      - name: Poll installed version until auto-update applies
+        run: |
+          target="${CUR#v}"
+          ok=""
+          for i in $(seq 1 40); do
+            sleep 10
+            v=$(defaults read "/Applications/Mambo Pedidos.app/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "")
+            echo "poll $i -> installed version: $v (target $target)"
+            if [ "$v" = "$target" ]; then ok=1; break; fi
+          done
+          if [ -z "$ok" ]; then echo "::error::AUTO-UPDATE FAILED: installed version never reached $target"; exit 1; fi
+          pgrep -f "Mambo Pedidos.app/Contents/MacOS/mambo-pedidos" | head -1
+          echo "::notice::AUTO-UPDATE OK on macOS: ${PREV} -> ${CUR}"
+      - name: Leave evidence on failure
+        if: failure()
+        run: |
+          defaults read "/Applications/Mambo Pedidos.app/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "no app in /Applications"
+          ps aux | grep -i mambo | grep -v grep | head -3
