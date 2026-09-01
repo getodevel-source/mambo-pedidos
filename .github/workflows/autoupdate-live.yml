@@ -105,16 +105,26 @@ jobs:
           $target = $env:CUR.TrimStart('v')
           $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          # El runner de Windows suele bloquear el instalador recien descargado
+          # por el escaneo de Defender: el primer intento del updater falla y el
+          # segundo pasa. Re-lanzar la app re-dispara el auto-update.
           $ok = $false
-          for ($i = 0; $i -lt 40; $i++) {
-            Start-Sleep -Seconds 10
-            try {
-              $v = (Get-Item $exe).VersionInfo.ProductVersion
-              Write-Host "poll $i -> installed version: $v (target $target)"
-              if ($v -eq $target) { $ok = $true; break }
-            } catch { Write-Host "poll ${i}: $($_.Exception.Message)" }
-            $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+          for ($attempt = 1; $attempt -le 2; $attempt++) {
+            for ($i = 0; $i -lt 25; $i++) {
+              Start-Sleep -Seconds 10
+              try {
+                $v = (Get-Item $exe).VersionInfo.ProductVersion
+                Write-Host "attempt $attempt poll $i -> installed version: $v (target $target)"
+                if ($v -eq $target) { $ok = $true; break }
+              } catch { Write-Host "attempt $attempt poll $i : $($_.Exception.Message)" }
+              $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
+            }
+            if ($ok) { break }
+            Write-Host "attempt $attempt failed; relaunching app for retry"
+            Get-Process | Where-Object { $_.Name -match 'Mambo' } | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 5
+            Start-Process -FilePath $exe
           }
           if (-not $ok) { throw "AUTO-UPDATE FAILED: installed version never reached $target" }
           $proc = Get-Process | Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1

@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.2.20',
+  CURRENT_VERSION: '2.2.21',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -23,11 +23,21 @@ const AppUpdater = {
    *  el self-replace (extraer binario + copiar sobre el exe + relanzar). */
   async installBinaryUpdate() {
     const handle = this._updateHandle;
-    const raw = (handle && handle.rawJson) || {};
-    const plat =
-      (raw.platforms && (raw.platforms['linux-x86_64'] || raw.platforms['linux-x86_64-appimage'])) ||
-      null;
-    const url = plat && plat.url;
+    const v = this.latestVersion;
+    // El objeto del plugin NO siempre trae rawJson con la URL: la URL del
+    // AppImage es determinística para nuestros releases — armarla directo.
+    let url = null;
+    try {
+      // 1) el propio plugin expone downloadUrl (la URL que usaria la instalacion
+      //    nativa); 2) rawJson.platforms como alternativa; 3) URL deterministica.
+      url = (handle && handle.downloadUrl) || null;
+      const raw = (handle && handle.rawJson) || {};
+      const plat = raw.platforms && (raw.platforms['linux-x86_64'] || raw.platforms['linux-x86_64-appimage']);
+      url = url || (plat && plat.url) || null;
+    } catch { }
+    if (!url && v && this.isValidVersion(v)) {
+      url = `${this.REPO_URL}/releases/download/v${v}/Mambo.Pedidos_${v}_amd64.AppImage`;
+    }
     if (!handle || !url) {
       toast('⬇️ Abriendo la descarga manual en el navegador...', 'info');
       this.openInBrowser();
@@ -85,7 +95,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.2.20';
+    return this.CURRENT_VERSION || '2.2.21';
   },
 
   /**

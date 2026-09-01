@@ -152,19 +152,21 @@ pub fn run() {
         let is_wayland = session_type == "wayland"
             || (session_type.is_empty() && std::env::var("WAYLAND_DISPLAY").is_ok());
 
-        // Respetar un GDK_BACKEND ya seteado por el entorno (p.ej. el AppRun
-
-        // del AppImage que fuerza x11 por el webkit embebido: pisarlo a
-
-        // wayland crashea el WebKitWebProcess del bundle viejo). Solo
-
-        // intervenir cuando nadie decidió el backend.
-
-        if is_wayland && std::env::var("GDK_BACKEND").is_err() {
-
-            std::env::set_var("GDK_BACKEND", "wayland");
-
-        }
+            // Regla por tipo de instalacion:
+            // - AppImage bundle (APPIMAGE env): respetar el x11 que fuerza el
+            //   hook linuxdeploy — el webkit embebido crashea bajo wayland.
+            // - AppDir/binario (libs del sistema): FORZAR wayland nativo. El
+            //   hook exporta GDK_BACKEND=x11 y eso dejaba la app a escala 1
+            //   estirada por el compositor = LA APP PIXELADA. Con wayland
+            //   Hyprland anuncia scale 2 (buffer 2x): texto nitido, tamano
+            //   logico correcto.
+            let is_bundle_appimage = std::env::var("APPIMAGE").is_ok();
+            if is_wayland && !is_bundle_appimage {
+                std::env::set_var("GDK_BACKEND", "wayland");
+                // GDK_SCALE=1 (launcher viejo) forzaria buffer 1x = blur:
+                // sacarlo en sesion wayland.
+                std::env::remove_var("GDK_SCALE");
+            }
     }
 
     tauri::Builder::default()
