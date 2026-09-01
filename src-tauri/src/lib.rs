@@ -77,17 +77,24 @@ fn get_install_kind() -> String {
     "binary".to_string()
 }
 
-/// Guarda los bytes del AppImage descargado en el TEMP del sistema y
-/// devuelve la ruta (para apply_appimage_update). Evita el scope del FS plugin.
+/// Descarga el AppImage firmado EN EL BACKEND (reqwest) directo al TEMP y
+/// devuelve la ruta para apply_appimage_update. Los 82MB NUNCA cruzan el IPC
+/// (un Uint8Array gigante por invoke revienta la serialización del webview:
+/// ese fue el error real "te manda a GitHub" del auto-install AppDir).
 #[tauri::command]
-fn save_temp_update(data: Vec<u8>) -> Result<String, String> {
+async fn download_update(url: String) -> Result<String, String> {
+    let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("la descarga falló: HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis();
     let path = std::env::temp_dir().join(format!("mambo-update-{}.AppImage", ts));
-    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
     Ok(path.display().to_string())
 }
 
@@ -181,7 +188,7 @@ pub fn run() {
             open_external_url,
             get_app_version,
             get_install_kind,
-            save_temp_update,
+            download_update,
             apply_appimage_update
         ])
         .run(tauri::generate_context!())

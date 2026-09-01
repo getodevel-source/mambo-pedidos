@@ -35,10 +35,9 @@ const AppUpdater = {
     }
     toast('⬇️ Descargando actualización automática...', 'info');
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('la descarga falló: HTTP ' + res.status);
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      const tmpPath = await window.__TAURI__.core.invoke('save_temp_update', { data: bytes });
+      // La descarga ocurre EN EL BACKEND (reqwest): los 82MB no cruzan el IPC
+      // (mandar el Uint8Array por invoke revienta la serialización → error).
+      const tmpPath = await window.__TAURI__.core.invoke('download_update', { url });
       toast('⚙️ Instalando actualización — la app se reinicia sola...', 'info');
       await window.__TAURI__.core.invoke('apply_appimage_update', { appimagePath: tmpPath });
       return true;
