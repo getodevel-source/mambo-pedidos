@@ -71,7 +71,7 @@ jobs:
               $j = Invoke-RestMethod -Uri "https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json" -TimeoutSec 20
               if ($j.version -eq $target) { Write-Host "latest.json ready: $($j.version)"; break }
               Write-Host "waiting for latest.json=$target (now $($j.version))"
-            } catch { Write-Host "poll $i: $($_.Exception.Message)" }
+            } catch { Write-Host "poll ${i}: $($_.Exception.Message)" }
             Start-Sleep -Seconds 20
           }
       - name: Download previous NSIS installer
