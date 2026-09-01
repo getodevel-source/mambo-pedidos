@@ -1,6 +1,6 @@
 {
   "name": "mambo-pedidos",
-  "version": "2.2.19",
+  "version": "2.2.20",
   "description": "Mambo Pedidos - Gestor de catalogos y pedidos para perifericos gamer",
   "main": "src/index.html",
   "scripts": {
