@@ -38,8 +38,20 @@ jobs:
         run: |
           TAG="${{ inputs.tag_name || github.event.release.tag_name }}"
           if [ -z "$TAG" ]; then
-            TAG="$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest'))['tag_name'])" 2>/dev/null || echo v2.2.6)"
-          fi
+              TAG="${{ inputs.tag_name || github.event.release.tag_name }}"
+              if [ -z "$TAG" ]; then
+                TAG="$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest'))['tag_name'])" 2>/dev/null || echo v2.2.6)"
+              fi
+              TARGET="${TAG#v}"
+              # Los assets del release llegan ~10 min despues del evento release,
+              # y el latest.json anuncia el TAG solo cuando estan subidos: esperar
+              # evita la carrera de tiempo que rompio el smoke del 2.2.15.
+              for i in $(seq 1 60); do
+                v=$(curl -fsL --connect-timeout 20 https://github.com/getodevel-source/mambo-pedidos/releases/latest/download/latest.json 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
+                if [ "$v" = "$TARGET" ]; then echo "latest.json ready: $v"; break; fi
+                echo "waiting for latest.json=$TARGET (now $v) — attempt $i"
+                sleep 20
+              done
           curl -fL --retry 6 --retry-delay 30 --retry-all-errors -o mambo.AppImage \
             "https://github.com/getodevel-source/mambo-pedidos/releases/download/${TAG}/Mambo.Pedidos_${TAG#v}_amd64.AppImage"
           chmod +x mambo.AppImage
