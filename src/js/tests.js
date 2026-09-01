@@ -480,7 +480,32 @@ const Tests = {
     		// PIL iteración 4: código duplicado dentro del modelo (celda nombre+descripción)
     		this.assert(qr("AK980V2PRO Lychee AK980 Transparent", "TECLADO", "row") === "YELLOW", "PIL4: código duplicado → YELLOW");
     		this.assert(qr("A87 Plum Pro Sea Salt", "TECLADO", "row") === "GREEN", "PIL4 anti-overfit: 1 código + descripción → GREEN");
-		// assignment-anchors (repo-improvement-sprint): modo matriz de tarifa común
+		// windowControls (window-controls-macos): barra de título y guards
+		{
+			const { JSDOM } = require("jsdom");
+			const fs = require("fs");
+			const path = require("path");
+			const code = fs.readFileSync(path.join(__dirname, "windowControls.js"), "utf8");
+			const dom = new JSDOM(
+				'<!doctype html><html><body><div class="titlebar"><button data-act="close"></button><button data-act="minimize"></button><button data-act="fullscreen"></button></div></body></html>',
+				{ runScripts: "outside-only", url: "http://localhost/" },
+			);
+			const win = dom.window;
+			win.eval(code);
+			// en el sandbox con platform linux el título se activa: html.mac-titlebar
+			this.assert(win.document.documentElement.classList.contains("mac-titlebar"), "WC: activa mac-titlebar en Linux/macOS");
+			const closeBtn = win.document.querySelector('[data-act="close"]');
+			this.assert(closeBtn !== null, "WC: botón cerrar presente");
+			const minBtn = win.document.querySelector('[data-act="minimize"]');
+			this.assert(minBtn !== null, "WC: botón minimizar presente");
+			const fullBtn = win.document.querySelector('[data-act="fullscreen"]');
+			this.assert(fullBtn !== null, "WC: botón pantalla completa presente");
+			// sin __TAURI__ los clicks no lanzan (guarda)
+			let threw = false;
+			try { closeBtn.click(); } catch (e) { threw = true; }
+			this.assert(!threw, "WC: sin Tauri los clicks son inertes (sin excepción)");
+		}
+	// assignment-anchors (repo-improvement-sprint): modo matriz de tarifa común
 		{
 			const vg = (anchor, rowY, pageAnchors) =>
 				PdfParser.verifyGrounding({ anchor, rowTextY: rowY, pageNum: 1, pageAnchors });

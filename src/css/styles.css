@@ -2109,3 +2109,62 @@ select option, .select option {
 
 /* sin drawer: el toggle y el backdrop no se muestran nunca */
 .menu-toggle, .menu-backdrop { display: none !important; }
+
+/* ===============================================================
+   WINDOW CONTROLS estilo macOS (Linux/macOS) — traffic lights izq.
+   Windows usa decorations nativas; html.mac-titlebar solo en los
+   otros SO (lo pone windowControls.js según plaforma).
+   =============================================================== */
+.titlebar {
+  display: none;
+}
+html.mac-titlebar .titlebar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  padding: 0 16px;
+  z-index: 10000;
+  -webkit-app-region: drag;
+  app-region: drag;
+  background: rgba(13, 15, 22, 0.92);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+}
+.tb-btn {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.0);
+  font-size: 9px;
+  line-height: 1;
+  transition: color 0.12s;
+}
+.tb-close { background: #ff5f57; }
+.tb-min   { background: #febc2e; }
+.tb-full  { background: #28c840; }
+.tb-btn:hover { color: rgba(0, 0, 0, 0.75); }
+
+/* Ajustes del layout para dejar pasar la barra (solo con controles custom) */
+html.mac-titlebar body {
+  padding-top: 36px;
+}
+html.mac-titlebar .sidebar {
+  top: 36px;
+  height: calc(100vh - 36px);
+}
+html.mac-titlebar .menu-toggle {
+  top: 50px;
+}

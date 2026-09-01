@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let parsed = reqwest::Url::parse(&url).map_err(|_| "URL externa inválida".to_string())?;
@@ -50,6 +52,17 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Controles de ventana estilo macOS (cruz / minimizar / pantalla
+            // completa a la IZQUIERDA) en Linux y macOS: la barra se dibuja en
+            // el frontend (windowControls.js) sin decorations. Windows conserva
+            // sus controles nativos a la derecha.
+            #[cfg(not(target_os = "windows"))]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_decorations(false);
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())

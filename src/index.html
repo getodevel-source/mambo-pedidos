@@ -17,7 +17,13 @@
   </head>
   <body>
     <!-- ============== SIDEBAR ============== -->
-    <aside class="sidebar" role="navigation" aria-label="Navegación principal">
+        <!-- Controles de ventana estilo macOS (Linux/macOS; ocultan en Windows) -->
+    <div class="titlebar" aria-label="Controles de ventana">
+      <button class="tb-btn tb-close" data-act="close" aria-label="Cerrar" title="Cerrar"></button>
+      <button class="tb-btn tb-min" data-act="minimize" aria-label="Minimizar" title="Minimizar"></button>
+      <button class="tb-btn tb-full" data-act="fullscreen" aria-label="Pantalla completa" title="Pantalla completa"></button>
+    </div>
+<aside class="sidebar" role="navigation" aria-label="Navegación principal">
       <div class="sidebar-logo">
         <img src="header-logo.png" alt="Mambo" />
         <div class="name">MAMBO<span class="accent">.</span></div>
@@ -4084,6 +4090,7 @@
     <script src="js/storage.js"></script>
     <script src="js/skuAllocator.js"></script>
     <script src="js/pdfParserClassifier.js"></script>
+    <script src="js/windowControls.js"></script>
     <script src="js/parser/cellUtils.js"></script>
     <script src="js/parser/rowMatch.js"></script>
     <script src="js/pdfParser.js"></script>
