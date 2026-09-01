@@ -163,9 +163,12 @@ pub fn run() {
             let is_bundle_appimage = std::env::var("APPIMAGE").is_ok();
             if is_wayland && !is_bundle_appimage {
                 std::env::set_var("GDK_BACKEND", "wayland");
-                // GDK_SCALE=1 (launcher viejo) forzaria buffer 1x = blur:
-                // sacarlo en sesion wayland.
-                std::env::remove_var("GDK_SCALE");
+                // Buffer 2x (GDK_SCALE=2): WebKit dibuja nitido y el
+                // compositor lo downsamplinga al 1.3333x nativo del monitor.
+                // Con scale 1 (launcher viejo) el compositor ESTIRA el buffer
+                // 1:1 -> pixelado cronico; sin scale, Hyprland negocia 1 y
+                // pasa lo mismo. Forzar 2 = nitido con tamano logico correcto.
+                std::env::set_var("GDK_SCALE", "2");
             }
     }
 
