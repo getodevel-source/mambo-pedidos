@@ -36,8 +36,6 @@ jobs:
           ${{ matrix.install }} ${{ matrix.pkg }}
       - name: Download the released AppImage
         run: |
-          TAG="${{ inputs.tag_name || github.event.release.tag_name }}"
-          if [ -z "$TAG" ]; then
               TAG="${{ inputs.tag_name || github.event.release.tag_name }}"
               if [ -z "$TAG" ]; then
                 TAG="$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('https://api.github.com/repos/getodevel-source/mambo-pedidos/releases/latest'))['tag_name'])" 2>/dev/null || echo v2.2.6)"
@@ -52,10 +50,10 @@ jobs:
                 echo "waiting for latest.json=$TARGET (now $v) — attempt $i"
                 sleep 20
               done
-          curl -fL --retry 6 --retry-delay 30 --retry-all-errors -o mambo.AppImage \
-            "https://github.com/getodevel-source/mambo-pedidos/releases/download/${TAG}/Mambo.Pedidos_${TAG#v}_amd64.AppImage"
-          chmod +x mambo.AppImage
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
+              curl -fL --retry 6 --retry-delay 30 --retry-all-errors -o mambo.AppImage \
+                "https://github.com/getodevel-source/mambo-pedidos/releases/download/${TAG}/Mambo.Pedidos_${TAG#v}_amd64.AppImage"
+              chmod +x mambo.AppImage
+              echo "TAG=$TAG" >> "$GITHUB_ENV"
       - name: Visual smoke (AppImage real, extracted, GDK_SCALE=1)
         run: |
           # sin FUSE en contenedores: APPIMAGE_EXTRACT_AND_RUN extrae y ejecuta
