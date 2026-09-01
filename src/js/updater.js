@@ -12,7 +12,7 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.2.12',
+  CURRENT_VERSION: '2.2.13',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
@@ -35,7 +35,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.2.12';
+    return this.CURRENT_VERSION || '2.2.13';
   },
 
   /**
@@ -112,7 +112,17 @@ const AppUpdater = {
           this.showModal(updateInfo.version, this.latestNotes);
           toast(`🚀 ¡Nueva versión v${updateInfo.version} disponible!`, 'success');
         } else {
-          toast(`📦 Nueva versión v${updateInfo.version} disponible — tocá "Buscar actualización" para verla.`, 'info');
+              // AUTO-UPDATE: en el arranque la app se actualiza SOLA (descarga
+              // firmada + instala + relanza via plugin). En AppImage reemplaza y
+              // relanza; si el entorno no lo permite (AppDir/binario suelto) el
+              // fallo abre el modal manual (comportamiento anterior).
+              toast(`📦 Nueva versión v${updateInfo.version} — descarga automática...`, 'info');
+              setTimeout(() => {
+                this.startDirectDownload().catch(() => {
+                  this.showModal(updateInfo.version, this.latestNotes);
+                  toast('⬇️ No se pudo instalar automáticamente (AppImage requerido) — usá el modal', 'warning');
+                });
+              }, 2500);
         }
       } else if (userInitiated) {
         toast(`✅ Estás en la versión más reciente (v${currentVer})`, 'success');
