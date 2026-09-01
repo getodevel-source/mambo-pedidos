@@ -112,7 +112,7 @@ jobs:
               $v = (Get-Item $exe).VersionInfo.ProductVersion
               Write-Host "poll $i -> installed version: $v (target $target)"
               if ($v -eq $target) { $ok = $true; break }
-            } catch { Write-Host "poll $i: $($_.Exception.Message)" }
+            } catch { Write-Host "poll ${i}: $($_.Exception.Message)" }
             $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
               Where-Object { $_.Name -match 'Mambo' } | Select-Object -First 1 -ExpandProperty FullName
           }
