@@ -493,7 +493,12 @@ const Tests = {
 			const win = dom.window;
 			win.eval(code);
 			// en el sandbox con platform linux el título se activa: html.mac-titlebar
-			this.assert(win.document.documentElement.classList.contains("mac-titlebar"), "WC: activa mac-titlebar en Linux/macOS");
+			const wcPlatform = (String(win.navigator.platform || "") + " " + String(win.navigator.userAgent || "")).toLowerCase();
+			const wcExpectMac = /linux|darwin/.test(wcPlatform);
+			this.assert(
+				win.document.documentElement.classList.contains("mac-titlebar") === wcExpectMac,
+				"WC: mac-titlebar según plataforma del runner (esperado " + (wcExpectMac ? "activado" : "inactivo") + ")",
+			);
 			const closeBtn = win.document.querySelector('[data-act="close"]');
 			this.assert(closeBtn !== null, "WC: botón cerrar presente");
 			const minBtn = win.document.querySelector('[data-act="minimize"]');
