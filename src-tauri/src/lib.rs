@@ -95,6 +95,15 @@ async fn download_update(url: String) -> Result<String, String> {
         .as_millis();
     let path = std::env::temp_dir().join(format!("mambo-update-{}.AppImage", ts));
     std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    // El runtime debe EJECUTAR el AppImage para extraerlo: fs::write lo deja
+    // 644 -> "Permission denied" silencioso en apply (el bug real que devolvia
+    // al usuario a GitHub).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+    }
     Ok(path.display().to_string())
 }
 
@@ -122,7 +131,7 @@ fn apply_appimage_update(appimage_path: String) -> Result<(), String> {
         }
     }
     let script = format!(
-        "set -e\ncd \"$(mktemp -d)\"\nexport APPIMAGE_EXTRACT_AND_RUN=1\n\"{appimage}\" --appimage-extract >/dev/null 2>&1\ncp squashfs-root/usr/bin/mambo-pedidos \"{exe_new}\"\nchmod +x \"{exe_new}\"\npkill -x mambo-pedidos || true\nmv -f \"{exe_new}\" \"{exe_str}\"\nsetsid \"{exe_str}\" >/dev/null 2>&1 &",
+        "set -e\ncd \"$(mktemp -d)\"\nexport APPIMAGE_EXTRACT_AND_RUN=1\n\"{appimage}\" --appimage-extract >/dev/null 2>&1\ncp squashfs-root/usr/bin/mambo-pedidos \"{exe_new}\"\nchmod +x \"{exe_new}\"\nLIBDIR=\"$(dirname \"{exe_str}\")/../lib\"\nrm -f \"$LIBDIR\"/libwebkit2gtk-4.1.so.0* \"$LIBDIR\"/libjavascriptcoregtk-4.1.so.18* || true\npkill -x mambo-pedidos || true\nmv -f \"{exe_new}\" \"{exe_str}\"\nsetsid \"{exe_str}\" >/dev/null 2>&1 &",
         appimage = appimage_path,
         exe_new = exe_new,
         exe_str = exe_str
