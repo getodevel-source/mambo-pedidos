@@ -83,3 +83,35 @@ python3 scripts/visual-smoke.py measure <png>                          # render 
 Síntoma exacto en consola del runtime: `this.extractPageProductsByTableRows is
 not a function` por página + toast "No se detectaron productos válidos en los
 archivos".
+
+## 5) Release + auto-update probado (v2.2.24, verificado E2E)
+
+Secuencia real ejecutada y verificada en los TRES sistemas:
+
+1. `git commit` del fix → `git push origin master`.
+2. `npm run bump -- 2.2.24` (propaga version a package/Cargo/tauri.conf/updater/
+   index.html/latest.json/tests) → commit `chore(release):` → push.
+3. `git tag v2.2.24 && git push origin v2.2.24` → release.yml (3 OS) +
+   visual-smokes + verify-latest. **Leccion**: el GITHUB_TOKEN del runner no
+   puede CREAR releases en esta org → pre-crear con
+   `gh release create v2.2.24 --draft` (tauri-action la publica al actualizar).
+4. `latest.json`: **lo genera y sube tauri-action con las firmas reales**.
+   `scripts/gen-latest.mjs` quedo como respaldo reproducible si algun dia no.
+5. **Leccion nueva**: pasar draft→publish via API NO dispara el evento
+   `release: published` → `autoupdate-live.yml` no arranca solo; dispararlo con
+   `gh workflow run autoupdate-live.yml` (resuelve N-1 solo).
+6. Resultados: `AUTO-UPDATE OK on Windows: v2.2.23 -> v2.2.24`,
+   `AUTO-UPDATE OK on macOS: v2.2.23 -> v2.2.24`, y en la notebook Linux el
+   AppDir `~/Applications/MamboPedidos/usr/bin/mambo-pedidos` quedo
+   **byte-identico** (`md5sum`) al binario oficial extraido del AppImage v2.2.24
+   del release, proceso relanzado solo y ventana renderizando 1:1 (sidebar
+   en rango, texto 12px).
+
+Verificacion local del update sin UI: comparar `md5sum` del binario del AppDir
+contra el extraido del AppImage oficial:
+
+```bash
+gh release download v2.2.24 -p "*.AppImage" --dir /tmp/ref && cd /tmp/ref
+./Mambo.Pedidos_2.2.24_amd64.AppImage --appimage-extract
+md5sum squashfs-root/usr/bin/mambo-pedidos ~/Applications/MamboPedidos/usr/bin/mambo-pedidos
+```
