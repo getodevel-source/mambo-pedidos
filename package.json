@@ -26,6 +26,7 @@
     "photo:baseline": "node scripts/photo-baseline.js catalog-export.json --json ground-truth/photo-baseline.json",
     "audit:assignment": "node scripts/assignment-audit.js catalog-export.json --json assignment-audit-report.json",
     "export:corpus": "node scripts/export-catalog-batch.js catalog-export.json --images scripts/_img_audit/images",
+        "catalogs:load": "node scripts/catalog-load.js",
     "photo:check": "node scripts/photo-baseline.js catalog-export.json --check --min-avg 300 --max-under-150 1"
   },
   "keywords": [

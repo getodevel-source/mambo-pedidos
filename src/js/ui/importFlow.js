@@ -25,7 +25,7 @@ const ImportFlow = {
       showProgress(basePct, `Cargando ${f.name}...`, `Archivo ${i + 1} de ${totalFiles}`);
 
       try {
-        const ext = f.name.split('.').pop().toLowerCase();
+        const ext = f.name.split('.').pop().trim().toLowerCase();
         const progressCb = (current, total) => {
           const filePct = (current / total) * stepPct;
           const currentPct = Math.round(basePct + filePct);
