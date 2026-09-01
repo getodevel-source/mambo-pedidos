@@ -122,7 +122,7 @@ fn apply_appimage_update(appimage_path: String) -> Result<(), String> {
         }
     }
     let script = format!(
-        "set -e\ncd \"$(mktemp -d)\"\nexport APPIMAGE_EXTRACT_AND_RUN=1\n\"{appimage}\" --appimage-extract >/dev/null 2>&1\ncp squashfs-root/usr/bin/mambo-pedidos \"{exe_new}\"\nchmod +x \"{exe_new}\"\npkill -x mambo-pedido || true\nmv -f \"{exe_new}\" \"{exe_str}\"\nsetsid \"{exe_str}\" >/dev/null 2>&1 &",
+        "set -e\ncd \"$(mktemp -d)\"\nexport APPIMAGE_EXTRACT_AND_RUN=1\n\"{appimage}\" --appimage-extract >/dev/null 2>&1\ncp squashfs-root/usr/bin/mambo-pedidos \"{exe_new}\"\nchmod +x \"{exe_new}\"\npkill -x mambo-pedidos || true\nmv -f \"{exe_new}\" \"{exe_str}\"\nsetsid \"{exe_str}\" >/dev/null 2>&1 &",
         appimage = appimage_path,
         exe_new = exe_new,
         exe_str = exe_str
