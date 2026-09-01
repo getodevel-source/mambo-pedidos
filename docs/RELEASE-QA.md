@@ -68,3 +68,28 @@ npm run visual-smoke measure <captura.png>   # pipeline de píxeles sobre una ca
    assets → curl con `--retry 6 --retry-delay 30 --retry-all-errors`.
 5. Los releases del bot usan el código del TAG: un fix de los scripts de QA
    requiere bump + tag nuevo (no rerun) — por eso 2.2.5→2.2.10.
+
+## Auto-update por release (politica vigente desde v2.2.21)
+
+Cada release debe poder instalarse SOLO, en los tres sistemas:
+
+- **Windows**: latest.json + NSIS firmado -> el plugin ejecuta el instalador /S y relanza.
+  Verificado por el job `autoupdate-live` en cada release (runner real de Windows).
+- **macOS**: latest.json + .app.tar.gz firmado -> el plugin reemplaza /Applications y relanza.
+  Verificado por `autoupdate-live` (runner real de macOS).
+- **Linux AppImage (bundle oficial)**: `get_install_kind()` detecta APPIMAGE/magic ->
+  self-replace del .AppImage. NOTA: el webkit embebido del bundle es viejo y puede
+  fallar bajo Wayland; en esas maquinas usar AppDir (siguiente punto).
+- **Linux AppDir (instalacion recomendada, cajon)**: `installBinaryUpdate()`:
+  descarga el AppImage firmado via `download_update` (reqwest EN RUST - los 82MB
+  JAMAS cruzan el IPC; esa fue la causa del "te manda a GitHub"),
+  `apply_appimage_update` extrae con el runtime (`--appimage-extract`), copia SU
+  binario sobre el exe del cajon (usa libs del SISTEMA = render nitido), `pkill -x
+  mambo-pedidos`, renombra y relanza solo. Probado end-to-end en hw real (md5
+  identico al extraido + relanzado).
+- **Render Linux**: AppDir en sesion Wayland fuerza `GDK_BACKEND=wayland` +
+  `GDK_SCALE=2` (buffer 2x downsampeado por Hyprland = nitido). El bundle AppImage
+  conserva x11 (su webkit embebido muere bajo wayland).
+
+Gate: `autoupdate-live.yml` se dispara con CADA release publicado; si falla, el
+release no esta listo.
