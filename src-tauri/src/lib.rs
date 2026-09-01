@@ -68,6 +68,12 @@ fn get_install_kind() -> String {
             }
         }
     }
+    // Plataformas con instalador nativo: el auto-install es seguro
+    // (el plugin ejecuta el setup NSIS / reemplaza el .app firmado).
+    #[cfg(target_os = "windows")]
+    return "nsis".to_string();
+    #[cfg(target_os = "macos")]
+    return "app".to_string();
     "binary".to_string()
 }
 
