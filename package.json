@@ -22,6 +22,7 @@
     "visual-smoke": "python3 scripts/visual-smoke.py",
     "audit": "node scripts/quality-pipeline.js --verbose",
     "audit:quick": "node scripts/quality-pipeline.js",
+    "audit:import": "node scripts/import-audit.mjs",
     "audit:full": "node scripts/audit-app.js --json audit-app-report.json",
     "photo:baseline": "node scripts/photo-baseline.js catalog-export.json --json ground-truth/photo-baseline.json",
     "audit:assignment": "node scripts/assignment-audit.js catalog-export.json --json assignment-audit-report.json",

@@ -2057,22 +2057,30 @@ if (typeof window !== "undefined") window.PdfParser = PdfParser;
 if (typeof PdfParserClassifier !== "undefined") {
 	Object.assign(PdfParser, PdfParserClassifier);
 } else if (typeof module !== "undefined" && typeof require === "function") {
-	// PIL6 (repo-improvement-sprint): helpers puros extraídos a cellUtils.js
-	try {
-		Object.assign(PdfParser, require("./parser/cellUtils.js"));
-	try {
-		Object.assign(PdfParser, require("./parser/rowMatch.js"));
-	} catch (e) {}
-	if (typeof window !== "undefined" && typeof window.RowMatch === "object") {
-		Object.assign(PdfParser, window.RowMatch);
-	}
-	} catch (e) {}
-	if (typeof window !== "undefined" && typeof window.CellUtils === "object") {
-		Object.assign(PdfParser, window.CellUtils);
-	}
-
 	try {
 		Object.assign(PdfParser, require("./pdfParserClassifier.js"));
+	} catch (e) {}
+}
+
+// PIL6 (repo-improvement-sprint): helpers puros extraídos a cellUtils.js y
+// rowMatch.js. Browser: scripts clásicos cargados ANTES que pdfParser.js en
+// index.html exponen window.CellUtils/window.RowMatch; Node: require. El bug
+// d3e17d2 asignaba SOLO en la ruta Node — la app real (ruta browser) rompía
+// con "this.extractPageProductsByTableRows is not a function" y el import
+// daba 0 productos mientras los tests en Node pasaban verde. Ambas rutas
+// deben exponer la MISMA superficie de métodos.
+if (typeof window !== "undefined" && typeof window.CellUtils === "object") {
+	Object.assign(PdfParser, window.CellUtils);
+} else if (typeof module !== "undefined" && typeof require === "function") {
+	try {
+		Object.assign(PdfParser, require("./parser/cellUtils.js"));
+	} catch (e) {}
+}
+if (typeof window !== "undefined" && typeof window.RowMatch === "object") {
+	Object.assign(PdfParser, window.RowMatch);
+} else if (typeof module !== "undefined" && typeof require === "function") {
+	try {
+		Object.assign(PdfParser, require("./parser/rowMatch.js"));
 	} catch (e) {}
 }
 

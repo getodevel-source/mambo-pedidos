@@ -62,6 +62,7 @@ const Tests = {
 		this.testHeaderPriorityRowContext();
 		this.testTableHeaderNoiseFilter();
 		this.testSpatialCellGridExtraction();
+		this.testBrowserParserWiring();
 		this.testDoorToDoorCustomsLiquidation();
 		this.testCorporateNoiseSanitizer();
 		this.testMinFobKpiPositiveFilter();
@@ -1896,6 +1897,75 @@ const Tests = {
 				pWhite.img === "data:image/png;base64,BBBB",
 			"Producto 2 (White) extrajo modelo limpio (sin keyword de categoría) y su foto de celda aislada",
 		);
+	},
+
+	/*
+	 * IT-browser-parser: la app real corre la RUTA BROWSER de pdfParser.js (scripts
+	 * clásicos, globales en window), no la ruta Node (require). El split PIL6
+	 * (cellUtils.js/rowMatch.js) asignaba los helpers SOLO en la ruta Node
+	 * (d3e17d2): los tests en Node pasaban verde y el import real daba 0 productos
+	 * ("this.extractPageProductsByTableRows is not a function"). Este test ejecuta
+	 * el archivo en un sandbox vm SIN `module`/`require` (browser de verdad) con
+	 * los globales de script clásico ya definidos, y exige que la superficie de
+	 * métodos coincida con la ruta Node.
+	 */
+	testBrowserParserWiring() {
+		const vm = require("vm");
+		const fs = require("fs");
+		const path = require("path");
+		const nodeSurface = Object.keys(PdfParser)
+			.filter((k) => typeof PdfParser[k] === "function")
+			.sort();
+		const src = fs.readFileSync(
+			path.join(__dirname, "pdfParser.js"),
+			"utf8",
+		);
+		// Sandbox browser: NO module/require (clave del bug), globales cargados como
+		// scripts clásicos previos. window === global (como en un browser).
+		const window = {
+			CellUtils: require("./parser/cellUtils.js"),
+			RowMatch: require("./parser/rowMatch.js"),
+		};
+		const sandbox = {
+			window,
+			// En un browser los scripts clásicos exponen el clasificador como global
+			// (y también en window); pdfParser.js lo lee por nombre de scope.
+			PdfParserClassifier: require("./pdfParserClassifier.js"),
+			pdfjsLib: { OPS: {} },
+		};
+		vm.createContext(sandbox);
+		vm.runInContext(src, sandbox);
+		const browserParser = window.PdfParser;
+
+		this.assert(
+			typeof browserParser === "object" && browserParser !== null,
+			"ruta browser expone window.PdfParser (vm, sin module/require)",
+		);
+		const browserSurface = Object.keys(browserParser)
+			.filter((k) => typeof browserParser[k] === "function")
+			.sort();
+		this.assert(
+			browserSurface.length >= nodeSurface.length,
+			"ruta browser (vm) expone la misma superficie que la ruta Node (" +
+				browserSurface.length +
+				" vs " +
+				nodeSurface.length +
+				")",
+		);
+		for (const key of [
+			"extractPageProductsByTableRows",
+			"finalizeCatalogProducts",
+			"extractPageProductsByCellGrid",
+			"detectBrandFromFilename",
+			"matchImagesToProductsGlobal",
+			"sanitizeProductNames",
+			"extractInteriorColor",
+		]) {
+			this.assert(
+				typeof browserParser[key] === "function",
+				"ruta browser expone " + key + " (helpers del split PIL6)",
+			);
+		}
 	},
 
 	testDoorToDoorCustomsLiquidation() {
