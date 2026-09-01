@@ -40,15 +40,22 @@ fn get_app_version() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // WebKitGTK (motor Linux de Tauri) solo soporta escalas ENTERAS: con un
-    // monitor a escala fraccionaria (p.ej. 1.4 en una laptop 14"), Hyprland
-    // anuncia round-up -> escala 2 y la app renderiza a la mitad del ancho
-    // logico y se ve desproporcionada ("todo gigante"). Forzar 1 deja que el
-    // compositor haga el escalado fraccionario (que si soporta). Se puede
-    // pisar con GDK_SCALE en el entorno.
+    // Wayland nativo: GTK4 + WebKitGTK >= 2.42 manejan escalas fraccionarias,
+    // el webview rinde al DPR real del monitor (texto nitido, tamano correcto).
+    // El hook linuxdeploy-plugin-gtk del AppImage fuerza GDK_BACKEND=x11 para
+    // esquivar un crash de WebKitGTK 2.36 (tauri#8541, obsoleto) -> bajo
+    // XWayland con monitor fraccionario el DPR queda en 1 y el compositor
+    // estira el buffer: TODO se ve pixelado. En sesion Wayland lo corregimos
+    // aca; en X11 no tocamos nada (GDK_SCALE quedo obsoleto: X11-only y en
+    // el peor caso fuerza DPR 1).
     #[cfg(target_os = "linux")]
-    if std::env::var("GDK_SCALE").is_err() {
-        std::env::set_var("GDK_SCALE", "1");
+    {
+        let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+        let is_wayland = session_type == "wayland"
+            || (session_type.is_empty() && std::env::var("WAYLAND_DISPLAY").is_ok());
+        if is_wayland {
+            std::env::set_var("GDK_BACKEND", "wayland");
+        }
     }
 
     tauri::Builder::default()
