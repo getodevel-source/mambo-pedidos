@@ -19,6 +19,7 @@
     "lint": "eslint src/js/ scripts/ --max-warnings 200",
     "layout-audit": "node scripts/layout-audit.mjs",
     "verify-latest": "node scripts/verify-latest.js",
+    "latest:gen": "node scripts/gen-latest.mjs",
     "visual-smoke": "python3 scripts/visual-smoke.py",
     "audit": "node scripts/quality-pipeline.js --verbose",
     "audit:quick": "node scripts/quality-pipeline.js",
