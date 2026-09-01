@@ -2365,8 +2365,21 @@ const Tests = {
 		this.assert(
 			AppUpdater.isValidVersion("1.7.2") &&
 				!AppUpdater.isValidVersion("1.7.2%22"),
-			"La versión remota se valida antes de construir enlaces",
-		);
+			"La versión remota se valida antes de construir enlaces") &&
+			(() => {
+				// Guard de instalación: el auto-update nunca debe intentar
+				// reemplazar un binario suelto (AppDir) con el AppImage
+				// descargado (rompería el lanzador — bug real v2.2.14→2.2.15).
+				const ok =
+					AppUpdater.isAutoInstallable('appimage') &&
+					AppUpdater.isAutoInstallable('nsis') &&
+					AppUpdater.isAutoInstallable('app') &&
+					!AppUpdater.isAutoInstallable('binary') &&
+					!AppUpdater.isAutoInstallable('unknown') &&
+					!AppUpdater.isAutoInstallable(undefined);
+				this.assert(ok, "Updater: isAutoInstallable rechaza binary/unknown");
+				return ok;
+			})();
 	},
 
 	testPreserveModelNamesWithoutGenericOverwrite() {
@@ -2640,7 +2653,7 @@ const Tests = {
 		}
 
 		this.assert(
-			AppUpdater.CURRENT_VERSION === '2.2.15',
+			AppUpdater.CURRENT_VERSION === '2.2.16',
 			"AppUpdater CURRENT_VERSION configurado en 2.1.0",
 		);
 		this.assert(

@@ -38,6 +38,39 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Cómo está instalada la app, para decidir si el auto-update puede
+/// reemplazar la instalación en sitio o debe pedir instalación manual.
+///
+/// - "appimage": variable de entorno APPIMAGE presente, o el binario actual
+///   es un AppImage type-2 (magic 0x41 0x49 0x02 en bytes 8..11) — el
+///   auto-reemplazo es seguro (el updater escribe sobre el .AppImage).
+/// - "binary": otros casos (AppDir, binario suelto). El updater de Tauri, sin
+///   APPIMAGE env, sobrescribiría el binario en ejecución con el AppImage
+///   descargado y rompería el lanzador: el frontend NO debe auto-instalar.
+#[tauri::command]
+fn get_install_kind() -> String {
+    if std::env::var("APPIMAGE").is_ok() {
+        return "appimage".to_string();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Ok(mut f) = std::fs::File::open(&exe) {
+                use std::io::Read;
+                let mut buf = [0u8; 12];
+                if f.read_exact(&mut buf).is_ok()
+                    && buf[8] == 0x41
+                    && buf[9] == 0x49
+                    && buf[10] == 0x02
+                {
+                    return "appimage".to_string();
+                }
+            }
+        }
+    }
+    "binary".to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Wayland nativo: GTK4 + WebKitGTK >= 2.42 manejan escalas fraccionarias,
@@ -77,7 +110,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
-            get_app_version
+            get_app_version,
+            get_install_kind
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

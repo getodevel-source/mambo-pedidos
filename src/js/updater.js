@@ -12,11 +12,28 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.2.15',
+  CURRENT_VERSION: '2.2.16',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
   isChecking: false,
+
+  /** Pregunta al backend cómo está instalada la app: "appimage" (auto-reemplazo
+   *  seguro), "nsis"/"app" (instalador nativo, también seguro), o "binary"
+   *  (AppDir/binario suelto: el auto-install lo rompería). */
+  async getInstallKind() {
+    try {
+      if (window.__TAURI__?.core?.invoke) {
+        return await window.__TAURI__.core.invoke('get_install_kind');
+      }
+    } catch { }
+    return 'unknown';
+  },
+
+  /** Solo auto-instalar cuando el backend confirma reemplazo seguro. */
+  isAutoInstallable(kind) {
+    return kind === 'appimage' || kind === 'nsis' || kind === 'app';
+  },
   _updateHandle: null,
 
   async syncVersionFromRust() {
@@ -35,7 +52,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.2.15';
+    return this.CURRENT_VERSION || '2.2.16';
   },
 
   /**
@@ -112,11 +129,13 @@ const AppUpdater = {
           this.showModal(updateInfo.version, this.latestNotes);
           toast(`🚀 ¡Nueva versión v${updateInfo.version} disponible!`, 'success');
         } else {
-              // AUTO-UPDATE: en el arranque la app se actualiza SOLA (descarga
-              // firmada + instala + relanza via plugin). En AppImage reemplaza y
-              // relanza; si el entorno no lo permite (AppDir/binario suelto) el
-              // fallo abre el modal manual (comportamiento anterior).
-              toast(`📦 Nueva versión v${updateInfo.version} — descarga automática...`, 'info');
+                            // AUTO-UPDATE: en el arranque la app se actualiza SOLA (descarga
+              // firmada + instala + relanza via plugin), SOLO cuando el backend
+              // confirma instalación auto-reemplazable (AppImage/instalador). En
+              // un binario suelto (AppDir) el updater sobrescribiría el ejecutable
+              // con el AppImage descargado y rompería el lanzador: se avisa y no
+              // se descarga nada (instalación manual vía el modal).
+toast(`📦 Nueva versión v${updateInfo.version} — descarga automática...`, 'info');
               setTimeout(() => {
                 this.startDirectDownload().catch(() => {
                   this.showModal(updateInfo.version, this.latestNotes);
@@ -262,6 +281,14 @@ const AppUpdater = {
    * Requiere el resource `rid` devuelto por el check + un Channel de progreso.
    */
   async startDirectDownload() {
+    // Guard de instalación: si el backend dice que el binario es suelto
+    // (AppDir), el auto-reemplazo de Tauri lo rompería — descarga manual.
+    const installKind = await this.getInstallKind();
+    if (!this.isAutoInstallable(installKind)) {
+      toast('⬇️ Instalación automática no disponible en esta instalación — abriendo la descarga manual', 'warning');
+      this.openInBrowser();
+      return;
+    }
     // IT36: si la actualización vino por el fallback (sin rid verificado del
     // plugin), no hay instalación 1-Click — abrimos la release en el navegador.
     if (!this._updateHandle || typeof this._updateHandle.rid !== 'number') {
@@ -369,7 +396,13 @@ const AppUpdater = {
 
   openExternal(url) {
     if (!url || !this.isAllowedExternalUrl(url)) return;
-    this._invoke('open_external_url', { url }).catch(() => { window.open(url, '_blank'); });
+    this._invoke('open_external_url', { url }).catch(() => {
+          // Nunca reventar: en entornos sin navegador real (tests headless) no hay
+          // window.open ni location: la apertura externa simplemente no ocurre.
+          try { window.open(url, '_blank'); } catch {
+            try { window.location.href = url; } catch { }
+          }
+        });
   },
 
   isAllowedExternalUrl(url) {
