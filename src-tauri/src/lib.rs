@@ -86,8 +86,19 @@ pub fn run() {
         let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
         let is_wayland = session_type == "wayland"
             || (session_type.is_empty() && std::env::var("WAYLAND_DISPLAY").is_ok());
-        if is_wayland {
+
+        // Respetar un GDK_BACKEND ya seteado por el entorno (p.ej. el AppRun
+
+        // del AppImage que fuerza x11 por el webkit embebido: pisarlo a
+
+        // wayland crashea el WebKitWebProcess del bundle viejo). Solo
+
+        // intervenir cuando nadie decidió el backend.
+
+        if is_wayland && std::env::var("GDK_BACKEND").is_err() {
+
             std::env::set_var("GDK_BACKEND", "wayland");
+
         }
     }
 
