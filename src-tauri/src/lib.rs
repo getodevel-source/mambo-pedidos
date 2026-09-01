@@ -77,6 +77,58 @@ fn get_install_kind() -> String {
     "binary".to_string()
 }
 
+/// Guarda los bytes del AppImage descargado en el TEMP del sistema y
+/// devuelve la ruta (para apply_appimage_update). Evita el scope del FS plugin.
+#[tauri::command]
+fn save_temp_update(data: Vec<u8>) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    let path = std::env::temp_dir().join(format!("mambo-update-{}.AppImage", ts));
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+/// Auto-instalación para instalaciones AppDir/binario suelto (Linux):
+/// extrae el AppImage descargado y verificado, copia SU binario sobre el
+/// ejecutable en curso y relanza. El binario del AppImage, fuera del bundle,
+/// usa las libs del SISTEMA (que sí renderizan en esta máquina; el webkit
+/// embebido del bundle crashea).
+#[tauri::command]
+fn apply_appimage_update(appimage_path: String) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_str = exe.display().to_string();
+    let exe_new = format!("{}.new", exe_str);
+    if appimage_path.contains('"') || appimage_path.contains('$') || appimage_path.contains('`') {
+        return Err("ruta de update inválida".into());
+    }
+    // Validar que el archivo sea un AppImage type-2 (magic 0x41 0x49 0x02)
+    {
+        use std::io::Read;
+        let mut f = std::fs::File::open(&appimage_path).map_err(|e| e.to_string())?;
+        let mut buf = [0u8; 12];
+        f.read_exact(&mut buf).map_err(|e| e.to_string())?;
+        if !(buf[8] == 0x41 && buf[9] == 0x49 && buf[10] == 0x02) {
+            return Err("el archivo no es un AppImage válido".into());
+        }
+    }
+    let script = format!(
+        "set -e\ncd \"$(mktemp -d)\"\nexport APPIMAGE_EXTRACT_AND_RUN=1\n\"{appimage}\" --appimage-extract >/dev/null 2>&1\ncp squashfs-root/usr/bin/mambo-pedidos \"{exe_new}\"\nchmod +x \"{exe_new}\"\npkill -x mambo-pedido || true\nmv -f \"{exe_new}\" \"{exe_str}\"\nsetsid \"{exe_str}\" >/dev/null 2>&1 &",
+        appimage = appimage_path,
+        exe_new = exe_new,
+        exe_str = exe_str
+    );
+    std::process::Command::new("setsid")
+        .arg("sh")
+        .arg("-c")
+        .arg(&script)
+        .spawn()
+        .map_err(|e| format!("no se pudo lanzar el instalador: {}", e))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Wayland nativo: GTK4 + WebKitGTK >= 2.42 manejan escalas fraccionarias,
@@ -128,7 +180,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_external_url,
             get_app_version,
-            get_install_kind
+            get_install_kind,
+            save_temp_update,
+            apply_appimage_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -12,11 +12,43 @@
  */
 
 const AppUpdater = {
-  CURRENT_VERSION: '2.2.18',
+  CURRENT_VERSION: '2.2.19',
   REPO_URL: 'https://github.com/getodevel-source/mambo-pedidos',
   latestVersion: null,
   latestNotes: null,
   isChecking: false,
+
+  /** Auto-instalación para binarios sueltos (Linux AppDir): descarga el
+   *  AppImage firmado del release, lo guarda en TEMP vía el backend y le pide
+   *  el self-replace (extraer binario + copiar sobre el exe + relanzar). */
+  async installBinaryUpdate() {
+    const handle = this._updateHandle;
+    const raw = (handle && handle.rawJson) || {};
+    const plat =
+      (raw.platforms && (raw.platforms['linux-x86_64'] || raw.platforms['linux-x86_64-appimage'])) ||
+      null;
+    const url = plat && plat.url;
+    if (!handle || !url) {
+      toast('⬇️ Abriendo la descarga manual en el navegador...', 'info');
+      this.openInBrowser();
+      return false;
+    }
+    toast('⬇️ Descargando actualización automática...', 'info');
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('la descarga falló: HTTP ' + res.status);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const tmpPath = await window.__TAURI__.core.invoke('save_temp_update', { data: bytes });
+      toast('⚙️ Instalando actualización — la app se reinicia sola...', 'info');
+      await window.__TAURI__.core.invoke('apply_appimage_update', { appimagePath: tmpPath });
+      return true;
+    } catch (e) {
+      console.error('installBinaryUpdate failed', e);
+      toast('❌ No se pudo instalar automáticamente: ' + (e && e.message ? e.message : e), 'error');
+      this.openInBrowser();
+      return false;
+    }
+  },
 
   /** Pregunta al backend cómo está instalada la app: "appimage" (auto-reemplazo
    *  seguro), "nsis"/"app" (instalador nativo, también seguro), o "binary"
@@ -32,7 +64,9 @@ const AppUpdater = {
 
   /** Solo auto-instalar cuando el backend confirma reemplazo seguro. */
   isAutoInstallable(kind) {
-    return kind === 'appimage' || kind === 'nsis' || kind === 'app';
+    // 'binary' (Linux AppDir) se gestiona con el mecanismo propio (el guard
+    // del flujo lo enruta a installBinaryUpdate antes de llegar acá).
+    return ['appimage', 'nsis', 'app', 'binary'].includes(kind);
   },
   _updateHandle: null,
 
@@ -52,7 +86,7 @@ const AppUpdater = {
   },
 
   getCurrentVersion() {
-    return this.CURRENT_VERSION || '2.2.18';
+    return this.CURRENT_VERSION || '2.2.19';
   },
 
   /**
@@ -137,6 +171,8 @@ const AppUpdater = {
               // se descarga nada (instalación manual vía el modal).
 toast(`📦 Nueva versión v${updateInfo.version} — descarga automática...`, 'info');
               setTimeout(() => {
+                // 'binary' (AppDir suelto): el guard interno de
+                // startDirectDownload enruta a installBinaryUpdate (custom).
                 this.startDirectDownload().catch(() => {
                   this.showModal(updateInfo.version, this.latestNotes);
                   toast('⬇️ No se pudo instalar automáticamente (AppImage requerido) — usá el modal', 'warning');
@@ -281,9 +317,15 @@ toast(`📦 Nueva versión v${updateInfo.version} — descarga automática...`, 
    * Requiere el resource `rid` devuelto por el check + un Channel de progreso.
    */
   async startDirectDownload() {
-    // Guard de instalación: si el backend dice que el binario es suelto
-    // (AppDir), el auto-reemplazo de Tauri lo rompería — descarga manual.
+    // Guard de instalación: el backend dice cómo está instalada la app.
+    // "binary" (Linux AppDir/binario suelto): el auto-reemplazo de Tauri
+    // rompería el lanzador, pero podemos auto-instalar con nuestro propio
+    // mecanismo (extraer el binario del AppImage firmado + reemplazar el exe).
     const installKind = await this.getInstallKind();
+    if (installKind === 'binary') {
+      await this.installBinaryUpdate();
+      return;
+    }
     if (!this.isAutoInstallable(installKind)) {
       toast('⬇️ Instalación automática no disponible en esta instalación — abriendo la descarga manual', 'warning');
       this.openInBrowser();
