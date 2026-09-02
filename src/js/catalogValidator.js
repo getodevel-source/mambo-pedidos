@@ -1094,6 +1094,89 @@ const CatalogValidator = {
 
     return report;
   },
+
+  // ── Perf sprint (perf-engineering): export JSON determinístico ──
+  // Orden estable de campos (whitelist de extracción) + evidencia opcional;
+  // NUNCA emite artefactos runtime (_imageRef/_selected/_previewValidation).
+  // Contract en openspec/specs/perf-engineering/spec.md §2.
+  buildCatalogExportJSON(items, opts = {}) {
+    const scope = opts.scope === "preview" ? "preview" : "catalog";
+    const images = opts.images === "none" ? "none" : "thumb";
+    const pretty = opts.pretty !== false;
+    const source = Array.isArray(items) ? items : [];
+    const BASE = ["sku", "cat", "marca", "modelo", "variante", "color", "fob", "img", "status", "warnings", "confidence", "grounded", "sourceFile", "qualityReason"];
+    const EXTRA = ["rawText", "cellRawText", "imgWarnings", "sourceWarnings", "_evaluations"];
+
+    const out = [];
+    for (const it of source) {
+      if (!it || typeof it !== "object") continue;
+      const row = {};
+      for (const key of BASE) {
+        if (key === "img" && images === "none") continue;
+        if (key === "color" && it.color === undefined) continue;
+        if (it[key] !== undefined) row[key] = it[key];
+      }
+      if (scope === "preview") {
+        for (const key of EXTRA) {
+          if (it[key] !== undefined && it[key] !== null) {
+            if (Array.isArray(it[key]) && it[key].length === 0) continue;
+            if (typeof it[key] === "string" && it[key].length === 0) continue;
+            row[key] = it[key];
+          }
+        }
+      }
+      out.push(row);
+    }
+    return pretty ? JSON.stringify(out, null, 2) : JSON.stringify(out);
+  },
+
+  // Export catalog as downloadable JSON file (perf-engineering): con opciones
+  // si el modal existe (app real); default directo sin UI en harness/tests.
+  exportCatalogJSON(opts) {
+    if (!opts || typeof opts !== "object") {
+      const modal = document && document.getElementById ? document.getElementById("exportJsonModal") : null;
+      if (modal) { modal.style.display = "flex"; return; }
+      opts = {};
+    }
+    const items = opts.scope === "preview" && typeof ImportFlow !== "undefined" && ImportFlow.pendingPreviewItems && ImportFlow.pendingPreviewItems.length
+      ? ImportFlow.pendingPreviewItems
+      : (typeof catalog !== "undefined" ? catalog : null);
+    if (!items || !items.length) {
+      if (typeof toast === "function") toast("No hay catálogo para exportar", "warning");
+      return;
+    }
+    const data = CatalogValidator.buildCatalogExportJSON(items, opts);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const scopeName = opts.scope === "preview" ? "preview" : "productos";
+    a.download = `mambo-${scopeName}-${items.length}items-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (typeof toast === "function") {
+      const withImgs = opts.images !== "none" ? " con imágenes" : "";
+      toast(`📥 Catálogo exportado (${items.length}${withImgs}) → carpeta Descargas`, "success");
+    }
+  },
+
+  // Lee el modal de opciones (exportJsonModal) y exporta.
+  doExportCatalogJSON() {
+    const g = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+    const opts = {
+      scope: g("exportJsonScope") || "catalog",
+      images: g("exportJsonImages") || "thumb",
+      pretty: (g("exportJsonFormat") || "pretty") !== "compact",
+    };
+    const modal = document.getElementById("exportJsonModal");
+    if (modal) modal.style.display = "none";
+    CatalogValidator.exportCatalogJSON(opts);
+  },
+
+
+
 };
 
 const CATALOG_VALIDATOR_CALIBRATION = { outlierLiteralCalibration: true };
@@ -1103,6 +1186,9 @@ if (typeof module !== "undefined" && module.exports) {
 }
 if (typeof window !== "undefined") {
   window.CatalogValidator = CatalogValidator;
+  // Perf sprint: export JSON con opciones (el botón llama exportCatalogJSON()).
+  window.exportCatalogJSON = (opts) => CatalogValidator.exportCatalogJSON(opts);
+  window.doExportCatalogJSON = () => CatalogValidator.doExportCatalogJSON();
 
   // Global console shortcut: auditCatalog() or auditCatalog(catalog)
   window.auditCatalog = function (products) {
@@ -1182,31 +1268,6 @@ if (typeof window !== "undefined") {
 
     window.auditReport = after;
     return { before, after, fixed };
-  };
-
-  // Export catalog as downloadable JSON file
-  window.exportCatalogJSON = function () {
-    const items = typeof catalog !== "undefined" ? catalog : null;
-    if (!items || !items.length) {
-      if (typeof toast === "function")
-        toast("No hay catálogo para exportar", "warning");
-      return;
-    }
-    const data = JSON.stringify(items, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mambo-catalogo-${items.length}productos-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    if (typeof toast === "function")
-      toast(
-        `📥 Catálogo exportado (${items.length} productos) → carpeta Descargas`,
-        "success",
-      );
   };
 
   // Run fixCatalog with UI feedback

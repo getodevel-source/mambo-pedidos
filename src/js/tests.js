@@ -71,6 +71,7 @@ const Tests = {
 		this.testCategoryChipsIconSupport();
 		this.testRepairCatalogItem();
 		this.testCatalogValidatorRules();
+		this.testBuildCatalogExportJSON();
 		this.testMissingImageIsNotGreen();
 		this.testUpstreamQualityCannotBePromoted();
 		this.testGroundingBarrier();
@@ -2216,6 +2217,62 @@ const Tests = {
 			audit.stats.green === 2,
 			"CatalogValidator otorgó semáforo verde con evidencia completa",
 		);
+	},
+
+	testBuildCatalogExportJSON() {
+		const base = () => ({
+			sku: "MOU-001",
+			cat: "MOUSE",
+			marca: "ATK",
+			modelo: "Blazing Sky F1",
+			variante: "Black",
+			color: "Black",
+			fob: 12.5,
+			img: "data:image/png;base64,AAAA",
+			_imageRef: { relativePath: "images/x.png", mime: "png" },
+			_selected: true,
+			status: "GREEN",
+			warnings: [],
+			confidence: 95,
+			grounded: true,
+			sourceFile: "ATK.pdf",
+			qualityReason: "Sin observaciones",
+			rawText: "Blazing Sky F1 Black 12.5",
+			cellRawText: { modelo: "Blazing Sky F1", fob: "12.5" },
+			imgWarnings: ["borde"],
+			sourceWarnings: [],
+			_evaluations: [{ rule: "R1", pass: true }],
+		});
+		const raw = CatalogValidator.buildCatalogExportJSON([base()], {});
+		const parsed = JSON.parse(raw);
+		this.assert(parsed.length === 1, "export: un item serializa");
+		const row = parsed[0];
+		this.assert(row._imageRef === undefined && row._selected === undefined,
+			"export: nunca emite artefactos runtime (_imageRef/_selected)");
+		this.assert(row.img === "data:image/png;base64,AAAA", "export: thumb incluido por default");
+		this.assert(row.rawText === undefined, "export catalog: sin evidencia extra (scope catalog)");
+		const keys = Object.keys(row);
+		const EXPECT = ["sku","cat","marca","modelo","variante","color","fob","img","status","warnings","confidence","grounded","sourceFile","qualityReason"];
+		this.assert(JSON.stringify(keys) === JSON.stringify(EXPECT),
+			"export: orden de campos estable (whitelist) — got " + keys.join(","));
+		this.assert(row.variante === "Black" && row.color === "Black", "export: variante y color presentes");
+
+		const noImg = JSON.parse(CatalogValidator.buildCatalogExportJSON([base()], { images: "none" }));
+		this.assert(noImg[0].img === undefined, "export: images:none omite img");
+
+		const prev = JSON.parse(CatalogValidator.buildCatalogExportJSON([base()], { scope: "preview" }));
+		this.assert(prev[0].rawText === "Blazing Sky F1 Black 12.5", "export preview: conserva rawText");
+		this.assert(prev[0]._evaluations && prev[0]._evaluations.length === 1, "export preview: conserva _evaluations");
+		this.assert(prev[0].imgWarnings && prev[0].imgWarnings.length === 1, "export preview: conserva imgWarnings");
+		this.assert(prev[0].sourceWarnings === undefined, "export preview: arrays vacíos se omiten (determinismo)");
+
+		const compact = CatalogValidator.buildCatalogExportJSON([base()], { pretty: false });
+		const pretty = CatalogValidator.buildCatalogExportJSON([base()], {});
+		this.assert(JSON.parse(compact).length === 1 && JSON.parse(pretty).length === 1, "export: pretty y compact parsean igual");
+		this.assert(compact.length < pretty.length, "export: compact es más chico que pretty");
+
+		const empty = CatalogValidator.buildCatalogExportJSON([], {});
+		this.assert(empty === "[]", "export: array vacío → []");
 	},
 
 	testMissingImageIsNotGreen() {

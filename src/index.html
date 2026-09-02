@@ -2706,6 +2706,51 @@
       </div>
     </div>
 
+    <!-- Modal Exportar JSON (perf-engineering: diagnóstico del parser) -->
+    <div
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      id="exportJsonModal"
+      style="display: none; z-index: 9995"
+      onclick="if (event.target === this) this.style.display='none'"
+    >
+      <div class="modal-box" style="max-width: 480px; width: 90%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="margin: 0;">Exportar JSON</h3>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('exportJsonModal').style.display='none'">✕</button>
+        </div>
+        <p style="color: var(--text-2); margin-bottom: 16px; font-size: 13px;">
+          Resultados del parser en JSON para auditoría: catálogo actual (final) o
+          preview con evidencia de extracción (rawText, evaluaciones).
+        </p>
+        <label style="display: block; margin-bottom: 12px;">
+          <span style="display: block; margin-bottom: 4px; font-size: 13px;">Alcance</span>
+          <select id="exportJsonScope" class="form-select" style="width: 100%;">
+            <option value="catalog">Catálogo actual (productos importados)</option>
+            <option value="preview">Preview de import (con evidencia del parser)</option>
+          </select>
+        </label>
+        <label style="display: block; margin-bottom: 12px;">
+          <span style="display: block; margin-bottom: 4px; font-size: 13px;">Imágenes</span>
+          <select id="exportJsonImages" class="form-select" style="width: 100%;">
+            <option value="thumb">Incluir thumbnails (tamaño normal)</option>
+            <option value="none">Sin imágenes (archivo mínimo)</option>
+          </select>
+        </label>
+        <label style="display: block; margin-bottom: 20px;">
+          <span style="display: block; margin-bottom: 4px; font-size: 13px;">Formato</span>
+          <select id="exportJsonFormat" class="form-select" style="width: 100%;">
+            <option value="pretty">Legible (indentado)</option>
+            <option value="compact">Compacto (más chico y rápido)</option>
+          </select>
+        </label>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn btn-primary" onclick="doExportCatalogJSON()">Exportar JSON</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Vista Previa de Importación (Semáforo de Diagnóstico) -->
     <div
       class="modal-backdrop"

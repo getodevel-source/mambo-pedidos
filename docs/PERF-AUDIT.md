@@ -143,5 +143,12 @@ lecturas batched: 20-50s). Heap post-restore 105-178MB.
 ```bash
 MAMBO_CATALOG_DIR="/home/geto/Mambo-app/Catalogos" npm run perf:audit   # todo el app
 MAMBO_CATALOG_DIR=... npm run perf:import                               # solo importación
+MAMBO_CATALOG_DIR=... npm run perf:export                               # solo export JSON (perf-engineering)
 MAMBO_CATALOG_DIR=... npm run audit:import                              # correctitud E2E
 ```
+
+## Changelog de performance
+
+| Fecha | Camino | Cambio | Antes → Después |
+|---|---|---|---|
+| 2026-09-02 | Export JSON (Slice A, perf-sprint) | `buildCatalogExportJSON` con opciones (scope/images/pretty), sin artefactos runtime, evidencia del parser en scope preview | 41ms/13.8MB sin opciones → preview-full 100ms/26MB · catalog sans-imgs 3ms/0.4MB · `_imageRef` fuera del archivo |
