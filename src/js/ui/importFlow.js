@@ -464,6 +464,10 @@ const ImportFlow = {
           variante: item.variante || '',
           fob: item.fob,
           img: hasCatalogImage(item.img) ? item.img : '-',
+          // Mem/import-2026: sin esta copia, el próximo save re-escribiría el
+          // THUMB como archivo (content-addressed por el hash del thumb) y el
+          // GC huérfanaría las fotos full-res del batch de import.
+          _imageRef: item._imageRef,
           status: item.status,
           warnings: item.warnings || [],
           confidence: item.confidence,

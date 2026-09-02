@@ -177,8 +177,9 @@ async function validarYOarmarPedido() {
     toast('Seleccioná al menos un producto', 'error');
     return;
   }
+  const bySku = new Map(catalog.map(c => [c.sku, c]));
   const items = Object.entries(selection).map(([sku, qty]) => {
-    const r = catalog.find(c => c.sku === sku);
+    const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
     return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
   });
   if (items.some(item => item.status === 'RED')) {
@@ -203,8 +204,10 @@ async function validarYOarmarPedido() {
 function armarPedido() {
   const sel = Object.entries(selection);
   if (!sel.length) { toast('Seleccioná al menos un producto', 'error'); return; }
+  // Perf (import-2026): el find por ítem era O(n²) con 2000+ items; índice por sku.
+  const bySku = new Map(catalog.map(c => [c.sku, c]));
   const items = sel.map(([sku, qty]) => {
-    const r = catalog.find(c => c.sku === sku);
+    const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
     return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
   });
   currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
