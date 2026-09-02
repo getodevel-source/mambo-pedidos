@@ -2834,7 +2834,7 @@ const Tests = {
 		}
 
 		this.assert(
-			AppUpdater.CURRENT_VERSION === '2.2.25',
+			AppUpdater.CURRENT_VERSION === '2.2.26',
 			"AppUpdater CURRENT_VERSION configurado en 2.1.0",
 		);
 		this.assert(
