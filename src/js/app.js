@@ -667,6 +667,9 @@ function updateProductImage(sku, dataUrl) {
       return;
     }
     item.img = dataUrl;
+    // El ref del archivo viejo ya no describe esta imagen: el próximo save
+    // escribe el archivo nuevo (y el GC borra el huérfano).
+    delete item._imageRef;
     if (typeof CatalogValidator !== 'undefined') CatalogValidator.runFullValidation(catalog);
     zoomImageByUrl(dataUrl, `${item.marca} ${item.modelo} (${item.sku})`);
     renderCatalog();
@@ -697,7 +700,7 @@ function renderPedidoTable() {
   if (!currentPedido) return;
   let html = '';
   currentPedido.items.forEach((r, i) => {
-    const imgHtml = hasCatalogImage(r.img) ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImageByUrl('${escJs(r.img)}', '${escJs(r.marca + ' ' + r.modelo)}')">` : `<span style="font-size: 16px; opacity: 0.3;">-</span>`;
+    const imgHtml = hasCatalogImage(r.img) ? `<img src="${esc(r.img)}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: rgba(0,0,0,0.3); border: 1px solid var(--border);" onclick="zoomImage('${escJs(r.sku)}')">` : `<span style="font-size: 16px; opacity: 0.3;">-</span>`;
     html += '<tr>';
     html += '<td style="text-align: center;">' + imgHtml + '</td>';
     html += '<td><code style="font-size: 10px; font-family: JetBrains Mono, monospace; color: var(--text-3);">' + esc(r.sku) + '</code></td>';

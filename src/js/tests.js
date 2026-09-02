@@ -7912,9 +7912,18 @@ const Tests = {
 			const back = await AppStorage.loadCatalog();
 			this.assert(
 				back.items.length === 1 && back.items[0].img === png,
-				"loadCatalog reconstruye item.img desde images/",
+				"loadCatalog reconstruye item.img desde images/ (sin canvas: conserva la dataURL completa)",
 			);
-			this.assert(back.items[0]._imageRef === undefined, "loadCatalog limpia _imageRef resuelto");
+			// import-2026: _imageRef se CONSERVA para el zoom full-res (loadFullImage);
+			// el thumb en img es solo para render. En Node no hay canvas (run-tests
+			// mock) así que img queda con la dataURL completa y loadFullImage devuelve
+			// exactamente esos bytes.
+			this.assert(
+				!!back.items[0]._imageRef && back.items[0]._imageRef.relativePath.indexOf("images/") === 0,
+				"_imageRef se conserva tras loadCatalog (zoom full-res por archivo)",
+			);
+			const full = await AppStorage.loadFullImage(back.items[0]);
+			this.assert(full === png, "loadFullImage devuelve la imagen completa del archivo");
 			this.assert(back.sel["IMG-RT-001"] === 2, "loadCatalog preserva la seleccion");
 			h.data.delete(key);
 		});
@@ -8270,8 +8279,14 @@ const Tests = {
 				// Arranque nuevo: se vacia la memoria y se recarga desde el archivo.
 				const loaded = await AppStorage.loadCatalog();
 				this.assert(loaded.items.length === 1, "disco real: loadCatalog() devuelve el item");
-				this.assert(loaded.items[0].img === PNG, "disco real: la imagen vuelve identica desde el archivo");
-				this.assert(!loaded.items[0]._imageRef, "disco real: la ref se consume al resolver");
+				this.assert(loaded.items[0].img === PNG, "disco real: la imagen vuelve identica desde el archivo (sin canvas en Node: dataURL completa)");
+				// import-2026: la ref se CONSERVA (zoom full-res por archivo); el
+				// thumb en img es solo render y loadFullImage devuelve los bytes.
+				this.assert(!!loaded.items[0]._imageRef, "disco real: la ref se conserva para loadFullImage");
+				this.assert(
+					(await AppStorage.loadFullImage(loaded.items[0])) === PNG,
+					"disco real: loadFullImage resuelve la imagen completa",
+				);
 
 				// GC: al cambiar la imagen, la anterior queda huerfana y debe irse.
 				const prevFile = nodePath.join(root, "images", onDisk[0]);

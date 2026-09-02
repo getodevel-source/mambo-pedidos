@@ -451,16 +451,17 @@ const AppStorage = {
     let imagesWritten = 0;
     if (fsApi) {
       try { await fsApi.ensureDir('images'); } catch (e) {}
-      // Perf (import-2026): los writes secuenciales por IPC eran el cuello de
-      // botella del confirm de import grande (2080 imágenes × roundtrip ≈ 20-50s
-      // en WebKitGTK/WebView2, UI congelada). Se procesan en batches paralelos
-      // de 32: ~65 roundtrips en vez de 2080. Misma semántica por ítem (fallo
-      // individual → failedRefs, sin abortar el batch).
+      // Mem (import-2026): desde el batch de import, el item en vivo lleva img=
+      // THUMBNAIL y _imageRef → el archivo full ya existe en disco. Un item con
+      // _imageRef válido NO se reescribe (el thumb es solo para render). Los que
+      // no tienen ref (imagen manual/ediciones) conservan el camino de escritura.
       const BATCH = 32;
       for (let i = 0; i < clone.length; i += BATCH) {
         const chunk = clone.slice(i, i + BATCH);
         await Promise.all(chunk.map(async (item) => {
-          if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
+          if (item && item._imageRef && item._imageRef.relativePath) {
+            refs.push(item._imageRef.relativePath);
+          } else if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
             const rel = this._fileNameFromDataUrl(item.img);
             if (rel) {
               try {
@@ -475,8 +476,6 @@ const AppStorage = {
                 console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message);
               }
             }
-          } else if (item && item._imageRef && item._imageRef.relativePath) {
-            refs.push(item._imageRef.relativePath);
           }
         }));
       }
@@ -486,13 +485,91 @@ const AppStorage = {
     return { items: clone, sel: selection || {} };
   },
 
-  // Resuelve _imageRef → item.img (dataURL) leyendo el archivo.
+  // Genera un thumbnail PNG (maxSide corto) de una dataURL. ASINCRÓNICO: el
+  // decode sincrónico (img.width justo después de src) devuelve 0 en Chromium/
+  // WebKit, así que se espera onload. Sin canvas (tests/Node) devuelve null y
+  // el caller conserva la imagen original.
+  async _makeThumb(dataUrl, maxSide = 112) {
+    try {
+      if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+      if (!img.width || !img.height) return null;
+      const short = Math.min(img.width, img.height);
+      const scale = short > maxSide ? maxSide / short : 1;
+      if (scale >= 1) return null; // ya es chica: no agrandar ni re-codificar
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext && c.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, w, h);
+      // Fotos (sin alpha) → JPEG q0.82 (3-6KB c/u); con transparencia → PNG
+      // (el canvas transparente pintaría negro sobre JPEG). El ZOOM nunca usa
+      // este thumb: resuelve el archivo completo por _imageRef.
+      try {
+        const px = ctx.getImageData(0, 0, w, h).data;
+        let opaque = true;
+        for (let i = 3; i < px.length && opaque; i += 4) if (px[i] < 250) opaque = false;
+        return opaque ? c.toDataURL('image/jpeg', 0.82) : c.toDataURL('image/png');
+      } catch {
+        return c.toDataURL('image/png');
+      }
+    } catch { return null; }
+  },
+
+  // Mem (import-2026): el import de N productos con imágenes vivía en memoria
+  // como dataURL completas (~75KB c/u → ~150MB con catálogo lleno; picos de
+  // varios GB en WebKitGTK al decodificar 300px por card). Este paso:
+  //  1) escribe el archivo COMPLETO a images/ (batches de 32 IPC — ~1.3s en
+  //     2080 imágenes) y deja _imageRef en el item (el zoom resuelve full-res);
+  //  2) reemplaza item.img por un thumbnail de ~112px (render idéntico en
+  //     cards/tabla/cotizaciones, ~10x menos memoria y decodificado).
+  // Sin fs o sin canvas degrada a imagen inline (contrato viejo); sin excepción.
+  async batchImportImages(items) {
+    if (!Array.isArray(items)) return { written: 0, thumbs: 0 };
+    const fsApi = this._fsApi();
+    const BATCH = 32;
+    let written = 0;
+    for (let i = 0; i < items.length; i += BATCH) {
+      const chunk = items.slice(i, i + BATCH);
+      await Promise.all(chunk.map(async (item) => {
+        if (!item || typeof item.img !== 'string' || !/^data:image\//i.test(item.img) || item._imageRef) return;
+        const rel = this._fileNameFromDataUrl(item.img);
+        if (!rel || !fsApi) return; // sin fs: el item queda con su dataURL inline (contrato viejo)
+        try {
+          await fsApi.writeBytes(rel, this._dataUrlToBytes(item.img));
+          const mime = (item.img.match(/^data:image\/([\w.+-]+);/i) || [])[1] || 'png';
+          item._imageRef = { relativePath: rel, mime };
+          written++;
+        } catch (e) {
+          console.warn('import: no se pudo guardar la imagen a archivo (queda inline):', e.message);
+          delete item._imageRef;
+        }
+      }));
+    }
+    let thumbs = 0;
+    // Decodificar las 2080 completas a la vez no: batches de 32 como los writes.
+    for (let i = 0; i < items.length; i += BATCH) {
+      const chunk = items.slice(i, i + BATCH);
+      await Promise.all(chunk.map(async (item) => {
+        if (item && item._imageRef && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
+          const t = await this._makeThumb(item.img);
+          if (t) { item.img = t; thumbs++; }
+        }
+      }));
+    }
+    return { written, thumbs };
+  },
+
+  // Resuelve _imageRef → item.img (dataURL) leyendo el archivo. Desde el batch
+  // de import el item lleva un THUMBNAIL en img; acá se regenera el thumb desde
+  // el archivo full y se CONSERVA _imageRef (el zoom usa loadFullImage).
   async _embedImagesFromFiles(items) {
     const fsApi = this._fsApi();
     if (!fsApi || !Array.isArray(items)) return;
-    // Perf (import-2026): igual que _serializeImagesToFiles — lecturas por IPC en
-    // batches de 32 en vez de una a una (el boot con catálogo grande re-lee todas
-    // las imágenes del catálogo).
     const BATCH = 32;
     for (let i = 0; i < items.length; i += BATCH) {
       const chunk = items.slice(i, i + BATCH);
@@ -501,12 +578,26 @@ const AppStorage = {
             !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
           try {
             const bytes = await fsApi.readBytes(item._imageRef.relativePath);
-            item.img = this._bytesToDataUrl(bytes, item._imageRef.mime);
-          } catch (e) { item.img = '-'; }
-          delete item._imageRef;
+            const dataUrl = this._bytesToDataUrl(bytes, item._imageRef.mime);
+            item.img = (await this._makeThumb(dataUrl)) || dataUrl;
+          } catch (e) { item.img = '-'; delete item._imageRef; }
         }
       }));
     }
+  },
+
+  // Imagen COMPLETA de un item para zoom/edición: archivo si hay _imageRef
+  // (async), si no el dataURL actual. null si no hay imagen.
+  async loadFullImage(item) {
+    if (!item) return null;
+    const fsApi = this._fsApi();
+    if (item._imageRef && item._imageRef.relativePath && fsApi) {
+      try {
+        const bytes = await fsApi.readBytes(item._imageRef.relativePath);
+        return this._bytesToDataUrl(bytes, item._imageRef.mime || 'png');
+      } catch (e) { /* fallback al thumb */ }
+    }
+    return (typeof item.img === 'string' && /^data:image\//i.test(item.img)) ? item.img : null;
   },
 
   // Elimina archivos de images/ no referenciados por el catálogo actual.

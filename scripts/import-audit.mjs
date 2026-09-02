@@ -107,18 +107,35 @@ try {
   );
   await page.waitForTimeout(1200);
 
+  // Stub de fs como el runtime Tauri (writeBytes/readBytes/list en memoria):
+  // sin esto el harness cae al modo localStorage y no refleja el camino real
+  // (batchImportImages escribe refs y el save no reescribe archivos).
+  await page.evaluate(() => {
+    window.__fs = { files: new Map(), dirs: new Set(['images']) };
+    window.AppStorage._fsApi = () => ({
+      ensureDir: async () => { window.__fs.dirs.add('images'); },
+      writeBytes: async (rel, bytes) => { window.__fs.files.set(rel, bytes); },
+      readBytes: async (rel) => window.__fs.files.get(rel),
+      list: async () => Array.from(window.__fs.files.keys()).map(n => ({ name: n.split('/').pop() })),
+      remove: async (rel) => { window.__fs.files.delete(rel); },
+    });
+  });
+
   // ── A) cada PDF individual → modal de preview con productos ──
   for (let i = 0; i < pdfPaths.length; i++) {
     const before = await PEND();
     await page.setInputFiles('#fileInputPdf', [pdfPaths[i]]);
     await page.waitForFunction(
-      (prev) =>
-        window.ImportFlow.pendingPreviewItems.length > prev ||
-        document.getElementById('importPreviewModal').style.display === 'flex',
+      (prev) => window.ImportFlow.pendingPreviewItems.length > prev,
       before,
       { timeout: 180000 },
     );
-    await page.waitForTimeout(200);
+    // entre el parse y el modal corre la optimización de imágenes + validación
+    await page.waitForFunction(
+      () => document.getElementById('importPreviewModal').style.display === 'flex',
+      null,
+      { timeout: 60000 },
+    );
     const pend = await PEND();
     const modal = await MODAL();
     check(`A${i + 1}) ${pdfs[i].slice(0, 22)}`, pend > before && modal === 'flex', `pend=${pend} modal=${modal}`);
@@ -185,7 +202,7 @@ try {
   await page.evaluate(() => {
     try {
       window.closeImportPreviewModal();
-    } catch (e) {}
+    } catch {}
     const m = document.getElementById('importPreviewModal');
     if (m) m.style.display = 'none';
     const o = document.getElementById('loadingOverlay');

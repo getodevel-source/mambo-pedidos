@@ -67,6 +67,16 @@ const ImportFlow = {
       }
     }
 
+    // Mem (import-2026): los items viven en memoria con su dataURL completa
+    // (~75KB c/u → ~150MB con catálogo lleno). Acá se escriben los archivos
+    // completos a images/ (batches de 32 IPC) y se reemplaza item.img por un
+    // thumbnail de 112px: la app pasa a trabajar con ~15MB y el zoom resuelve
+    // full-res desde el archivo (loadFullImage).
+    if (typeof AppStorage !== 'undefined' && typeof AppStorage.batchImportImages === 'function') {
+      showProgress(97, 'Optimizando imágenes...', `${ImportFlow.pendingPreviewItems.length} archivos a disco (thumbnails para memoria)`);
+      await AppStorage.batchImportImages(ImportFlow.pendingPreviewItems);
+    }
+
     showProgress(100, 'Validando calidad de datos...', 'Motor de validación cruzada...');
 
     if (ImportFlow.pendingPreviewItems.length > 0) {

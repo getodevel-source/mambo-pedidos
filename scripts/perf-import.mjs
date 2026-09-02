@@ -35,6 +35,19 @@ await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.waitForFunction(() => window.AppStorage && window.ImportFlow && window.PdfParser, null, { timeout: 20000 });
 await page.waitForTimeout(1000);
 
+// Stub de fs como el runtime Tauri (writeBytes/readBytes/list en memoria) —
+// sin esto el harness cae al modo localStorage y no refleja el path real.
+await page.evaluate(() => {
+  window.__fs = { files: new Map(), dirs: new Set(['images']) };
+  window.AppStorage._fsApi = () => ({
+    ensureDir: async () => { window.__fs.dirs.add('images'); },
+    writeBytes: async (rel, bytes) => { window.__fs.files.set(rel, bytes); },
+    readBytes: async (rel) => window.__fs.files.get(rel),
+    list: async () => Array.from(window.__fs.files.keys()).map(n => ({ name: n.split('/').pop() })),
+    remove: async (rel) => { window.__fs.files.delete(rel); },
+  });
+});
+
 // ── fase 1: importar TODA la carpeta, cronometrando por fuera ──
 console.log('== 1) CARGA CARPETA COMPLETA ==');
 const t0 = Date.now();
@@ -42,21 +55,22 @@ await page.setInputFiles('#folderInput', CATALOG_DIR);
 // aviso de fin: modal flex
 await page.waitForFunction(() => document.getElementById('importPreviewModal').style.display === 'flex', null, { timeout: 600000 });
 const tParse = Date.now() - t0;
-T('parse total (10 PDFs → 2080 items)', tParse);
+T('parse total + optimización de imágenes (10 PDFs → 2080 items)', tParse);
 
 // ── fase 2: métricas del estado (memoria, tamaño de imágenes) ──
 const meta = await page.evaluate(() => {
   const items = window.ImportFlow.pendingPreviewItems;
-  let imgBytes = 0, withImg = 0, maxImg = 0;
+  let imgBytes = 0, withImg = 0, maxImg = 0, refs = 0;
   for (const it of items) {
     if (typeof it.img === 'string' && it.img.startsWith('data:')) {
       imgBytes += it.img.length; withImg++;
       if (it.img.length > maxImg) maxImg = it.img.length;
     }
+    if (it._imageRef) refs++;
   }
   const m = performance.memory;
   return {
-    n: items.length, withImg, imgBytes, maxImg,
+    n: items.length, withImg, imgBytes, maxImg, refs,
     heapUsed: m ? m.usedJSHeapSize : 0, heapTotal: m ? m.totalJSHeapSize : 0,
   };
 });

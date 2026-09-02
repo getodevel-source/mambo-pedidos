@@ -9,11 +9,16 @@ const UIModals = {
 
   // --- Image Zoom ---
 
-  zoomImage(sku) {
+  async zoomImage(sku) {
     UIModals.activeZoomSku = sku;
     const item = catalog.find(r => r.sku === sku);
     if (item) {
-      UIModals.zoomImageByUrl(hasCatalogImage(item.img) ? item.img : '', `${item.marca} ${item.modelo} (${item.sku})`);
+      // Mem (import-2026): item.img es un thumbnail; el zoom muestra la imagen
+      // COMPLETA desde el archivo (loadFullImage) cuando existe.
+      const full = (typeof AppStorage !== 'undefined' && typeof AppStorage.loadFullImage === 'function')
+        ? await AppStorage.loadFullImage(item)
+        : null;
+      UIModals.zoomImageByUrl(full || (hasCatalogImage(item.img) ? item.img : ''), `${item.marca} ${item.modelo} (${item.sku})`);
     }
   },
 
@@ -407,10 +412,14 @@ const UIModals = {
     reader.readAsDataURL(file);
   },
 
-  triggerCleanBackground() {
+  async triggerCleanBackground() {
     if (!UIModals.activeZoomSku) return;
     const item = catalog.find(r => r.sku === UIModals.activeZoomSku);
-    if (!item || !hasCatalogImage(item.img)) { toast('No hay imagen válida para procesar', 'error'); return; }
+    // La limpieza de fondo trabaja sobre la imagen COMPLETA (item.img es thumb).
+    const full = (typeof AppStorage !== 'undefined' && typeof AppStorage.loadFullImage === 'function')
+      ? await AppStorage.loadFullImage(item)
+      : null;
+    if (!item || !(full || hasCatalogImage(item.img))) { toast('No hay imagen válida para procesar', 'error'); return; }
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -428,7 +437,7 @@ const UIModals = {
         toast('Fondo limpiado exitosamente', 'success');
       }
     };
-    img.src = item.img;
+    img.src = full || item.img;
   },
 
   // --- Brand Manager ---
