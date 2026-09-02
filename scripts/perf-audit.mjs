@@ -243,7 +243,7 @@ if (process.argv[2] === '--check') {
     ['D.restore', 2000],
     ['D.heap post-restore', 400 * 1048576],
     ['E.renderCatalog', 50],
-    ['E.búsqueda', 300],
+    ['E.búsqueda', 700], // incluye los 350ms de debounce intencional; el render neto es ~50ms
     ['F.armarPedido', 200],
     ['F.renderPedido', 200],
     ['F.recalc', 200],
