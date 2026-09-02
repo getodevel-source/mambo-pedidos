@@ -84,3 +84,23 @@ jobs:
         run: |
           [ -x /usr/bin/chromium ] || { echo "no /usr/bin/chromium"; exit 1; }
           npm run layout-audit
+
+  perf-gates:
+    name: Perf gates (mechanic — boot/import/confirm/restore/quote/export)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Install chromium (perf harness)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends chromium
+      - name: Build frontend
+        run: npm run build:frontend
+      - name: Run perf smoke gates
+        run: |
+          [ -x /usr/bin/chromium ] || { echo "no /usr/bin/chromium"; exit 1; }
+          PLAYWRIGHT_CHROMIUM=/usr/bin/chromium npm run perf:smoke
