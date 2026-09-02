@@ -115,3 +115,23 @@ gh release download v2.2.24 -p "*.AppImage" --dir /tmp/ref && cd /tmp/ref
 ./Mambo.Pedidos_2.2.24_amd64.AppImage --appimage-extract
 md5sum squashfs-root/usr/bin/mambo-pedidos ~/Applications/MamboPedidos/usr/bin/mambo-pedidos
 ```
+
+## 6) Baseline de performance (import de corpus completo, v2.2.25)
+
+`MAMBO_CATALOG_DIR=... npm run perf:import` — mide cada fase del flujo real con
+los 10 PDFs (2080 items) y falla si algo se desvía de este orden de magnitud.
+
+| Fase | Medido | Nota |
+|---|---|---|
+| Parse carpeta completa | ~40s | Secuencial por archivo (motor de extracción, golden-intacto) — el progreso avanza por página |
+| Validación (3 gates) | ~165ms | No es cuello de botella |
+| Render modal inicial | ~27ms | Lazy por chunks de 60 |
+| Scroll (chunk de 60 cards) | ~41ms | Decodifica las dataURLs del chunk |
+| Búsqueda con debounce | ~520ms | Incluye el debounce de 250ms |
+| Editar un ítem (re-validación) | ~230ms | |
+| **Confirm import completo** | **~1.3s** | v2.2.24: 20-50s+ (writes IPC secuenciales). Fix: batches de 32 → 1.3s |
+| Memoria imágenes en vivo | ~151MB | Cap del parser a 300px (photo-baseline), necesario para preview/tabla |
+
+Regla de oro del import performance (v2.2.25): **nunca más una operación IPC por
+imagen** — todo acceso a `images/` en batches de 32. El dedup del confirm usa
+índice `identityKey` (O(n)), no `catalog.find` (O(n²)).
