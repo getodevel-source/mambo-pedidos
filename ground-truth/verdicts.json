@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 11,
-  "MENOR": 19,
-  "CRITICO": 29,
-  "OK": 6
+  "CAMPO": 24,
+  "MENOR": 17,
+  "CRITICO": 16,
+  "OK": 8
  },
  "n": 65,
  "items": [
@@ -53,8 +53,8 @@
   },
   {
    "id": 5,
-   "veredicto": "OK",
-   "razon": "exacto",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_05_8BitDo_2026__pdf_p2.png)",
    "marca": "8bitdo",
    "modelo": "Ultimate 2C Wired Controller",
    "variante": "Green",
@@ -86,8 +86,8 @@
   },
   {
    "id": 8,
-   "veredicto": "OK",
-   "razon": "OCR p11: \"AJ139P NL V3 Ultra Black Paw3950 Star\" $40.39; etiqueta vieja mezclaba descripcion+nombre",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_08_AJAZZ_LIST_20260605__p11.png)",
    "marca": "Ajazz",
    "modelo": "AJ139P NL V3",
    "variante": "Black Paw3950 Star",
@@ -97,8 +97,8 @@
   },
   {
    "id": 9,
-   "veredicto": "OK",
-   "razon": "OCR p15: \"NACODEX NJO7 Ultra Tri-mode White PAW3950\"; NEW extrajo fila NJ08",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_09_AJAZZ_LIST_20260605__p15.png)",
    "marca": "Ajazz",
    "modelo": "NJ07 Ultra",
    "variante": "White Tri-mode PAW3950",
@@ -141,8 +141,8 @@
   },
   {
    "id": 13,
-   "veredicto": "OK",
-   "razon": "OCR p12: \"GHOST Hollow Carbon Fiber Extreme Silver\" ¥546 $82.1",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_13_ATK_Price_list_2607__p12.png)",
    "marca": "Atk",
    "modelo": "GHOST Hollow Carbon Fiber Extreme",
    "variante": "Silver",
@@ -174,8 +174,8 @@
   },
   {
    "id": 16,
-   "veredicto": "OK",
-   "razon": "OCR p15: \"Xinghe Dream green\" ¥264.50 $39.48; OLD \"contours\" era basura",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_15_AULA_Catalogue_20260_p15.png)",
    "marca": "Aula",
    "modelo": "Xinghe Dream",
    "variante": "Green",
@@ -240,8 +240,8 @@
   },
   {
    "id": 22,
-   "veredicto": "OK",
-   "razon": "OCR p1 AttackShark: \"V3 Tri Mode\" es el modelo real; variante Rose Red = color ✓",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_21_Attack_Shark_Catalog_p1.png)",
    "marca": "Attack shark",
    "modelo": "Rose",
    "variante": "Red",
@@ -262,8 +262,8 @@
   },
   {
    "id": 24,
-   "veredicto": "OK",
-   "razon": "extracción completa: V6 + variante White; cust \"Charging Dock\" era etiqueta vieja discordante",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_21_Attack_Shark_Catalog_p1.png)",
    "marca": "Attack shark",
    "modelo": "Charging Dock",
    "variante": "Magnetic White",
@@ -295,8 +295,8 @@
   },
   {
    "id": 27,
-   "veredicto": "OK",
-   "razon": "OCR p2: \"Mars68 Pro Wireless Tri-mode\" White $29.17; marca es Irok no Mars",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_25_Irok_Mars_IYX_Catalo_p2.png)",
    "marca": "Irok",
    "modelo": "Mars68 Pro",
    "variante": "White Tri-mode",
@@ -361,8 +361,8 @@
   },
   {
    "id": 33,
-   "veredicto": "OK",
-   "razon": "OCR p7 KZ: \"Libra\" es el modelo real (\"High Resolution\" es marketing de la página)",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_30_KZ_Catalog_Zhenzhou__p7.png)",
    "marca": "Kz",
    "modelo": "High Resolution",
    "variante": "",
@@ -471,8 +471,8 @@
   },
   {
    "id": 43,
-   "veredicto": "OK",
-   "razon": "OCR p38 Logitech: \"M750 M Wireless Mouse\" — el cust \"M720\" era un error del etiquetado viejo",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_38_Logitech_Catalogue_2_p3.png)",
    "marca": "Logitech",
    "modelo": "M720 Wireless Mouse",
    "variante": "Black",
@@ -614,8 +614,8 @@
   },
   {
    "id": 56,
-   "veredicto": "OK",
-   "razon": "OCR p1 RK: \"RK-598 Universe Glacier Axis\" — extracción completa (axis+color en variante)",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_47_Royal_Kludge_RK_cata_p1.png)",
    "marca": "Royal kludge",
    "modelo": "S98 Glacier Axis Universe",
    "variante": "White",
@@ -625,8 +625,8 @@
   },
   {
    "id": 57,
-   "veredicto": "OK",
-   "razon": "OCR p5 RK: R98 Green — extracción completa (V2 en modelo, Misty Axis en variante)",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_48_Royal_Kludge_RK_cata_p5.png)",
    "marca": "Royal kludge",
    "modelo": "Misty Axis R98",
    "variante": "Green V2",
@@ -647,8 +647,8 @@
   },
   {
    "id": 59,
-   "veredicto": "OK",
-   "razon": "extracción completa: R98 + Kaihua Speed Axis Cyan blue en variante",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_48_Royal_Kludge_RK_cata_p5.png)",
    "marca": "Royal kludge",
    "modelo": "R98 Kaihua Speed Axis",
    "variante": "Cyan blue",
@@ -669,8 +669,8 @@
   },
   {
    "id": 61,
-   "veredicto": "OK",
-   "razon": "OCR p2: \"MCHOSE V9 Turbo+ Magnetic Wireless Black Gold\" $60.58; el parser ahora extrae el V9 correcto",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_50___MCHOSE__2607_pdf_p2.png)",
    "marca": "Mchose",
    "modelo": "Turbo+ V9",
    "variante": "Black Gold",
@@ -680,8 +680,8 @@
   },
   {
    "id": 62,
-   "veredicto": "OK",
-   "razon": "Ace68GT + Mount Tai/GT en variante: corte según convención de la app (switch en variante)",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_51___MCHOSE__2607_pdf_p1.png)",
    "marca": "Mchose",
    "modelo": "Mount Tai GT powder",
    "variante": "Translucent Magnetic Switch Pink",
@@ -691,8 +691,8 @@
   },
   {
    "id": 63,
-   "veredicto": "OK",
-   "razon": "OCR p4 MCHOSE: \"Ace 68 Air\" + Hall Effect switch en variante ✓",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_52___MCHOSE__2607_pdf_p4.png)",
    "marca": "Mchose",
    "modelo": "Hall Effect Ace 68 Air",
    "variante": "Switch White",
@@ -702,8 +702,8 @@
   },
   {
    "id": 64,
-   "veredicto": "OK",
-   "razon": "OCR p6: \"MCHOSE K99 V3 Mountains Gradient Frost\"",
+   "veredicto": "CAMPO",
+   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_53___MCHOSE__2607_pdf_p6.png)",
    "marca": "Mchose",
    "modelo": "K99 Mountains V3",
    "variante": "Icy Creamsicle Gradient",
