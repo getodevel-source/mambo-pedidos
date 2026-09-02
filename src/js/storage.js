@@ -450,32 +450,35 @@ const AppStorage = {
     const failedRefs = [];
     let imagesWritten = 0;
     if (fsApi) {
-      let dirReady = false;
-      for (const item of clone) {
-        if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
-          const rel = this._fileNameFromDataUrl(item.img);
-          if (rel) {
-            try {
-              const mime = (item.img.match(/^data:image\/([\w.+-]+);/i) || [])[1] || 'png';
-              // v2: rutas relativas SIEMPRE con baseDir (lo fija el puente) y los
-              // nombres reales mkdir/writeBinaryFile de v1 ya no existen.
-              if (!dirReady) { await fsApi.ensureDir('images'); dirReady = true; }
-              await fsApi.writeBytes(rel, this._dataUrlToBytes(item.img));
-              item._imageRef = { relativePath: rel, mime };
-              item.img = '';
-              refs.push(rel);
-              imagesWritten++;
-            } catch (e) {
-              // B: el fallo se CUENTA, no se traga. item.img conserva la dataURL,
-              // asi que el catalogo en memoria y el payload persistido no pierden
-              // la imagen aunque el disco falle.
-              failedRefs.push(rel);
-              console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message);
+      try { await fsApi.ensureDir('images'); } catch (e) {}
+      // Perf (import-2026): los writes secuenciales por IPC eran el cuello de
+      // botella del confirm de import grande (2080 imágenes × roundtrip ≈ 20-50s
+      // en WebKitGTK/WebView2, UI congelada). Se procesan en batches paralelos
+      // de 32: ~65 roundtrips en vez de 2080. Misma semántica por ítem (fallo
+      // individual → failedRefs, sin abortar el batch).
+      const BATCH = 32;
+      for (let i = 0; i < clone.length; i += BATCH) {
+        const chunk = clone.slice(i, i + BATCH);
+        await Promise.all(chunk.map(async (item) => {
+          if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
+            const rel = this._fileNameFromDataUrl(item.img);
+            if (rel) {
+              try {
+                const mime = (item.img.match(/^data:image\/([\w.+-]+);/i) || [])[1] || 'png';
+                await fsApi.writeBytes(rel, this._dataUrlToBytes(item.img));
+                item._imageRef = { relativePath: rel, mime };
+                item.img = '';
+                refs.push(rel);
+                imagesWritten++;
+              } catch (e) {
+                failedRefs.push(rel);
+                console.warn('photo-quality: no se pudo escribir imagen a archivo:', e.message);
+              }
             }
+          } else if (item && item._imageRef && item._imageRef.relativePath) {
+            refs.push(item._imageRef.relativePath);
           }
-        } else if (item && item._imageRef && item._imageRef.relativePath) {
-          refs.push(item._imageRef.relativePath);
-        }
+        }));
       }
       await this._gcOrphanImages(refs, fsApi);
     }
@@ -487,26 +490,34 @@ const AppStorage = {
   async _embedImagesFromFiles(items) {
     const fsApi = this._fsApi();
     if (!fsApi || !Array.isArray(items)) return;
-    for (const item of items) {
-      if (item && item._imageRef && item._imageRef.relativePath &&
-          !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
-        try {
-          const bytes = await fsApi.readBytes(item._imageRef.relativePath);
-          item.img = this._bytesToDataUrl(bytes, item._imageRef.mime);
-        } catch (e) { item.img = '-'; }
-        delete item._imageRef;
-      }
+    // Perf (import-2026): igual que _serializeImagesToFiles — lecturas por IPC en
+    // batches de 32 en vez de una a una (el boot con catálogo grande re-lee todas
+    // las imágenes del catálogo).
+    const BATCH = 32;
+    for (let i = 0; i < items.length; i += BATCH) {
+      const chunk = items.slice(i, i + BATCH);
+      await Promise.all(chunk.map(async (item) => {
+        if (item && item._imageRef && item._imageRef.relativePath &&
+            !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
+          try {
+            const bytes = await fsApi.readBytes(item._imageRef.relativePath);
+            item.img = this._bytesToDataUrl(bytes, item._imageRef.mime);
+          } catch (e) { item.img = '-'; }
+          delete item._imageRef;
+        }
+      }));
     }
   },
 
   // Elimina archivos de images/ no referenciados por el catálogo actual.
   async _gcOrphanImages(refs, fsApi) {
     try {
+      const refSet = new Set(Array.isArray(refs) ? refs : []);
       const entries = await fsApi.list('images');
       for (const e of entries) {
         if (!e || !e.name) continue;
         const rel = 'images/' + e.name;
-        if (/\.(png|jpe?g|webp|gif)$/i.test(rel) && refs.indexOf(rel) === -1) {
+        if (/\.(png|jpe?g|webp|gif)$/i.test(rel) && !refSet.has(rel)) {
           try { await fsApi.remove(rel); } catch {}
         }
       }

@@ -384,6 +384,10 @@ const ImportFlow = {
     const modal = document.getElementById('importPreviewModal');
     if (modal) modal.style.display = 'none';
     ImportFlow.pendingPreviewItems = [];
+    // Mem (import-2026): _previewValidation referencia los productos con las
+    // dataURLs (~150MB con catálogo completo) — después de cerrar/confirmar
+    // nadie los necesita; soltarlos deja que el GC los reclame.
+    if (typeof window !== 'undefined') window._previewValidation = null;
   },
 
   async confirmImportPreview() {
@@ -401,15 +405,30 @@ const ImportFlow = {
     let updatedCount = 0;
     let skippedCount = 0;
 
+    // Perf (import-2026): el dedup previo hacía catalog.find por item (O(n^2) con
+    // catalogos grandes; ~1s+ al importar un segundo proveedor sobre 2000+ items).
+    // Indice por identityKey: misma semantica (primer match en orden de catalogo),
+    // O(n) total.
+    let identityIndex = null;
+    if (typeof SkuAllocator !== 'undefined') {
+      identityIndex = new Map();
+      // Primer match en orden de catalogo (igual que el find previo).
+      for (const c of catalog) {
+        const k = SkuAllocator.identityKey(c);
+        if (!identityIndex.has(k)) identityIndex.set(k, c);
+      }
+    }
+
     for (const item of selectedItems) {
       // #11: Never dedup items with empty modelo — they are not "equivalent" to each other
       const hasModelo = (item.modelo || '').trim().length > 0;
       const existing = hasModelo
-        ? catalog.find(c => typeof SkuAllocator !== 'undefined'
-          ? SkuAllocator.isEquivalent(c, item)
-          : ((c.marca || '').toLowerCase().trim() === (item.marca || '').toLowerCase().trim() &&
-             (c.modelo || '').toLowerCase().trim() === (item.modelo || '').toLowerCase().trim() &&
-             (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim()))
+        ? (identityIndex
+          ? identityIndex.get(SkuAllocator.identityKey(item))
+          : catalog.find(c =>
+              ((c.marca || '').toLowerCase().trim() === (item.marca || '').toLowerCase().trim() &&
+               (c.modelo || '').toLowerCase().trim() === (item.modelo || '').toLowerCase().trim() &&
+               (c.variante || '').toLowerCase().trim() === (item.variante || '').toLowerCase().trim())))
         : undefined;
 
       if (existing) {
