@@ -476,6 +476,10 @@ const ImportFlow = {
           // THUMB como archivo (content-addressed por el hash del thumb) y el
           // GC huérfanaría las fotos full-res del batch de import.
           _imageRef: item._imageRef,
+          // Invariante (perf-engineering): todo no-GREEN lleva su razón atómica
+          // — deriveReasonCode exige la evidencia estructurada del import.
+          _atomicReason: item._atomicReason,
+          _imgTextWarnings: item._imgTextWarnings,
           status: item.status,
           warnings: item.warnings || [],
           confidence: item.confidence,

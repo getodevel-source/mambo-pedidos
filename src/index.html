@@ -653,6 +653,14 @@
               Exportar JSON
             </button>
             <button
+              class="btn btn-sm btn-secondary"
+              onclick="showCatalogQuality()"
+              title="Reporte de calidad del catálogo por proveedor + campaña de remediación"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+              Calidad
+            </button>
+            <button
               class="btn btn-sm"
               style="
                 background: rgba(250, 204, 21, 0.15);
@@ -2702,6 +2710,58 @@
             </svg>
             Actualización Rápida 1-Click
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Calidad del Catálogo (I1: fiabilidad del catálogo cargado) -->
+    <div class="modal-backdrop" role="dialog" aria-modal="true" id="catalogQualityModal" style="display: none; z-index: 9994" onclick="if (event.target === this) this.style.display='none'">
+      <div class="modal-box" style="max-width: 860px; width: 94%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <h3 style="margin: 0;">Calidad del catálogo</h3>
+            <div id="catalogQualitySummary" style="font-size: 12px; color: var(--text-2); margin-top: 4px;"></div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="catalogQualityPct" style="font-size: 13px; font-weight: 700; color: #34d399;"></span>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('catalogQualityModal').style.display='none'">✕</button>
+          </div>
+        </div>
+        <div style="max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
+          <table class="table" style="width: 100%; font-size: 12px;">
+            <thead><tr>
+              <th>Proveedor</th><th>Total</th><th>Verdes</th><th>Revisar</th><th>Rojos</th><th>Verif.</th><th>FOB anclado</th><th>Outliers</th><th>Sin foto</th><th>Duplic.</th><th>Sin razón</th>
+            </tr></thead>
+            <tbody id="catalogQualityBody"></tbody>
+          </table>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('catalogQualityModal').style.display='none'">Cerrar</button>
+          <button class="btn btn-primary btn-sm" onclick="CatalogValidator.exportCatalogJSON({ scope: 'catalog', images: 'none', pretty: false })" title="Reporte compacto sin imágenes">Exportar reporte</button>
+          <button class="btn btn-sm" style="background: rgba(250,204,21,0.15); color:#facc15; border:1px solid rgba(250,204,21,0.3);" onclick="runCatalogRemediation()">Revisar y remediar (YELLOW/RED)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Revisión de Remediación (I1) -->
+    <div class="modal-backdrop" role="dialog" aria-modal="true" id="yellowReviewModal" style="display: none; z-index: 9996" onclick="if (event.target === this) this.style.display='none'">
+      <div class="modal-box" style="max-width: 780px; width: 94%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <h3 style="margin: 0;">Remediación con evidencia</h3>
+            <div id="yellowReviewCount" style="font-size: 12px; color: var(--text-2); margin-top: 4px;"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('yellowReviewModal').style.display='none'">✕</button>
+        </div>
+        <div style="max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
+          <table class="table" style="width: 100%; font-size: 12px;">
+            <thead><tr><th>SKU</th><th>Razón</th><th>Estrategia</th><th>Resultado</th><th>Evidencia</th></tr></thead>
+            <tbody id="yellowReviewBody"></tbody>
+          </table>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('yellowReviewModal').style.display='none'">Descartar</button>
+          <button class="btn btn-primary btn-sm" id="yellowReviewApply" style="display:none">Aplicar correcciones y guardar</button>
         </div>
       </div>
     </div>

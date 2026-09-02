@@ -1095,6 +1095,129 @@ const CatalogValidator = {
     return report;
   },
 
+
+  // ── I1 (process-improvement-program): reporte de calidad del catálogo cargado ──
+  // Agregador puro por proveedor — las mismas semánticas del semáforo de
+  // import (status/warnings/grounding). Determinístico y testeable en Node.
+  catalogQualityReport(items) {
+    const list = Array.isArray(items) ? items : [];
+    const byBrand = new Map();
+    const sum = { total: 0, green: 0, yellow: 0, red: 0, grounded: 0, outliers: 0, sinFoto: 0, duplicados: 0, unclassified: 0 };
+    const seenIdentity = new Map();
+    for (const it of list) {
+      if (!it || typeof it !== "object") continue;
+      const marca = String(it.marca || "OTRO").trim() || "OTRO";
+      if (!byBrand.has(marca)) byBrand.set(marca, { marca, total: 0, green: 0, yellow: 0, red: 0, grounded: 0, outliers: 0, sinFoto: 0 });
+      const b = byBrand.get(marca);
+      b.total++; sum.total++;
+      if (it.status === "GREEN") { b.green++; sum.green++; }
+      else if (it.status === "YELLOW") { b.yellow++; sum.yellow++; }
+      else { b.red++; sum.red++; }
+      if (it.grounded === true) { b.grounded++; sum.grounded++; }
+      const warns = Array.isArray(it.warnings) ? it.warnings : [];
+      if (warns.some(w => /outlier/i.test(String(w)))) { b.outliers++; sum.outliers++; }
+      if (typeof it.img !== "string" || !it.img.startsWith("data:image/")) { b.sinFoto++; sum.sinFoto++; }
+      // duplicados: identidad repetida (misma marca/modelo/variante/cat normalizados)
+      const ident = [String(it.marca||""), String(it.modelo||""), String(it.variante||""), String(it.cat||"")].map(v => v.trim().toLowerCase()).join("|");
+      if (ident.split("|").every(x => x)) {
+        const n = (seenIdentity.get(ident) || 0) + 1;
+        seenIdentity.set(ident, n);
+        if (n === 2) { sum.duplicados += 2; b.duplicados = (b.duplicados || 0) + 2; }
+        else if (n > 2) { sum.duplicados++; b.duplicados = (b.duplicados || 0) + 1; }
+      }
+      // no-GREEN sin razón atómica derivable (defecto de pipeline)
+      if (it.status !== "GREEN") {
+        let reason = null;
+        if (typeof ImportGates !== "undefined" && typeof ImportGates.deriveReasonCode === "function") reason = ImportGates.deriveReasonCode(it);
+        if (!reason || reason === "UNCLASSIFIED_YELLOW") { b.unclassified = (b.unclassified || 0) + 1; sum.unclassified++; }
+      }
+    }
+    const brands = Array.from(byBrand.values()).map(b => ({ ...b, groundedPct: b.total ? Math.round((b.grounded / b.total) * 100) : 0, duplicados: b.duplicados || 0, unclassified: b.unclassified || 0 })).sort((a, b2) => b2.total - a.total);
+    return { brands, summary: { ...sum, groundedPct: sum.total ? Math.round((sum.grounded / sum.total) * 100) : 0, verifiedPct: sum.total ? Math.round(((sum.green + sum.yellow) / sum.total) * 100) : 0 } };
+  },
+
+  // Abre el modal de calidad (catálogo cargado) — app real.
+  showCatalogQuality() {
+    const items = typeof catalog !== "undefined" ? catalog : [];
+    const modal = document.getElementById("catalogQualityModal");
+    if (!modal) return;
+    const report = CatalogValidator.catalogQualityReport(items);
+    const s = report.summary;
+    document.getElementById("catalogQualitySummary").textContent =
+      `${s.total} productos · ${s.green} verdes · ${s.yellow} en revisión · ${s.red} no importables · ` +
+      `${s.groundedPct}% con FOB anclado · ${s.outliers} outliers · ${s.sinFoto} sin foto · ${s.duplicados} duplicados`;
+    document.getElementById("catalogQualityPct").textContent = `${s.verifiedPct}% verificados`;
+    const body = document.getElementById("catalogQualityBody");
+    if (body) {
+      body.innerHTML = report.brands.map(b => {
+        const pct = b.total ? Math.round(((b.green + b.yellow) / b.total) * 100) : 0;
+        return `<tr>
+          <td style="font-weight:600;">${String(b.marca).replace(/</g,'&lt;')}</td>
+          <td>${b.total}</td>
+          <td style="color:#34d399;">${b.green}</td>
+          <td style="color:#facc15;">${b.yellow}</td>
+          <td style="color:#f87171;">${b.red}</td>
+          <td>${pct}%</td>
+          <td>${b.groundedPct}%</td>
+          <td>${b.outliers}</td>
+          <td>${b.sinFoto}</td>
+          <td>${b.duplicados}</td>
+          <td>${b.unclassified}</td>
+        </tr>`;
+      }).join("");
+    }
+    modal.style.display = "flex";
+  },
+
+  // Campaña de remediación guiada (I1): corre el pass con evidencia sobre el
+  // catálogo vivo y muestra el ledger para confirmación humana.
+  runCatalogRemediation() {
+    const items = typeof catalog !== "undefined" ? catalog : [];
+    if (!items.length) { if (typeof toast === "function") toast("No hay catálogo", "warning"); return; }
+    const REM = typeof Remediation !== "undefined" ? Remediation : null;
+    if (!REM || typeof REM.runRemediationPass !== "function") {
+      if (typeof toast === "function") toast("Remediación no disponible", "error");
+      return;
+    }
+    const cfg = (typeof RemediationConfig !== "undefined" && RemediationConfig.DEFAULT_REMEDIATION_CONFIG)
+      ? RemediationConfig.DEFAULT_REMEDIATION_CONFIG
+      : { enabled: true, strategies: {} };
+    const result = REM.runRemediationPass(items, {}, cfg);
+    const promoted = (result.ledger || []).filter(e => e && e.promoted).length;
+    const body = document.getElementById("yellowReviewBody");
+    if (body) {
+      body.innerHTML = (result.ledger || []).map(e => `<tr>
+        <td>${String(e.sku || '').replace(/</g,'&lt;')}</td>
+        <td>${String(e.reason || e.originalReason || '').replace(/</g,'&lt;')}</td>
+        <td>${String(e.strategy || '').replace(/</g,'&lt;')}</td>
+        <td style="color:${e.promoted ? '#34d399' : '#94a3b8'};">${e.promoted ? '✅ corregido' : 'sin evidencia'}</td>
+        <td style="font-size:11px;color:var(--text-3);max-width:220px;">${String(e.evidence || '').replace(/</g,'&lt;').slice(0,120)}</td>
+      </tr>`).join("");
+    }
+    const cnt = document.getElementById("yellowReviewCount");
+    if (cnt) cnt.textContent = `${(result.ledger || []).length} evaluados · ${promoted} corregidos con evidencia`;
+    // Aplicar: los items ya mutaron en el pass (in-place sobre catalog); persisti.
+    const applyBtn = document.getElementById("yellowReviewApply");
+    if (applyBtn) {
+      applyBtn.style.display = promoted ? "inline-flex" : "none";
+      applyBtn.onclick = () => {
+        const modal = document.getElementById("yellowReviewModal");
+        if (modal) modal.style.display = "none";
+        if (typeof AppStorage !== "undefined" && typeof AppStorage.saveCatalog === "function") {
+          AppStorage.saveCatalog(items, typeof selection !== "undefined" ? selection : {}).catch(e => {
+            if (typeof toast === "function") toast('No se pudo guardar: ' + (e && e.message), 'error');
+          });
+        }
+        if (typeof renderCatalog === "function") renderCatalog();
+        if (typeof showCatalogContent === "function") showCatalogContent();
+        if (typeof toast === "function") toast(promoted + ' productos corregidos con evidencia y guardados', 'success');
+        document.getElementById("catalogQualityModal").style.display = "none";
+      };
+    }
+    const modal = document.getElementById("yellowReviewModal");
+    if (modal) modal.style.display = "flex";
+  },
+
   // ── Perf sprint (perf-engineering): export JSON determinístico ──
   // Orden estable de campos (whitelist de extracción) + evidencia opcional;
   // NUNCA emite artefactos runtime (_imageRef/_selected/_previewValidation).
@@ -1189,6 +1312,8 @@ if (typeof window !== "undefined") {
   // Perf sprint: export JSON con opciones (el botón llama exportCatalogJSON()).
   window.exportCatalogJSON = (opts) => CatalogValidator.exportCatalogJSON(opts);
   window.doExportCatalogJSON = () => CatalogValidator.doExportCatalogJSON();
+  window.showCatalogQuality = () => CatalogValidator.showCatalogQuality();
+  window.runCatalogRemediation = () => CatalogValidator.runCatalogRemediation();
 
   // Global console shortcut: auditCatalog() or auditCatalog(catalog)
   window.auditCatalog = function (products) {

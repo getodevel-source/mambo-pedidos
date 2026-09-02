@@ -73,6 +73,7 @@ const Tests = {
 		this.testRepairCatalogItem();
 		this.testCatalogValidatorRules();
 		this.testBuildCatalogExportJSON();
+		this.testCatalogQualityReport();
 		this.testMissingImageIsNotGreen();
 		this.testUpstreamQualityCannotBePromoted();
 		this.testGroundingBarrier();
@@ -2295,6 +2296,37 @@ const Tests = {
 
 		const empty = CatalogValidator.buildCatalogExportJSON([], {});
 		this.assert(empty === "[]", "export: array vacío → []");
+	},
+
+	// I1 (process-improvement-program): agregador de calidad por proveedor —
+	// los totales deben coincidir con los status del catálogo, por marca y global.
+	testCatalogQualityReport() {
+		const items = [
+			{ sku: "A-1", marca: "ATK", modelo: "F1", variante: "Black", cat: "TECLADO", fob: 10, img: "data:image/png;base64,AA", status: "GREEN", grounded: true, warnings: [] },
+			{ sku: "A-2", marca: "ATK", modelo: "F1", variante: "Black", cat: "TECLADO", fob: 999, img: "data:image/png;base64,AA", status: "YELLOW", grounded: true, warnings: ["outlier de precio"] },
+			{ sku: "A-3", marca: "ATK", modelo: "F2", variante: "", cat: "MOUSE", fob: 5, img: "-", status: "RED", grounded: false, warnings: ["fob sin evidencia literal"] },
+			{ sku: "B-1", marca: "LOGITECH", modelo: "G502", variante: "White", cat: "MOUSE", fob: 40, img: "data:image/png;base64,BB", status: "GREEN", grounded: true, warnings: [] },
+		];
+		const rep = CatalogValidator.catalogQualityReport(items);
+		const s = rep.summary;
+		this.assert(s.total === 4 && s.green === 2 && s.yellow === 1 && s.red === 1, "reporte: totales globales 4/2/1/1 (got " + JSON.stringify(s) + ")");
+		this.assert(s.grounded === 3 && s.groundedPct === 75, "reporte: grounding 3/4 = 75%");
+		this.assert(s.outliers === 1, "reporte: 1 outlier detectado");
+		this.assert(s.sinFoto === 1, "reporte: 1 sin foto");
+		this.assert(s.duplicados === 2, "reporte: A-1/A-2 identidad duplicada = 2");
+		this.assert(s.verifiedPct === 75, "reporte: 75% verificados (no-RED)");
+		const atk = rep.brands.find(b => b.marca === "ATK");
+		this.assert(atk && atk.total === 3 && atk.green === 1 && atk.yellow === 1 && atk.red === 1, "reporte: fila ATK 3/1/1/1");
+		const lg = rep.brands.find(b => b.marca === "LOGITECH");
+		this.assert(lg && lg.green === 1 && lg.groundedPct === 100, "reporte: fila LOGITECH 100% grounded");
+		this.assert(rep.brands.length === 2, "reporte: 2 proveedores");
+		this.assert(rep.brands[0].total >= rep.brands[1].total, "reporte: ordenado por total desc");
+		// vacío
+		const empty = CatalogValidator.catalogQualityReport([]);
+		this.assert(empty.summary.total === 0 && empty.brands.length === 0, "reporte: vacío → 0");
+		// item sin marca → OTRO
+		const otro = CatalogValidator.catalogQualityReport([{ sku: "X", marca: "", modelo: "m", fob: 1, img: "-", status: "GREEN", warnings: [] }]);
+		this.assert(otro.brands[0].marca === "OTRO", "reporte: marca vacía → OTRO");
 	},
 
 	testMissingImageIsNotGreen() {
