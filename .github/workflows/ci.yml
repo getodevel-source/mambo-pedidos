@@ -53,6 +53,8 @@ jobs:
       - name: Run JavaScript tests
         run: npm test
 
+      - name: Build frontend (dist/ for generate_context!)
+        run: npm run build:frontend
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
