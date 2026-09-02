@@ -26,6 +26,7 @@
     "audit:import": "node scripts/import-audit.mjs",
     "perf:import": "node scripts/perf-import.mjs",
     "perf:audit": "node scripts/perf-audit.mjs",
+    "perf:audit:check": "node scripts/perf-audit.mjs --check",
     "perf:export": "node scripts/perf-export.mjs",
     "audit:full": "node scripts/audit-app.js --json audit-app-report.json",
     "photo:baseline": "node scripts/photo-baseline.js catalog-export.json --json ground-truth/photo-baseline.json",

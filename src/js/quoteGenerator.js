@@ -102,12 +102,26 @@ const QuoteGenerator = {
     return true;
   },
 
+  // Perf (perf-sprint Slice C): los formatters Intl por fila de cotización eran
+  // el costo dominante (0.3ms/ítem × 2 formatos). Caché por clave estable
+  // locale|currency|decimals — el mismo formatter se reusa en todas las filas.
+  _fmtCache: new Map(),
+  _getFormatter(locale, currency, decimals) {
+    const key = `${locale}|${currency}|${decimals}`;
+    let nf = QuoteGenerator._fmtCache.get(key);
+    if (!nf) {
+      nf = new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      QuoteGenerator._fmtCache.set(key, nf);
+    }
+    return nf;
+  },
+
   formatCurrency(value, opts = {}) {
     const locale = opts.locale || 'es-AR';
     const currency = opts.currency || 'USD';
     const decimals = opts.decimals !== undefined ? opts.decimals : 2;
     try {
-      const nf = new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      const nf = QuoteGenerator._getFormatter(locale, currency, decimals);
       // Node/Linux resuelve locales inválidos al default (en-US) SILENCIOSAMENTE
       // (Windows lanza RangeError). Verificamos que la BASE del idioma resuelto
       // coincida con la pedida (tolerante a 'es-AR'→'es' en ICU mínimo) para que

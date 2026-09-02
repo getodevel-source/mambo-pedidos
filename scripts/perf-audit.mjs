@@ -173,7 +173,101 @@ else {
 }
 rec('F.heap', await heap(), MB(await heap()));
 
+// ── G) PROCESOS RESTANTES (I0 del process-improvement-program) ──
+console.log('\n═══ G) CSV/XLSX · EXPORTS · WIZARD · MODALES ═══');
+const g = await evalT(`(async () => {
+  const out = {};
+  // G1/G2: CSV y XLSX sintéticos de 5000 filas
+  const rows = [];
+  for (let i = 0; i < 5000; i++) rows.push({ sku: 'T' + String(i).padStart(5,'0'), cat: 'TECLADO', marca: 'FIXTURE', modelo: 'Modelo ' + i, variante: i % 2 ? 'Black' : 'White', fob: 10 + (i % 90), img: '-' });
+  const csv = 'sku,cat,marca,modelo,variante,fob,img\\n' + rows.map(r => [r.sku,r.cat,r.marca,r.modelo,r.variante,r.fob,r.img].join(',')).join('\\n');
+  let t = performance.now();
+  const csvFile = new File([csv], 'fixture-5000.csv', { type: 'text/csv' });
+  await FileImporter.processCsvFile(csvFile, []);
+  out.csv = performance.now() - t;
+  t = performance.now();
+  await ensureXlsxLib();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'ok');
+  const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  const xFile = new File([xlsxBuf], 'fixture-5000.xlsx');
+  await FileImporter.processExcelFile(xFile, []);
+  out.xlsx = performance.now() - t;
+  // G3: exports del pedido (1200 items)
+  const items = catalog.slice(0, 1200).map(r => ({ sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r.img, status: r.status, qty: 2 }));
+  const ped = { name: 'Pedido I0', items, costs: getCostInputs(), date: new Date().toISOString() };
+  t = performance.now(); FileImporter.exportCustomsPackingList(ped); out.packingList = performance.now() - t;
+  t = performance.now(); FileImporter.exportExecutiveReport(ped); out.executive = performance.now() - t;
+  t = performance.now(); QuoteGenerator.exportCsv(ped); out.quoteCsv = performance.now() - t;
+  // G4: wizard (open + 6 pasos)
+  t = performance.now(); if (typeof ImportWizard !== 'undefined' && ImportWizard.open) ImportWizard.open(); out.wizardOpen = performance.now() - t;
+  const steps = (ImportWizard.steps || []).length;
+  t = performance.now();
+  for (let i = 0; i < Math.min(steps || 6, 6); i++) { if (ImportWizard.next) ImportWizard.next(); }
+  out.wizardSteps = performance.now() - t;
+  // G5: modales
+  const modals = ['openSupplierCompareModal', 'openSensitivitySimulatorModal', 'openBreakEvenModal', 'openDoorToDoorModal'];
+  for (const fn of modals) {
+    if (typeof UIModals !== 'undefined' && typeof UIModals[fn] === 'function') {
+      t = performance.now(); try { UIModals[fn](); } catch (e) {}
+      out[fn] = performance.now() - t;
+      // cerrar backdrops abiertos por el modal
+      document.querySelectorAll('.modal-backdrop').forEach(m => { m.style.display = 'none'; });
+    }
+  }
+  return out;
+})()`).catch(e => ({ err: String(e).slice(0, 300) }));
+if (g.err) console.log('  ⛔ phase G err:', g.err);
+else {
+  for (const [k, v] of Object.entries(g)) rec('G.' + k, v);
+}
+rec('G.heap', await heap());
+
 await browser.close();
 server.close();
 writeFileSync('/tmp/perf-audit.json', JSON.stringify(R, null, 2));
 console.log('\n📄 /tmp/perf-audit.json escrito');
+
+// ── modo --check: umbrales por fase (baselines 02/09 + tolerancia) ──
+if (process.argv[2] === '--check') {
+  // claves parciales de fase → umbral en ms (heap en MB→bytes)
+  const TH = [
+    ['A.boot-marks', 500],
+    ['B.parse+optimización', 60000],
+    ['B.longtasks', 15000],
+    ['B.gates', 500],
+    ['C.confirm', 1000],
+    ['C.saveCatalog', 500],
+    ['C.heap post-confirm', 400 * 1048576],
+    ['D.restore', 2000],
+    ['D.heap post-restore', 400 * 1048576],
+    ['E.renderCatalog', 50],
+    ['E.búsqueda', 300],
+    ['F.armarPedido', 200],
+    ['F.renderPedido', 200],
+    ['F.recalc', 200],
+    ['F.cotización', 500],
+    ['G.csv', 500],
+    ['G.xlsx', 1000],
+    ['G.packingList', 500],
+    ['G.executive', 500],
+    ['G.quoteCsv', 500],
+    ['G.wizardSteps', 1000],
+    ['G.open', 200],
+  ];
+  let fails = 0;
+  console.log('\n⛔ CHECK DE UMBRALES:');
+  const flat = {};
+  for (const [k, v] of Object.entries(R)) flat[k] = v.ms;
+  for (const [part, limit] of TH) {
+    const hit = Object.entries(flat).find(([k]) => k.includes(part));
+    if (!hit) continue;
+    const got = hit[1];
+    const status = got <= limit ? '✅' : '❌';
+    if (got > limit) fails++;
+    console.log(`  ${status} ${hit[0]}: ${Math.round(got)}ms (límite ${limit >= 1000000 ? (limit / 1048576).toFixed(0) + 'MB' : limit}ms)`);
+  }
+  console.log(fails === 0 ? '\n✅ PERF-AUDIT CHECK OK' : `\n❌ ${fails} fase(s) sobre el umbral`);
+  process.exit(fails === 0 ? 0 : 1);
+}

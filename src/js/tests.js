@@ -32,6 +32,7 @@ const Tests = {
 		this.testTextSanitizer();
 		this.testColorFieldSanitization();
 		this.testQuoteGeneratorHtml();
+		this.testQuoteI18nFormatterCache();
 		this.testImageSpatialMatching();
 		this.testImageShapeGate();
 		this.testImageShapeGateCompatible();
@@ -679,6 +680,27 @@ const Tests = {
 			opened,
 			"QuoteGenerator generó y abrió exitosamente la ventana imprimible de cotización",
 		);
+	},
+
+	// Perf sprint Slice C: los formatters Intl se cachean por locale|currency|
+	// decimals — la cotización de pedidos grandes no recrea Intl.NumberFormat
+	// por fila (365ms → <250ms/1200 items).
+	testQuoteI18nFormatterCache() {
+		QuoteGenerator._fmtCache.clear();
+		const a = QuoteGenerator._getFormatter("es-AR", "USD", 2);
+		const b = QuoteGenerator._getFormatter("es-AR", "USD", 2);
+		this.assert(a === b, "formatCurrency reusa el mismo formatter para la misma clave");
+		const c = QuoteGenerator._getFormatter("es-AR", "ARS", 0);
+		this.assert(c !== a, "clave distinta (moneda) → formatter distinto");
+		this.assert(QuoteGenerator._fmtCache.size === 2, "la caché tiene exactamente 2 entradas");
+		const f1 = QuoteGenerator.formatCurrency(1234.5, { currency: "USD" });
+		const f2 = QuoteGenerator.formatCurrency(1234.5, { currency: "USD" });
+		this.assert(f1 === f2, "formato determinístico para el mismo valor");
+		const t0 = Date.now();
+		for (let i = 0; i < 20000; i++) QuoteGenerator.formatCurrency(1234.5, { currency: "USD" });
+		const elapsed = Date.now() - t0;
+		this.assert(elapsed < 1500, "20k formatos con caché < 1.5s (got " + elapsed + "ms)");
+		QuoteGenerator._fmtCache.clear();
 	},
 
 	testImageSpatialMatching() {

@@ -287,25 +287,33 @@ const ImportFlow = {
     item[field] = field === 'fob'
       ? (parseFloat(String(value).replace(',', '.')) || 0)
       : String(value || '').trim();
-    const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
 
-    ImportFlow.pendingPreviewItems = validation.products;
-    validation.rejected.forEach(p => { p._selected = false; });
-    window._previewValidation = validation;
-
-    // Preservar scroll y foco: el re-render reconstruye el grid completo
-    const wrap = document.getElementById('pvGridWrap');
-    const prevScroll = wrap ? wrap.scrollTop : 0;
-    ImportFlow.renderImportPreviewModal(validation);
-    if (wrap) wrap.scrollTop = prevScroll;
-    const edited = wrap ? wrap.querySelector(`[data-edit-idx="${idx}"][data-edit-field="${field}"]`) : null;
-    if (edited) {
-      edited.focus();
-      if (typeof edited.setSelectionRange === 'function') {
-        const len = edited.value.length;
-        edited.setSelectionRange(len, len);
+    // Perf (perf-sprint Slice B): las ediciones rápidas (dictado) ya no corren
+    // la verificación completa + re-render por tecla: se coalescen en un
+    // trailing de 350ms. El semáforo FINAL es idéntico al de una verificación
+    // directa; el contador del botón de confirmar se refresca al instante.
+    ImportFlow.updateConfirmCount();
+    if (ImportFlow._verifyTimer) clearTimeout(ImportFlow._verifyTimer);
+    ImportFlow._verifyTimer = setTimeout(() => {
+      ImportFlow._verifyTimer = null;
+      const wrap = document.getElementById('pvGridWrap');
+      const prevScroll = wrap ? wrap.scrollTop : 0;
+      const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
+      ImportFlow.pendingPreviewItems = validation.products;
+      validation.rejected.forEach(p => { p._selected = false; });
+      window._previewValidation = validation;
+      ImportFlow.renderImportPreviewModal(validation);
+      if (wrap) wrap.scrollTop = prevScroll;
+      // Refocus del último campo editado si el usuario sigue en el mismo ítem.
+      const edited = wrap ? wrap.querySelector(`[data-edit-idx="${idx}"][data-edit-field="${field}"]`) : null;
+      if (edited) {
+        edited.focus();
+        if (typeof edited.setSelectionRange === 'function') {
+          const len = edited.value.length;
+          edited.setSelectionRange(len, len);
+        }
       }
-    }
+    }, 350);
   },
 
   toggleSelectAllPreview(checked) {
