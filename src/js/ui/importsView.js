@@ -43,6 +43,12 @@ const ImportsView = {
     const roi = profit.available ? profit.roiPct.toFixed(0) + '%' : '—';
     const courier = record.courier || '—';
     const date = this._fmtDate(this._statusDate(record));
+    // Etapa A (A4): el registro puede llevar su plan de importación adjunto.
+    let planBtn = '';
+    if (record.plan && Array.isArray(record.plan.pasos)) {
+      const pends = record.plan.pasos.filter((p) => !(record.plan.checks && record.plan.checks[p.id])).length;
+      planBtn = '<button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="ImportWizard.openPlanFromRecord(\'' + esc(record.number || '') + '\')">📋 Plan · ' + pends + ' pendientes</button>';
+    }
 
     return '<div class="card">' +
       '<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">' +
@@ -55,6 +61,7 @@ const ImportsView = {
           '<div><div class="stat-label">ROI</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--primary);">' + roi + '</div></div>' +
         '</div>' +
       '</div>' +
+      planBtn +
     '</div>';
   },
 

@@ -30,6 +30,7 @@ const Tests = {
 		this.testWeightBasedFreight();
 		this.testCourierWarnings();
 		this.testImportGuide();
+		await this.testImportGuideWizard();
 		this.testTextSanitizer();
 		this.testColorFieldSanitization();
 		this.testQuoteGeneratorHtml();
@@ -740,6 +741,136 @@ const Tests = {
 			planVacio.valido === false && planVacio.bloqueantes.some((b) => b.queFalta === "No hay pedido"),
 			"ImportGuide: sin pedido el plan es inválido y lo dice",
 		);
+	},
+
+	// ── ImportGuide + Wizard (Etapa A / A2-A4): fail-closed, editables, plan ──
+	async testImportGuideWizard() {
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		if (!IW || typeof IW.validate !== "function") {
+			this.assert(false, "RED: ImportWizard.validate no accesible");
+			return;
+		}
+		const prevPedido = global.currentPedido;
+		const prevState = IW.state;
+		const prevConfirm = global.confirm;
+		const prevPrompt = global.prompt;
+		const prevToast = global.toast;
+		const origLoad = AppStorage.loadImports;
+		const origSave = AppStorage.saveImports;
+		try {
+			IW.state = {
+				fleteModo: "peso", pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+				transporte: "maritimo", regimen: "importador", proposito: "personal",
+				enacomTitular: null, itemEdits: {}, checks: {},
+				depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
+				recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
+				ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null, origen: "China"
+			};
+			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
+
+			// 1) Peso en 0 con flete por peso → NO blocking, pero aviso de default activo.
+			let v = IW.validate();
+			this.assert(
+				v.avisos.some((a) => a.includes("Peso total en 0")),
+				"validate avisa el default de flete activo (peso 0 → % 15%)",
+			);
+			this.assert(
+				!v.faltantes.some((f) => f.blocking),
+				"sin datos críticos faltantes no hay faltantes blocking",
+			);
+
+			// 2) Flete en 0% (modo %) → blocking: el CIF deja de ser real.
+			IW.state.fleteModo = "pct"; IW.state.fletePct = 0;
+			v = IW.validate();
+			this.assert(
+				v.faltantes.some((f) => f.blocking && f.queFalta.includes("Flete en 0%")),
+				"validate bloquea flete en 0% (fail-closed)",
+			);
+
+			// 3) Courier CIF > USD 3.000 → blocking del plan (sugerencia barco).
+			IW.state.fleteModo = "peso"; IW.state.pesoKg = 10; IW.state.regimen = "courier"; IW.state.transporte = "courier";
+			global.currentPedido = { items: [{ sku: "X1", cat: "TECLADO", modelo: "K", fob: 4000, qty: 1 }] };
+			v = IW.validate();
+			this.assert(
+				v.faltantes.some((f) => f.blocking && f.queFalta.includes("supera USD 3000")),
+				"validate bloquea courier con CIF > USD 3.000",
+			);
+
+			// 4) saveAsImport con blocking → NO crea registro y avisa QUÉ falta.
+			const toasts = [];
+			let saved = null;
+			global.toast = (msg, type) => { toasts.push({ msg, type }); };
+			global.confirm = () => true;
+			global.prompt = () => "Prov";
+			AppStorage.loadImports = async () => ({ records: [], counter: 0 });
+			AppStorage.saveImports = async (p) => { saved = p; };
+			await IW.saveAsImport();
+			this.assert(
+				saved === null && toasts.some((t) => t.type === "error" && t.msg.includes("No se puede guardar")),
+				"saveAsImport NO guarda con faltantes blocking (fail-closed) y dice qué falta",
+			);
+
+			// 5) Con datos válidos → guarda y adjunta el PLAN completo al registro.
+			IW.state.regimen = "importador"; IW.state.fleteModo = "peso"; IW.state.pesoKg = 5; IW.state.seguro = 0.015;
+			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
+			toasts.length = 0;
+			await IW.saveAsImport();
+			this.assert(
+				saved && saved.records.length === 1,
+				"saveAsImport guarda el registro con datos válidos",
+			);
+			this.assert(
+				saved && saved.records[0].plan && Array.isArray(saved.records[0].plan.pasos) && saved.records[0].plan.pasos.length >= 13,
+				"el registro guardado lleva el plan completo adjunto (pasos)",
+			);
+			this.assert(
+				saved && saved.records[0].plan && saved.records[0].plan.regimen === "maritimo",
+				"el plan adjunto registra el régimen del proyecto",
+			);
+
+			// 6) Overrides editables por ítem: FOB y peso sin tocar el catálogo.
+			IW.state.itemEdits = { T1: { fob: 45, weightKg: 3 } };
+			const eff = IW._effectiveItems();
+			this.assert(
+				eff[0].fob === 45 && eff[0].weightKg === 3,
+				"_effectiveItems aplica el override editable de FOB/peso por ítem",
+			);
+			this.assert(
+				IW._currentFobTotal() === 90,
+				"el FOB total usa el override (45 × 2)",
+			);
+			IW.state.itemEdits = {};
+			this.assert(
+				IW._effectiveItems()[0].weightKg == null && ImportGuide.pesoTotalKg(IW._effectiveItems()) === 2,
+				"sin override el peso del pedido usa los defaults de categoría (2 teclados × 1kg)",
+			);
+
+			// 7) Checkpoints por paso: el faltante de flete aparece en el paso flete.
+			IW.state.fleteModo = "pct"; IW.state.fletePct = 0;
+			const htmlFlete = IW._checkpointsHtml("flete");
+			const htmlResumen = IW._checkpointsHtml("resumen");
+			this.assert(
+				htmlFlete.includes("Flete en 0%") && htmlFlete.includes("alert-banner danger"),
+				"el paso flete muestra su faltante blocking en rojo",
+			);
+			this.assert(
+				htmlResumen.includes("Flete en 0%") && htmlResumen.includes("alert-banner danger"),
+				"el resumen muestra los faltantes blocking (nunca silencioso)",
+			);
+			this.assert(
+				IW._checkpointsHtml("pedido") === "",
+				"el faltante de flete NO se muestra en el paso pedido (checkpoint por paso)",
+			);
+		} finally {
+			global.currentPedido = prevPedido;
+			IW.state = prevState;
+			global.confirm = prevConfirm;
+			global.prompt = prevPrompt;
+			global.toast = prevToast;
+			AppStorage.loadImports = origLoad;
+			AppStorage.saveImports = origSave;
+		}
 	},
 
 	testTextSanitizer() {

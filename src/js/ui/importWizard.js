@@ -18,6 +18,18 @@ const ImportWizard = {
   state: {
     fleteModo: 'peso', pesoKg: 15, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
     transporte: 'maritimo', regimen: 'importador',
+    // Etapa A (d1): propósito del envío — personal usa el simplificado courier;
+    // reventa muestra el aviso honesto de régimen fiscal (verificación d1).
+    proposito: 'personal',
+    // Etapa A (d3): origen de la mercadería (default China) — dato del checklist
+    // documental; TODO es editable y recalcula en vivo.
+    origen: 'China',
+    // Titular de la homologación ENACOM (fabricante con transferencia o trámite propio).
+    enacomTitular: null,
+    // Overrides por ítem (Etapa A, d3/d4): FOB y peso editable SIN tocar el catálogo.
+    itemEdits: {},
+    // Checklist del plan de importación (Etapa A, A4): pasos marcados completos.
+    checks: {},
     depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
     recuperaCredito: true,
     iibbJurisdiccion: 'santa_fe', iibbPctCustom: 0.03,
@@ -165,7 +177,7 @@ const ImportWizard = {
 
   // Devuelve el HTML tambien cuando no hay ventana, para poder probarlo.
   exportSummaryPdf() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const items = ImportWizard._effectiveItems();
     if (!items.length) {
       if (typeof toast === 'function') toast('No hay productos en el pedido para exportar el resumen.', 'error');
       return null;
@@ -354,6 +366,227 @@ const ImportWizard = {
 
   _esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
 
+  // ── Etapa A / A3: ítems efectivos con overrides editables (FOB, peso) ──
+  // El catálogo no se toca: el override vive en state.itemEdits y viaja a todos
+  // los cálculos (motor, resumen, export, plan). Editar en cualquier momento
+  // recalcula TODO (d3/d4).
+  _itemByIndex(i) {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    return items[Number(i)] || null;
+  },
+
+  _effectiveItems() {
+    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const edits = ImportWizard.state.itemEdits || {};
+    return items.map((it) => {
+      const o = edits[String((it && it.sku) || '').trim()];
+      if (!o) return it;
+      const out = Object.assign({}, it);
+      if (o.fob != null) out.fob = o.fob;
+      if (o.weightKg != null) out.weightKg = o.weightKg;
+      return out;
+    });
+  },
+
+  setItemEditByIndex(i, field, value) {
+    const it = ImportWizard._itemByIndex(i);
+    if (!it) return;
+    const sku = String((it.sku || '').trim());
+    if (!sku) return;
+    const s = ImportWizard.state;
+    s.itemEdits = s.itemEdits || {};
+    const cur = Object.assign({}, s.itemEdits[sku] || {});
+    const v = Number(value);
+    if (value === '' || value == null || !Number.isFinite(v) || v < 0) delete cur[field];
+    else cur[field] = v;
+    if (cur.fob == null && cur.weightKg == null) delete s.itemEdits[sku];
+    else s.itemEdits[sku] = cur;
+    ImportWizard._save();
+  },
+
+  // ── Etapa A / A2: validación fail-closed (checkpoints) ──
+  // Devuelve { faltantes: [{paso, queFalta, impacto, blocking}], avisos, plan }.
+  // Blocking: sin pedido, régimen courier fuera de límites, flete en cero.
+  // Los faltantes no-blocking se muestran en rojo igual (nunca silencioso).
+  validate() {
+    const items = ImportWizard._effectiveItems();
+    const faltantes = [];
+    const avisos = [];
+    const s = ImportWizard.state || {};
+    let plan = null;
+
+    if (!items.length) {
+      faltantes.push({ paso: 'pedido', queFalta: 'No hay pedido', impacto: 'sin pedido no hay importación que planificar ni guardar', blocking: true });
+    }
+    if (typeof ImportGuide !== 'undefined' && typeof ImportGuide.planFor === 'function') {
+      plan = ImportGuide.planFor(items, ImportWizard.state, ImportWizard._doorConfig());
+      (plan.bloqueantes || []).forEach((b) => {
+        faltantes.push({ paso: 'flete', queFalta: b.queFalta, impacto: b.impacto, blocking: true });
+      });
+      (plan.avisos || []).forEach((a) => avisos.push(a));
+      (plan.pasos || []).forEach((p) => {
+        const mapa = { 'orden-compra': 'pedido', flete: 'flete', tributos: 'flete', enacom: 'impuestos' };
+        const pasoWizard = mapa[p.id];
+        if (!pasoWizard) return;
+        (p.faltantes || []).forEach((f) => {
+          faltantes.push({ paso: pasoWizard, queFalta: f.queFalta, impacto: f.impacto, blocking: false });
+        });
+      });
+    }
+    if (s.fleteModo === 'pct' && Number(s.fletePct) <= 0) {
+      faltantes.push({ paso: 'flete', queFalta: 'Flete en 0%', impacto: 'sin flete el CIF y todos los tributos dejan de ser reales', blocking: true });
+    }
+    if (s.fleteModo === 'peso' && !(Number(s.pesoKg) > 0)) {
+      avisos.push('Peso total en 0: el motor usa el % de flete por default (15%) y el costo NO es el real. Cargá el peso total o usá el estimado de tus productos.');
+    }
+    if (Number(s.seguro) <= 0 && s.seguroUsdOverride == null) {
+      avisos.push('Seguro en 0%: el envío no está asegurado; si se pierde en tránsito no cobrás nada.');
+    }
+    if (s.iibbJurisdiccion === 'otra' && !(Number(s.iibbPctCustom) > 0)) {
+      avisos.push('Jurisdicción IIBB configurada pero sin porcentaje: los tributos usan el default.');
+    }
+    return { faltantes, avisos, plan };
+  },
+
+  // Checkpoints por paso del asistente: rojo, nunca silencioso. El resumen
+  // muestra TODO; los pasos intermedios solo lo que les toca.
+  _checkpointsHtml(stepId) {
+    const v = ImportWizard.validate();
+    const faltantes = stepId === 'resumen' ? v.faltantes : v.faltantes.filter((f) => f.paso === stepId);
+    const avisos = (stepId === 'resumen' || stepId === 'flete') ? v.avisos : [];
+    const bloq = faltantes.filter((f) => f.blocking);
+    const noBloq = faltantes.filter((f) => !f.blocking);
+    let html = '';
+    bloq.forEach((f) => {
+      html += `<div class="alert-banner danger" style="margin:0 0 8px;">⛔ <b>Falta:</b> ${ImportWizard._esc(f.queFalta)} — ${ImportWizard._esc(f.impacto)}</div>`;
+    });
+    noBloq.forEach((f) => {
+      html += `<div class="alert-banner warning" style="margin:0 0 8px;">⚠️ <b>Falta:</b> ${ImportWizard._esc(f.queFalta)} — ${ImportWizard._esc(f.impacto)}</div>`;
+    });
+    avisos.forEach((a) => {
+      const ya = html.includes(ImportWizard._esc(a.slice(0, 40)));
+      if (!ya) html += `<div class="alert-banner warning" style="margin:0 0 8px;">ℹ️ ${ImportWizard._esc(a)}</div>`;
+    });
+    return html;
+  },
+
+  // ── Etapa A / A4: vista Plan + Seguimiento (checklist) ──
+  _pendientesDe(plan, checks) {
+    return (plan && plan.pasos ? plan.pasos : []).filter((p) => !(checks && checks[p.id]));
+  },
+
+  _planHtml(plan, isRecord, checks, recordNumber) {
+    const lblReg = plan.regimen === 'courier' ? 'Courier' : 'Marítimo (despacho general)';
+    const lblProp = plan.proposito === 'reventa' ? 'Reventa' : 'Uso personal';
+    const checksSrc = checks || {};
+    const pendientes = ImportWizard._pendientesDe(plan, checksSrc);
+    let html = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div style="font-size:13px;"><b>${lblReg}</b> · ${lblProp} · ${plan.pasos.length} pasos · <span style="color:var(--text-muted);">${pendientes.length} pendientes</span></div>
+      ${recordNumber ? `<div style="font-size:12px;color:var(--text-muted);">${ImportWizard._esc(recordNumber)}</div>` : ''}
+    </div>`;
+    if (!plan.valido) {
+      html += (plan.bloqueantes || []).map((b) => `<div class="alert-banner danger" style="margin:0 0 8px;">⛔ ${ImportWizard._esc(b.queFalta)} — ${ImportWizard._esc(b.impacto)}</div>`).join('');
+    }
+    (plan.avisos || []).forEach((a) => {
+      html += `<div class="alert-banner warning" style="margin:0 0 8px;">ℹ️ ${ImportWizard._esc(a)}</div>`;
+    });
+    const primerPendiente = plan.pasos.findIndex((p) => !checksSrc[p.id]);
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    plan.pasos.forEach((p, i) => {
+      const checked = !!checksSrc[p.id];
+      const faltan = (p.faltantes && p.faltantes.length) ? p.faltantes : null;
+      const costo = Number(p.costoUsd) > 0 ? '$' + Math.round(p.costoUsd) + ' USD' : '';
+      const onclick = isRecord ? `ImportWizard.toggleRecordCheck('${p.id}')` : `ImportWizard.toggleCheck('${p.id}')`;
+      html += `<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;background:${checked ? 'rgba(34,197,94,0.06)' : 'rgba(255,255,255,0.03)'};border:1px solid ${checked ? 'rgba(34,197,94,0.25)' : 'var(--border)'};">
+        <input type="checkbox" style="margin-top:2px;" ${checked ? 'checked' : ''} onchange="${onclick}">
+        <div style="flex:1;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:13px;font-weight:${checked ? '400' : '700'};${checked ? 'color:var(--text-muted);text-decoration:line-through;' : ''}">${i + 1}. ${ImportWizard._esc(p.titulo)}</span>
+            ${i === primerPendiente ? '<span class="badge" style="background:var(--primary);color:#000;">PRÓXIMO PASO</span>' : ''}
+            ${faltan ? '<span class="badge" style="background:rgba(239,68,68,0.2);color:var(--red, #ef4444);">falta dato</span>' : ''}
+          </div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;line-height:1.45;">${ImportWizard._esc(p.descripcion)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">👤 ${ImportWizard._esc(p.responsable)}${p.fuente ? ' · ' + ImportWizard._esc(p.fuente) : ''}${p.plazo ? ' · ⏱ ' + ImportWizard._esc(p.plazo) : ''}${costo ? ' · 💰 ' + costo : ''}</div>
+          ${faltan ? `<div style="font-size:11px;color:#ef4444;margin-top:4px;">Falta: ${faltan.map((f) => ImportWizard._esc(f.queFalta)).join('; ')} — ${ImportWizard._esc(faltan[0].impacto)}</div>` : ''}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:12px;">Cada paso se guarda automáticamente. Los costos y valores marcados con ⚠️ son estimados: verificá con el despachante o el courier antes de despachar.</div>';
+    return html;
+  },
+
+  openPlan() {
+    const modal = document.getElementById('importPlanModal');
+    if (modal) modal.style.display = 'flex';
+    ImportWizard.renderPlan();
+  },
+
+  renderPlan() {
+    const body = document.getElementById('importPlanBody');
+    if (!body) return;
+    if (typeof ImportGuide === 'undefined' || !ImportGuide.planFor) {
+      body.innerHTML = '<div class="alert-banner danger">El motor de plan no está disponible.</div>';
+      return;
+    }
+    const plan = ImportGuide.planFor(ImportWizard._effectiveItems(), ImportWizard.state, ImportWizard._doorConfig());
+    body.innerHTML = ImportWizard._planHtml(plan, false, ImportWizard.state.checks || {}, null);
+  },
+
+  toggleCheck(id) {
+    const s = ImportWizard.state;
+    s.checks = s.checks || {};
+    s.checks[id] = !s.checks[id];
+    ImportWizard._save();
+    ImportWizard.renderPlan();
+  },
+
+  // Plan guardado en un registro IMP-xxxx (Tracker): se marca y persiste al
+  // registro mismo (mismo patrón AppStorage), no al state del wizard.
+  async openPlanFromRecord(number) {
+    let payload;
+    try {
+      payload = await AppStorage.loadImports();
+    } catch (e) { return; }
+    const rec = (payload.records || []).find((r) => r.number === number);
+    if (!rec || !rec.plan) {
+      if (typeof toast === 'function') toast('Este registro no tiene plan (guardalo desde el asistente de importación).', 'warning');
+      return;
+    }
+    ImportWizard._planRecordNumber = number;
+    const modal = document.getElementById('importPlanModal');
+    if (modal) modal.style.display = 'flex';
+    const body = document.getElementById('importPlanBody');
+    if (body) body.innerHTML = ImportWizard._planHtml(rec.plan, true, rec.plan.checks || {}, number);
+  },
+
+  async toggleRecordCheck(id) {
+    const number = ImportWizard._planRecordNumber;
+    if (!number) return;
+    let payload;
+    try {
+      payload = await AppStorage.loadImports();
+    } catch (e) { return; }
+    const rec = (payload.records || []).find((r) => r.number === number);
+    if (!rec || !rec.plan) return;
+    rec.plan.checks = rec.plan.checks || {};
+    rec.plan.checks[id] = !rec.plan.checks[id];
+    try {
+      await AppStorage.saveImports(payload);
+    } catch (e) {
+      if (typeof toast === 'function') toast('No se pudo guardar el avance del plan: ' + ((e && e.message) || e), 'error');
+      return;
+    }
+    const body = document.getElementById('importPlanBody');
+    if (body) body.innerHTML = ImportWizard._planHtml(rec.plan, true, rec.plan.checks, number);
+    if (typeof renderImportaciones === 'function') renderImportaciones();
+  },
+
+  closePlan() {
+    const modal = document.getElementById('importPlanModal');
+    if (modal) modal.style.display = 'none';
+  },
+
   render() {
     const stepsEl = document.getElementById('iwSteps');
     const body = document.getElementById('importWizardBody');
@@ -371,7 +604,7 @@ const ImportWizard = {
 
     // Un solo punto de inserción: la vigencia aplica a todos los pasos, y
     // duplicar el banner en cada _render_ garantiza que alguno se olvide.
-    body.innerHTML = ImportWizard._ratesBanner() + ImportWizard['_render_' + ImportWizard.steps[ImportWizard.step].id]();
+    body.innerHTML = ImportWizard._ratesBanner() + ImportWizard._checkpointsHtml(ImportWizard.steps[ImportWizard.step].id) + ImportWizard['_render_' + ImportWizard.steps[ImportWizard.step].id]();
 
     const isLast = ImportWizard.step === ImportWizard.steps.length - 1;
     prevBtn.style.visibility = ImportWizard.step === 0 ? 'hidden' : 'visible';
@@ -394,22 +627,42 @@ const ImportWizard = {
     </div>`;
   },
 
-  // ---- pedido ----
+  // ---- pedido (Etapa A/A3: FOB y peso editables por ítem, ENACOM visible) ----
   _render_pedido() {
     const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const eff = ImportWizard._effectiveItems();
     const count = items.length;
     const ok = count > 0;
-    const rows = items.map(it => `<tr>
+    const s = ImportWizard.state;
+    const hayWireless = ok && (typeof ImportGuide !== 'undefined') && ImportGuide.tieneInalambricos(eff);
+    const rows = items.map((it, i) => {
+      const e = eff[i] || it;
+      const sku = String(it.sku || '').trim();
+      const wireless = (typeof ImportGuide !== 'undefined') && ImportGuide.esInalambrico(it);
+      const peso = (typeof ImportGuide !== 'undefined') ? ImportGuide.pesoItemKg(e) : '';
+      return `<tr>
       <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.marca || '')}</td>
-      <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.modelo || it.sku)}</td>
+      <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.modelo || it.sku)}${wireless ? ' <span class="badge" style="background:rgba(234,179,8,0.15);color:#eab308;">📡 inalámbrico</span>' : ''}</td>
       <td style="padding:5px 8px;font-size:12px;">${ImportWizard._esc(it.variante || '')}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right;">${it.qty}</td>
-      <td style="padding:5px 8px;font-size:12px;text-align:right;">$${Math.round((it.fob||0)*100)/100}</td>
-    </tr>`).join('');
+      <td style="padding:5px 8px;font-size:12px;"><input type="number" step="0.01" min="0" style="width:76px;font-size:12px;" value="${e.fob == null ? '' : e.fob}" oninput="ImportWizard.setItemEditByIndex(${i},'fob',this.value);ImportWizard.render()" onchange="ImportWizard.setItemEditByIndex(${i},'fob',this.value);ImportWizard.render()" title="FOB del producto — editable sin tocar el catálogo"></td>
+      <td style="padding:5px 8px;font-size:12px;"><input type="number" step="0.01" min="0" style="width:64px;font-size:12px;" value="${peso}" oninput="ImportWizard.setItemEditByIndex(${i},'weightKg',this.value);ImportWizard.render()" onchange="ImportWizard.setItemEditByIndex(${i},'weightKg',this.value);ImportWizard.render()" title="Peso por unidad (default de categoría si no lo editás)"> kg</td>
+    </tr>`;
+    }).join('');
     return `<div class="card" style="padding:18px;">
-      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 2 — Tu pedido (${count} productos)</div>
+      <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 2 — Tu pedido (${count} productos) · TODO editable y recalculado en vivo</div>
       ${ok
-        ? `<div class="table-scroll"><table><thead><tr><th>Marca</th><th>Modelo</th><th>Variante</th><th>Qty</th><th>FOB</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+             <div><label class="wz-lbl">Origen de la mercadería</label><input type="text" class="input" value="${ImportWizard._esc(s.origen || 'China')}" onchange="ImportWizard.state.origen=this.value;ImportWizard._save()"></div>
+             ${hayWireless ? `<div><label class="wz-lbl">Homologación ENACOM — titular</label>
+               <select class="select" onchange="ImportWizard.state.enacomTitular=this.value;ImportWizard.render()">
+                 <option value="" ${!s.enacomTitular ? 'selected' : ''}>Todavía no definido</option>
+                 <option value="fabricante" ${s.enacomTitular === 'fabricante' ? 'selected' : ''}>Certificado del fabricante (transferencia)</option>
+                 <option value="propia" ${s.enacomTitular === 'propia' ? 'selected' : ''}>Trámite propio (semanas)</option>
+               </select>
+               <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Los inalámbricos necesitan ENACOM para venderse. El costo se suma automáticamente.</div></div>` : ''}
+           </div>
+           <div class="table-scroll"><table><thead><tr><th>Marca</th><th>Modelo</th><th>Variante</th><th>Qty</th><th>FOB USD${ImportWizard._tip('FOB')}</th><th>Peso/ud</th></tr></thead><tbody>${rows}</tbody></table></div>
            <div style="display:flex;gap:10px;margin-top:12px;">
              <button class="btn btn-secondary btn-sm" onclick="ImportWizard.close(); switchView('catalogo')">Ajustar pedido</button>
              <button class="btn btn-primary btn-sm" onclick="ImportWizard.next()">Siguiente →</button>
@@ -431,6 +684,12 @@ const ImportWizard = {
     return `<div class="card" style="padding:18px;">
       <div class="page-sub" style="color:var(--text-muted);margin-bottom:12px;">Paso 3 — Régimen, transporte y seguro (define tu valor CIF)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="wz-lbl">Propósito del envío (Etapa A, d1)</label>
+          <select class="select" onchange="ImportWizard.state.proposito=this.value;ImportWizard.render()">
+            <option value="personal" ${s.proposito==='personal'?'selected':''}>Uso personal / compra puntual</option>
+            <option value="reventa" ${s.proposito==='reventa'?'selected':''}>Reventa / uso comercial</option>
+          </select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.proposito==='reventa' ? '⚠️ El régimen simplificado courier es de consumidor final: si revendés, los tributos reales son los de la matriz completa ("por cuenta y orden", en verificación de fuente). La guía te avisa en cada paso.' : 'El régimen simplificado courier (USD 400 exento + 50% del excedente) aplica a consumo final.'}</div></div>
         <div><label class="wz-lbl">Régimen de importación</label>
           <select class="select" onchange="ImportWizard.state.regimen=this.value;if(this.value==='courier'){ImportWizard.state.transporte='courier';ImportWizard.state.fleteModo='peso';}ImportWizard.render()">
             <option value="importador" ${s.regimen==='importador'?'selected':''}>Importador (despacho general)</option>
@@ -654,15 +913,17 @@ const ImportWizard = {
     </div>`;
   },
 
-  // ---- resumen ----
+  // ---- resumen (Etapa A: checkpoints completos + plan) ----
   _render_resumen() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const items = ImportWizard._effectiveItems();
     const s = ImportWizard.state;
     if (!items.length) {
       return `<div class="card" style="padding:18px;"><div style="font-weight:700;">No hay pedido.</div><p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Volvé al paso 2 y armá el pedido desde el catálogo.</p></div>`;
     }
     const fobTotal = items.reduce((a, i) => a + (i.fob || 0) * (i.qty || 0), 0);
     const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
+    const planLive = (typeof ImportGuide !== 'undefined' && ImportGuide.planFor) ? ImportGuide.planFor(items, s, ImportWizard._doorConfig()) : null;
+    const planPendientes = planLive ? planLive.pasos.filter((x) => !(s.checks && s.checks[x.id])).length : 0;
     const sum = res.summary;
     const recupera = s.recuperaCredito;
     const neto = recupera ? sum.costoNetoRealUsd : sum.totalPuertaConIvaUsd;
@@ -725,6 +986,7 @@ const ImportWizard = {
       <div class="table-scroll" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>NCM</th><th>Qty</th><th>Tributos</th><th>Costo unit+IVA</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.saveAsImport()">💾 Guardar como importación</button>
+        <button class="btn btn-primary btn-sm" onclick="ImportWizard.openPlan()">📋 Ver plan completo (${planPendientes} pendientes)</button>
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportCsv()">⬇ Exportar resumen CSV</button>
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.exportSummaryPdf()">🖨 Exportar resumen PDF</button>
         <button class="btn btn-secondary btn-sm" onclick="ImportWizard.saveProject()">💾 Guardar proyecto</button>
@@ -735,7 +997,7 @@ const ImportWizard = {
 
   // Exporta el resumen del proyecto a CSV (descarga).
   exportCsv() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const items = ImportWizard._effectiveItems();
     if (!items.length) { if (typeof toast === 'function') toast('No hay pedido para exportar', 'error'); return; }
     const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
     const sum = res.summary;
@@ -771,7 +1033,11 @@ const ImportWizard = {
   // Config del motor puerta a puerta con los inputs del asistente (incluye BP).
   _doorConfig() {
     const s = ImportWizard.state;
-    const pesoKg = s.fleteModo === 'peso' ? s.pesoKg : 0;
+    // Etapa A (A3): si no hay peso manual, se usa el peso REAL calculado de los
+    // ítems (defaults por categoría + overrides editables). Así el flete courier
+    // y el chequeo de 50kg/3.000 USD describen el pedido, no un default ciego.
+    const pesoItems = (typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg) ? ImportGuide.pesoTotalKg(ImportWizard._effectiveItems()) : 0;
+    const pesoKg = s.fleteModo === 'peso' ? (Number(s.pesoKg) > 0 ? s.pesoKg : pesoItems) : 0;
     const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
     return {
@@ -784,7 +1050,7 @@ const ImportWizard = {
   },
 
   _currentFobTotal() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const items = ImportWizard._effectiveItems();
     return items.reduce((a, i) => a + (i.fob || 0) * (i.qty || 0), 0);
   },
 
@@ -792,7 +1058,10 @@ const ImportWizard = {
   _estimateFlete() {
     const s = ImportWizard.state;
     const fob = ImportWizard._currentFobTotal();
-    if (s.fleteModo === 'peso') return (s.pesoKg || 0) * (s.costoPorKg || 0);
+    if (s.fleteModo === 'peso') {
+      const peso = Number(s.pesoKg) > 0 ? Number(s.pesoKg) : ((typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg) ? ImportGuide.pesoTotalKg(ImportWizard._effectiveItems()) : 0);
+      return peso * (s.costoPorKg || 0);
+    }
     return fob * (s.fletePct != null ? s.fletePct : 0.15);
   },
 
@@ -833,13 +1102,24 @@ const ImportWizard = {
   // Bridge "Guardar como importación" (spec import-tracker / Wizard Save Bridge):
   // crea un registro IMP-xxxx en `ordered` con snapshot del costo final (caja).
   // DECLINED → no crea registro, no muta estado ni flujo.
+  // Etapa A (A2): fail-closed — con faltantes blocking NO se guarda y el aviso
+  // dice QUÉ falta. Etapa A (A4): el registro lleva su PLAN adjunto + checks.
   async saveAsImport() {
-    const items = (typeof currentPedido !== 'undefined' && currentPedido && currentPedido.items) ? currentPedido.items : [];
+    const items = ImportWizard._effectiveItems();
     if (!items.length) {
       if (typeof toast === 'function') toast('No hay pedido para guardar', 'error');
       return;
     }
     const s = ImportWizard.state;
+    // Gate fail-closed (A2): bloquea con faltantes blocking y lo dice.
+    const v = ImportWizard.validate();
+    const blocking = (v.faltantes || []).filter((f) => f.blocking);
+    if (blocking.length) {
+      if (typeof toast === 'function') {
+        toast('No se puede guardar: ' + blocking.map((b) => b.queFalta).join(' · '), 'error');
+      }
+      return;
+    }
     const res = Calculator.calculateDoorToDoorExactCost(items, ImportWizard._doorConfig());
     const sum = res.summary;
     let ok = true;
@@ -878,6 +1158,22 @@ const ImportWizard = {
     rec.finalLandedCostUsd = sum.totalPuertaConIvaUsd;
     rec.localPriceUsd = (s.precioLocalUsd != null && s.precioLocalUsd > 0) ? s.precioLocalUsd : null;
     rec.tipoCambio = sum.tipoCambio;
+    // Etapa A (A4): el plan queda adjunto al registro para seguirlo desde el Tracker.
+    if (v.plan) {
+      rec.plan = {
+        generado: new Date().toISOString(),
+        regimen: v.plan.regimen,
+        proposito: v.plan.proposito,
+        checks: Object.assign({}, s.checks || {}),
+        pasos: v.plan.pasos.map((p) => ({
+          id: p.id, titulo: p.titulo, descripcion: p.descripcion,
+          responsable: p.responsable, costoUsd: p.costoUsd || 0,
+          plazo: p.plazo || '', fuente: p.fuente || '',
+          completo: !!p.completo,
+          pendiente: !!(p.faltantes && p.faltantes.length)
+        }))
+      };
+    }
     rec.notes = 'Creado desde el asistente de importación (paso 6)';
     if (typeof AppStorage !== 'undefined' && AppStorage.saveImports) {
       await AppStorage.saveImports(result.payload);
