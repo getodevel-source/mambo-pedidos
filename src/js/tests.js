@@ -1996,6 +1996,21 @@ const Tests = {
 				dupes.slice(2).every((p) => p.status === "GREEN"),
 			"PIL7: solo el grupo colisionado pasa a YELLOW (únicos/mismo FOB/otra marca intactos)",
 		);
+		// PIL8: dígito de versión pegado al nombre ("Air 2") tiene vecino y se
+		// queda; suelto o en otra línea se va como antes.
+		const neighEls = [{ x: 129, y: 748, text: "Air" }, { x: 145, y: 748, text: "2" }, { x: 300, y: 748, text: "Pink" }];
+		this.assert(
+			PdfParser.hasGluedNameNeighbor(neighEls, neighEls[1]) === true,
+			"PIL8: '2' pegado a 'Air' (misma línea, 16px) tiene vecino",
+		);
+		this.assert(
+			PdfParser.hasGluedNameNeighbor(neighEls, { x: 500, y: 100, text: "7" }) === false,
+			"PIL8: dígito suelto sin vecino se va",
+		);
+		this.assert(
+			PdfParser.hasGluedNameNeighbor(neighEls, { x: 140, y: 760, text: "3" }) === false,
+			"PIL8: misma columna pero otra línea no cuenta como vecino",
+		);
 	},
 
 	testHonestModelQualityGate() {

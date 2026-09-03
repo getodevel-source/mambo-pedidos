@@ -8,6 +8,21 @@
 const rowEnvFlag = (name) => { try { return typeof process !== "undefined" && process.env ? process.env[name] : undefined; } catch { return undefined; } };
 
 const RowMatch = {
+// PIL8: un dígito suelto pegado al nombre ("Air 2", "Zero 2") es dígito de
+// versión, no ruido — pero solo con un vecino de texto en la misma línea a la
+// izquierda (los specs sueltos como "44" no van pegados a nada). Puro y
+// testeable directo (no necesita PDF).
+hasGluedNameNeighbor(rawElements, el, maxGap = 40, maxDy = 3) {
+	if (!Array.isArray(rawElements) || !el) return false;
+	const x = Number(el.x) || 0, y = Number(el.y) || 0;
+	return rawElements.some((o) => {
+		if (!o || o === el) return false;
+		const t = String(o.text != null ? o.text : o.str != null ? o.str : "").trim();
+		if (t.length < 2) return false;
+		const dx = x - (Number(o.x) || 0);
+		return dx > 0 && dx <= maxGap && Math.abs((Number(o.y) || 0) - y) <= maxDy;
+	});
+},
 extractPageProductsByTableRows(
 		rawElements,
 		priceAnchors,
@@ -127,7 +142,10 @@ extractPageProductsByTableRows(
 				// Filtrar ruido
 				// SLICE 4: preserve single-letter model suffixes ("G502 X", "M750 M") in
 				// the model band — they are part of the code, not noise.
-				if (isPageNoise(txt) && !(el.x < 150 && /^[A-Z]$/.test(txt))) continue;
+				// PIL8: igual para dígitos de versión pegados ("Air 2") — con
+				// vecino de texto se quedan, sueltos se van como antes.
+				const singleKept = el.x < 150 && (/^[A-Z]$/.test(txt) || (/^\d$/.test(txt) && this.hasGluedNameNeighbor(rawElements, el)));
+				if (isPageNoise(txt) && !singleKept) continue;
 				if (isHeaderNoiseLine(txt)) continue;
 				// IT15: palabras de plantilla (labels de sección/estado del catálogo)
 				// como modelo — "Standard", "Business", "BILL" — nunca son un modelo.
@@ -175,7 +193,9 @@ extractPageProductsByTableRows(
 						if (this.HEADER_TOKEN_RE.test(txt)) continue;
 						// IT15: en la banda modelo, los valores numéricos puros de specs
 						// (Haimu "3.0"/"0.50mn"/"44") son parámetros técnicos, no modelo.
-						if (/^[\d.]+(\s*(mm|mn|g|kg))?$/i.test(txt.trim())) continue;
+						// PIL8: pero un dígito suelto PEGADO al nombre ("Air 2") es
+						// dígito de versión — los specs nunca van pegados al nombre.
+						if (/^[\d.]+(\s*(mm|mn|g|kg))?$/i.test(txt.trim()) && !(txt.trim().length === 1 && this.hasGluedNameNeighbor(rawElements, el))) continue;
 						nameParts.push(txt);
 						if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;
 						continue;

@@ -1,16 +1,16 @@
 {
  "counts": {
-  "CAMPO": 14,
+  "CAMPO": 12,
   "MENOR": 20,
-  "CRITICO": 14,
-  "OK": 17
+  "CRITICO": 13,
+  "OK": 20
  },
  "n": 65,
  "items": [
   {
    "id": 1,
-   "veredicto": "CAMPO",
-   "razon": "modelo \"Zero\" pierde el \"2\" (es Zero 2)",
+   "veredicto": "OK",
+   "razon": "IT7: fix dígito pegado — extracción ahora Zero 2 completo (caso PIL0 original). Verificado en measure-extraction.",
    "marca": "8bitdo",
    "modelo": "Zero",
    "variante": "Bluetooth Yellow",
@@ -449,8 +449,8 @@
   },
   {
    "id": 41,
-   "veredicto": "CRITICO",
-   "razon": "perdió \"MX\" y \"4 for Mac\"; \"Master Wireless Mouse\" ambiguo",
+   "veredicto": "OK",
+   "razon": "IT7: la gemela for-Mac extrae Master 4 Mac (se distinguen); MX perdido en ambas sin ambigüedad. Fila única correcta.",
    "marca": "Logitech",
    "modelo": "Master Wireless Mouse",
    "variante": "Black",
@@ -691,8 +691,8 @@
   },
   {
    "id": 63,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_52___MCHOSE__2607_pdf_p4.png)",
+   "veredicto": "OK",
+   "razon": "IT7: fix dígito pegado — extracción ahora Ace 68 Air 2 completo (era Ace 68 Air). Verificado en measure-extraction.",
    "marca": "Mchose",
    "modelo": "Hall Effect Ace 68 Air",
    "variante": "Switch White",

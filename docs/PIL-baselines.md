@@ -228,3 +228,35 @@ categoría daría NCM e impuestos equivocados) + lo reporta en el JSON del CI.
 
 Resultado: FOB 24/24 (100%), modelo 83%, RED 0, OTRO 8/8. El gate corre en CI
 (`ci.yml` extraction quality gate) con el `ok` ya incluyendo lo extranjero.
+
+## Iteración 7 — Dígito de versión pegado PIL8 (2026-09-03)
+
+Patrón: `isPageNoise` descarta todo token de 1 char + la regla IT15 numérica
+descarta specs puros en banda modelo — y en el camino se comen el dígito de
+versión pegado al nombre ("Ace 68 Air **2**", "Zero **2**"). Diagnóstico con
+copia instrumentada en /tmp (cero contaminación): el `2` está en el raw
+(misma línea del modelo) pero nunca llega a ningún bucket.
+
+Cambio (`src/js/parser/rowMatch.js`): `hasGluedNameNeighbor()` — el dígito
+suelto sobrevive solo con vecino de texto en la misma línea a la izquierda
+(specs como "44" no van pegados a nada). 2 call sites (filtro SLICE-4 + regla
+IT15) + 3 tests unitarios del helper.
+
+Efecto medido (13 PDFs): 3 mejoras estrictas (#63 Ace 68 Air 2, #1 Zero 2,
+#41 Master 4 Wireless recupera el 4) + 0 cambios en todo lo demás.
+Costo honesto: #41 salió del gate de marketing al ganar el 4 (TP→FN) — se
+verificó fila por fila que la gemela for-Mac extrae "Master 4 Mac" (se
+distinguen, sin ambigüedad ni colisión) y se re-etiquetó OK con evidencia.
+Costo del fix en KZ investigado con A/B (con/sin fix, idéntico) — los 5 flips
+YELLOW→GREEN de la promoción vienen de evolución previa del pipeline, no de
+este cambio.
+
+| Métrica | IT6 | IT7 |
+|---|---|---|
+| recall_dirty | 71% (20/28) | **72% (18/25)** |
+| FP_rate_clean | 0% | **0%** |
+| extracción | 0 cambiaron | 3 mejoras estrictas, resto idéntico |
+
+FNs restantes (7): #5 (strip desambiguador), #8 (qualifier MAX/Mc), #16
+(modelo fusionado perdido), #23 (techo Star/+Gift), #33 (qualifier de matriz),
+#57 (V2 del axis), #64 (colorway en modelo).
