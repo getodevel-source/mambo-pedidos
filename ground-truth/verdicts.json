@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 9,
+  "CAMPO": 8,
   "MENOR": 21,
   "CRITICO": 13,
-  "OK": 22
+  "OK": 23
  },
  "n": 65,
  "items": [
@@ -702,8 +702,8 @@
   },
   {
    "id": 64,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_53___MCHOSE__2607_pdf_p6.png)",
+   "veredicto": "OK",
+   "razon": "IT11: fix colorway suelto — extracción ahora K99 V3 + Mountains en variante (era K99 Mountains V3). Fila única correcta.",
    "marca": "Mchose",
    "modelo": "K99 Mountains V3",
    "variante": "Icy Creamsicle Gradient",

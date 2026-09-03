@@ -334,3 +334,26 @@ Efecto: #57 → 'R98' + 'Misty Axis V2 Green' (re-etiquetado OK con evidencia);
 
 FNs restantes (4): #16 (modelo fusionado), #23 (techo), #33 (qualifier matriz),
 #64 (colorway en modelo).
+
+## Iteración 11 — Colorway suelto a variante (2026-09-03)
+
+Patrón (#64): colorway en territorio medio sin pegar al modelo ("Mountains"
+lejos de "K99") iba al modelo. Tres piezas:
+1. Regla: palabra pura-letras en rama media + código existe + no-sufijo +
+   no-marca + no-pegada → variante (reusa hasGluedNameNeighbor).
+2. Adyacencia bidireccional (el vecino puede estar a derecha: "Sea Salt").
+3. Sort por bandas Y de 0.5px (el polvo flotante invertía el orden y rompía
+   reglas dependientes de orden) + guard de marcas (isBrandWord: "Razer" se
+   queda para el brand-strip).
+Lecciones pagadas: un fix ingenuo movía "Sea" y sangraba "Razer" (detectados
+por el gate de 65 antes de commitear); instrumentación con logs propios
+silenciados por TDZ y scripts con argv faltante costaron horas — verificar
+siempre que el instrumento observa lo que cree observar.
+
+| Métrica | IT10 | IT11 |
+|---|---|---|
+| recall_dirty | 82% (18/22) | **86% (18/21)** |
+| FP_rate_clean | 0% | **0%** |
+| extracción | 0 cambiaron | 1 mejora estricta (#64), resto idéntico |
+
+FNs restantes (3): #16 (modelo fusionado), #23 (techo), #33 (qualifier matriz).

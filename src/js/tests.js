@@ -2057,6 +2057,32 @@ const Tests = {
 			rkOut.length === 1 && rkOut[0].modelo === "R98" && /V2/.test(rkOut[0].variante || ""),
 			"PIL10: V2 suelto en territorio switch va a variante, no al modelo (" + JSON.stringify(rkOut[0] && { m: rkOut[0].modelo, v: rkOut[0].variante }) + ")",
 		);
+		// PIL11 (RED): colorway suelto en territorio medio no va al modelo —
+		// caso #64: "Mountains" lejos de "K99" va a variante; "Air" pegado a
+		// "68" se queda (adyacencia manda, no la palabra).
+		const k99Els = [
+			{ x: 108, y: 199, text: "K99" },
+			{ x: 262, y: 199, text: "Mountains" },
+			{ x: 497, y: 205, text: "$59.35" },
+		];
+		const k99Anchors = [{ x: 497, y: 205, price: 59.35, rawLine: "$59.35", pageNum: 1 }];
+		const k99Out = PdfParser.extractPageProductsByTableRows(k99Els, k99Anchors, 800, 1, [], "OTRO", [], [], (s) => !s || s.length < 2, () => false);
+		this.assert(
+			k99Out.length === 1 && k99Out[0].modelo === "K99" && /Mountains/.test(k99Out[0].variante || ""),
+			"PIL11: colorway no pegado va a variante, no al modelo (" + JSON.stringify(k99Out[0] && { m: k99Out[0].modelo, v: k99Out[0].variante }) + ")",
+		);
+		const aceEls = [
+			{ x: 93, y: 748, text: "Ace" },
+			{ x: 116, y: 748, text: "68" },
+			{ x: 129, y: 748, text: "Air" },
+			{ x: 497, y: 764, text: "$50.04" },
+		];
+		const aceAnchors = [{ x: 497, y: 764, price: 50.04, rawLine: "$50.04", pageNum: 1 }];
+		const aceOut = PdfParser.extractPageProductsByTableRows(aceEls, aceAnchors, 800, 1, [], "OTRO", [], [], (s) => !s || s.length < 2, () => false);
+		this.assert(
+			aceOut.length === 1 && aceOut[0].modelo === "Ace 68 Air",
+			"PIL11 anti-overfit: palabra pegada al código se queda en el modelo",
+		);
 	},
 
 	testHonestModelQualityGate() {

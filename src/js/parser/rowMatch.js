@@ -19,8 +19,10 @@ hasGluedNameNeighbor(rawElements, el, maxGap = 40, maxDy = 3) {
 		if (!o || o === el) return false;
 		const t = String(o.text != null ? o.text : o.str != null ? o.str : "").trim();
 		if (t.length < 2) return false;
-		const dx = x - (Number(o.x) || 0);
-		return dx > 0 && dx <= maxGap && Math.abs((Number(o.y) || 0) - y) <= maxDy;
+		// Adyacencia bidireccional: el vecino puede estar a izquierda o derecha
+		// ("Sea Salt", "Air 2"). Solo importa misma línea y cercanía.
+		const dx = Math.abs(x - (Number(o.x) || 0));
+		return dx <= maxGap && Math.abs((Number(o.y) || 0) - y) <= maxDy;
 	});
 },
 extractPageProductsByTableRows(
@@ -134,7 +136,11 @@ extractPageProductsByTableRows(
 			const colorParts = [];
 			let productCode = "";
 
-			const allItems = cellItems.sort((a, b) => a.y - b.y || a.x - b.x);
+			// PIL11b: ordenar por bandas Y de 0.5px (no por flotante crudo): el
+			// polvo de coma flotante (199.46500000000003 vs 199.465) invertía el
+			// orden de tokens de la misma línea y rompía reglas dependientes de
+			// orden (códigos primero). 0.5px preserva super/subíndices reales.
+			const allItems = cellItems.sort((a, b) => Math.round(a.y * 2) - Math.round(b.y * 2) || a.x - b.x);
 
 			for (const el of allItems) {
 				const txt = el.text;
@@ -302,9 +308,14 @@ extractPageProductsByTableRows(
 						/^[A-Za-z]+$/.test(txt) &&
 						nameParts.some((p) => /\d/.test(p)) &&
 						firstCodeY !== null &&
-						relX > 0.15 &&
-						el.y > firstCodeY + 5
+						((relX > 0.15 && el.y > firstCodeY + 5) ||
+							(!/^(pro|plus|max|ultra|lite|mini|se)$/i.test(txt.trim()) && !this.isBrandWord(txt) &&
+								!this.hasGluedNameNeighbor(rawElements, el)))
 					) {
+						// PIL11: ...o palabra suelta en territorio medio sin pegar
+						// al modelo (colorway "Mountains" lejos de "K99") — va a
+						// variante. Pegadas ("Air" junto a "68") y sufijos de línea
+						// (Pro/Max/Ultra/...) no se tocan. En banda modelo tampoco.
 						typeParts.push(txt);
 					} else if (/^v\d+$/i.test(txt.trim()) && allItems.some((o) => o !== el && Math.abs((Number(o.y) || 0) - (Number(el.y) || 0)) <= 6 && /\b(axis|switch)\b/i.test(String(o.text || "")))) {
 					// PIL10: versión suelta JUNTO A switch/axis en su misma línea
@@ -675,6 +686,17 @@ extractPageProductsByTableRows(
 			delete p._inheritedFromPrice;
 		}
 		return pageProducts;
+	},
+
+	// PIL11b: palabras de marca nunca migran a variante — las maneja el
+	// brand-strip con la marca detectada de la fila (sacarlas de modelo las
+	// rescataría al campo equivocado). Guard con typeof (embed mínimo).
+	isBrandWord(w) {
+		try {
+			const list = (typeof TextSanitizer !== "undefined" && TextSanitizer && TextSanitizer.KNOWN_BRANDS) || [];
+			const lw = String(w || "").trim().toLowerCase();
+			return Array.isArray(list) && list.some((b) => String(b).toLowerCase() === lw);
+		} catch (e) { return false; }
 	},
 
 	// PIL9: una fila sin palabra de conexión (wired/wireless/bluetooth) la toma
