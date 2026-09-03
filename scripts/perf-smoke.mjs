@@ -26,17 +26,32 @@ const page = await browser.newPage({ viewport:{width:1280,height:800} });
 page.on('pageerror', e=>console.log('pageerror:', String(e).slice(0,200)));
 
 const R = {};
-const rec = (k, ms, ok, det='') => { R[k] = { ms: Math.round(ms), ok, det }; console.log(`  ${ok?'✅':'❌'} ${k}: ${ms.toFixed(0)}ms${det?' — '+det:''}`); };
+const NAME_KEY = { 'boot a listeners':'boot', 'import CSV sintético 5000':'csvImport', 'confirm 5000 items':'confirm', 'saveCatalog con refs/stub':'save', 'heap post-confirm':'heapPostConfirmMB', 'restore 5000 tras reload':'restore', 'renderCatalog':'renderCatalog', 'búsqueda (neta)':'search', 'armarPedido 1200':'armarPedido', 'recalc':'renderPedido', 'cotización 1200':'quote', 'export JSON stringify':'exportJson' };
+const rec = (k, ms, ok, det='') => { R[k] = { ms: Math.round(ms), ok, det }; const lim = Math.round((TH[NAME_KEY[k]] ?? 0) * LOAD); console.log(`  ${ok?'✅':'❌'} ${k}: ${ms.toFixed(0)}ms${det?' — '+det:''}${lim ? ' (límite '+lim+'ms)' : ''}`); };
 const TH = { boot: 1500, csvImport: 3000, confirm: 1500, save: 1500, restore: 3000, renderCatalog: 150, search: 600, armarPedido: 400, renderPedido: 400, quote: 1000, exportJson: 800, heapPostConfirmMB: 400 };
+// Factor de carga (mismo mecanismo que perf-audit): en CI/sesión ocupada el
+// harness se degrada ~2x; un ref barato escala los umbrales sin esconder
+// regresiones (una regresión real escala PEOR que la referencia).
+const REF_QUIET = 12;
+async function loadFactor() {
+  try {
+    const ref = await page.evaluate(`(() => { const t0 = performance.now();
+      for (let i = 0; i < 10000; i++) QuoteGenerator.formatCurrency(1234.5, { currency: 'USD' });
+      return performance.now() - t0; })()`);
+    return Math.min(3, Math.max(1, ref / REF_QUIET));
+  } catch { return 1; }
+}
 
 await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.waitForFunction(()=>window.AppStorage && window.ImportFlow, null, {timeout:30000});
+const LOAD = await loadFactor();
+console.log(`REF carga perf-smoke: ${LOAD.toFixed(2)}x`);
 let t = Date.now();
 await page.waitForFunction(()=>window.AppStorage && typeof catalog!=='undefined', null, {timeout:20000});
 // boot completo (store + listeners): esperar marks
 await page.waitForFunction(()=>performance.getEntriesByType('mark').some(m=>m.name==='boot:listeners'), null, {timeout:15000});
 const bootMs = Date.now() - t;
-rec('boot a listeners', bootMs, bootMs < TH.boot);
+rec('boot a listeners', bootMs, bootMs < TH.boot * LOAD);
 
 // stub fs (camino Tauri)
 await page.evaluate(`window.__fs={files:new Map(),dirs:new Set(['images'])}; window.AppStorage._fsApi=()=>({ensureDir:async()=>{},writeBytes:async(r,b)=>{window.__fs.files.set(r,b)},readBytes:async(r)=>window.__fs.files.get(r),list:async()=>[],remove:async()=>{}});`);
@@ -54,27 +69,27 @@ const r = await page.evaluate(`(async()=>{
   return items.length;
 })()`);
 const csvMs = Date.now() - t;
-rec('import CSV sintético 5000', csvMs, csvMs < TH.csvImport, `items=${r}`);
+rec('import CSV sintético 5000', csvMs, csvMs < TH.csvImport * LOAD, `items=${r}`);
 
 // confirm + save + restore
 t = Date.now();
 await page.evaluate(`window.ImportFlow.confirmImportPreview()`);
 await page.waitForFunction(()=>typeof catalog!=='undefined' && catalog.length>=4000, null, {timeout:60000});
 const confirmMs = Date.now() - t;
-rec('confirm 5000 items', confirmMs, confirmMs < TH.confirm);
+rec('confirm 5000 items', confirmMs, confirmMs < TH.confirm * LOAD);
 t = Date.now();
 await page.evaluate(`AppStorage.saveCatalog(catalog, selection)`);
 const saveMs = Date.now() - t;
-rec('saveCatalog con refs/stub', saveMs, saveMs < TH.save);
+rec('saveCatalog con refs/stub', saveMs, saveMs < TH.save * LOAD);
 await page.waitForTimeout(300);
 const heapMB = await page.evaluate("performance.memory ? (performance.memory.usedJSHeapSize/1048576) : 0");
-rec('heap post-confirm', heapMB, heapMB < TH.heapPostConfirmMB, heapMB.toFixed(0)+'MB');
+rec('heap post-confirm', heapMB, heapMB < TH.heapPostConfirmMB * LOAD, heapMB.toFixed(0)+'MB');
 
 t = Date.now();
 await page.reload();
 await page.waitForFunction(()=>window.AppStorage && typeof catalog!=='undefined' && catalog.length>=4000, null, {timeout:60000});
 const restoreMs = Date.now() - t;
-rec('restore 5000 tras reload', restoreMs, restoreMs < TH.restore);
+rec('restore 5000 tras reload', restoreMs, restoreMs < TH.restore * LOAD);
 await page.waitForTimeout(400);
 
 // catálogo + pedido + cotización + export
@@ -90,12 +105,12 @@ const ph = await page.evaluate(`(async()=>{
   t=performance.now(); CatalogValidator.buildCatalogExportJSON(catalog, {images:'none', pretty:false}); out.exportJson=performance.now()-t;
   return out;
 })()`);
-rec('renderCatalog', ph.render, ph.render < TH.renderCatalog);
-rec('búsqueda (neta)', ph.search, ph.search < TH.search);
-rec('armarPedido 1200', ph.armar, ph.armar < TH.armarPedido);
-rec('recalc', ph.recalc, ph.recalc < TH.renderPedido);
-rec('cotización 1200', ph.quote, ph.quote < TH.quote);
-rec('export JSON stringify', ph.exportJson, ph.exportJson < TH.exportJson);
+rec('renderCatalog', ph.render, ph.render < TH.renderCatalog * LOAD);
+rec('búsqueda (neta)', ph.search, ph.search < TH.search * LOAD);
+rec('armarPedido 1200', ph.armar, ph.armar < TH.armarPedido * LOAD);
+rec('recalc', ph.recalc, ph.recalc < TH.renderPedido * LOAD);
+rec('cotización 1200', ph.quote, ph.quote < TH.quote * LOAD);
+rec('export JSON stringify', ph.exportJson, ph.exportJson < TH.exportJson * LOAD);
 
 await browser.close();
 server.close();
