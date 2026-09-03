@@ -265,6 +265,27 @@ const TextSanitizer = {
       modelo = `${marca} ${catSuffix}`;
     }
 
+    // 5d. PIL12: sufijo separado "+Xxx" al final del modelo ("X820Ultra +Gift",
+    // caso #23: el +Gift es parte del switch, no del modelo). Si ya está en
+    // variante se elimina sin duplicar; si no, se mueve (nunca se pierde).
+    // No toca "+" pegados ("Turbo+", "A7V3Pro+": sufijos reales de línea) ni
+    // deja el modelo vacío o degenerado.
+    {
+      const mPlus = modelo.match(/\s\+(\w[\w+-]*)\s*$/);
+      if (mPlus) {
+        const resto = modelo.replace(/\s\+\w[\w+-]*\s*$/, "").trim();
+        if (/[A-Za-z0-9]{2,}/.test(resto)) {
+          const tok = mPlus[1];
+          const tokRe = new RegExp(
+            "\\+" + tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b",
+            "i",
+          );
+          modelo = resto;
+          if (!tokRe.test(variante)) variante = (variante ? variante + " " : "") + "+" + tok;
+        }
+      }
+    }
+
     // Normalizar capitalización de marca
     if (marca && marca !== "OTRO") {
       marca = marca.charAt(0).toUpperCase() + marca.slice(1).toLowerCase();

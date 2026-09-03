@@ -2083,6 +2083,23 @@ const Tests = {
 			aceOut.length === 1 && aceOut[0].modelo === "Ace 68 Air",
 			"PIL11 anti-overfit: palabra pegada al código se queda en el modelo",
 		);
+		// PIL12 (RED): sufijo "+Xxx" separado ya presente en variante se elimina
+		// del modelo sin duplicar (caso #23: "+Gift" es del switch).
+		const g23 = TextSanitizer.sanitizeItem({ marca: "Attack Shark", modelo: "X820Ultra +Gift", variante: "Gradient+Gift Switch Black", cat: "MOUSE", fob: 37.61 }, []);
+		this.assert(
+			g23.modelo === "X820Ultra" && g23.variante === "Gradient+Gift Switch Black",
+			"PIL12: +Gift duplicado sale del modelo sin duplicarse en variante",
+		);
+		const g23b = TextSanitizer.sanitizeItem({ marca: "X", modelo: "K70 +Gift", variante: "Black", cat: "TECLADO", fob: 10 }, []);
+		this.assert(
+			g23b.modelo === "K70" && /Gift/.test(g23b.variante || ""),
+			"PIL12: +Gift ausente en variante se mueve (no se pierde)",
+		);
+		const g23c = TextSanitizer.sanitizeItem({ marca: "MCHOSE", modelo: "Turbo+ V9", variante: "White Gold", cat: "HEADSET", fob: 60.58 }, []);
+		this.assert(
+			g23c.modelo === "Turbo+ V9",
+			"PIL12 anti-overfit: + pegado (Turbo+) no se toca",
+		);
 	},
 
 	testHonestModelQualityGate() {

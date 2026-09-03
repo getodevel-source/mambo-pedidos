@@ -357,3 +357,18 @@ siempre que el instrumento observa lo que cree observar.
 | extracción | 0 cambiaron | 1 mejora estricta (#64), resto idéntico |
 
 FNs restantes (3): #16 (modelo fusionado), #23 (techo), #33 (qualifier matriz).
+
+## Iteración 12 — Sufijo +Xxx duplicado (2026-09-03)
+
+Patrón (#23): "+Gift" (parte del switch) contaminaba el modelo aunque ya
+estaba en variante ("X820Ultra +Gift" + "Gradient+Gift Switch Black").
+Fix (`sanitizeItem` paso 5d): sufijo separado +Xxx al final del modelo se
+elimina sin duplicar si ya está en variante, o se mueve si no (nunca se
+pierde). No toca "+" pegados ("Turbo+"). 3 tests. Único cambio en 65 casos.
+
+| Métrica | IT11 | IT12 |
+|---|---|---|
+| recall_dirty | 86% (18/21) | **90% (18/20)** |
+| FP_rate_clean | 0% | **0%** |
+
+FNs restantes (2): #16 (modelo fusionado), #33 (qualifier de matriz).

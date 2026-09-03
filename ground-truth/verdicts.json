@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 8,
+  "CAMPO": 7,
   "MENOR": 21,
   "CRITICO": 13,
-  "OK": 23
+  "OK": 24
  },
  "n": 65,
  "items": [
@@ -251,8 +251,8 @@
   },
   {
    "id": 23,
-   "veredicto": "CAMPO",
-   "razon": "OCR no concluyente entre Star (34.77) y +Gift (37.61); se mantiene OLD con variante limpia",
+   "veredicto": "OK",
+   "razon": "IT12: fix +Gift duplicado — extracción ahora X820Ultra limpio (era X820Ultra +Gift). Fila única correcta.",
    "marca": "Attack shark",
    "modelo": "X820Ultra Star +Gift",
    "variante": "Black",
