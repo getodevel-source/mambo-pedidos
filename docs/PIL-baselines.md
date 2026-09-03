@@ -145,3 +145,32 @@ IDÉNTICO (fd0ac1d1… — los FOB de matriz ya eran correctos; solo cambia el
 semáforo). YELLOW totales 654 → 582. Los 13 restantes (0,6% del catálogo):
 celdas multilínea con dy > tol, precio correcto confirmado por muestreo →
 techo documentado. 3 tests nuevos (matriz / tabla normal / desalineada real).
+
+## Iteración 3 — Re-etiquetado con evidencia de crops (2026-09-03)
+
+Problema: 12 de los 21 FNs no eran fallas del parser actual sino etiquetas
+viejas (la extracción mejoró desde el etiquetado y nadie lo confirmó).
+Evidencia: revisión crop por crop (ground-truth/page_*.png) + tabla de
+diagnóstico (manifest actual vs veredicto).
+
+Cambio (solo `ground-truth/verdicts.json`, sin código):
+- OK (9): #13 (ATK strip), #22 (V3 Tri-Mode), #24 (V6), #27 (Mars strip),
+  #43 (M750 M literal), #44 (DESLINEADO resuelto solo), #56 (RK- strip),
+  #59 (R98 completo), #62 (Ace68GT completo). Criterio: modelo+var+precio
+  identifican una fila única del crop.
+- MENOR (3): #9 (modelo OK, ruido OCR en var), #31 (modelo+precio OK,
+  variante filtrada de otra fila), #61 (reorder cosmético Turbo+ V9).
+- NO se re-etiqueta #5: 'Ultimate 2C'+'Orange Green' es AMBIGUO (existe en
+  wireless $19.40 y wired $15.45) — el strippeo de 'Wired Controller' fue
+  demasiado lejos. Queda CAMPO para iteración de código.
+
+| Métrica | antes | IT3 |
+|---|---|---|
+| recall_dirty | 48% (19/40) | **68% (19/28)** |
+| FP_rate_clean | 0% (0/25) | **0% (0/37)** |
+| extracción (measure-extraction) | — | 0 cambiaron (sin regresión) |
+
+FNs restantes (9, con causa): #5 (strip desambiguador), #8 (qualifier MAX),
+#11 (switch+color en modelo, var huérfana), #16 (modelo fusionado perdido),
+#23 (techo: ambigüedad Star/+Gift), #33 (qualifier de matriz), #57 (V2 del
+axis pegado), #63 (dígito de versión perdido upstream), #64 (colorway en modelo).

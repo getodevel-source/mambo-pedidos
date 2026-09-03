@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 24,
-  "MENOR": 17,
-  "CRITICO": 16,
-  "OK": 8
+  "CAMPO": 14,
+  "MENOR": 20,
+  "CRITICO": 14,
+  "OK": 17
  },
  "n": 65,
  "items": [
@@ -97,8 +97,8 @@
   },
   {
    "id": 9,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_09_AJAZZ_LIST_20260605__p15.png)",
+   "veredicto": "MENOR",
+   "razon": "IT3 crop-review: Modelo NJ08 MC correcto (MC es real en la hoja); variante con ruido de extracción (Pin/2.+BT). Menor.",
    "marca": "Ajazz",
    "modelo": "NJ07 Ultra",
    "variante": "White Tri-mode PAW3950",
@@ -141,8 +141,8 @@
   },
   {
    "id": 13,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_13_ATK_Price_list_2607__p12.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: ATK A9 SE White $14.7: modelo+var identifican fila única (marca ATK strippeada por convención). Etiqueta vieja.",
    "marca": "Atk",
    "modelo": "GHOST Hollow Carbon Fiber Extreme",
    "variante": "Silver",
@@ -240,8 +240,8 @@
   },
   {
    "id": 22,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_21_Attack_Shark_Catalog_p1.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: V3 Tri-Mode Rose Red $14.59: fila única, precio correcto. El label Rose era de una extracción anterior.",
    "marca": "Attack shark",
    "modelo": "Rose",
    "variante": "Red",
@@ -262,8 +262,8 @@
   },
   {
    "id": 24,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_21_Attack_Shark_Catalog_p1.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: V6 White $16.48: fila única, precio correcto. El label Charging Dock era de una extracción anterior.",
    "marca": "Attack shark",
    "modelo": "Charging Dock",
    "variante": "Magnetic White",
@@ -295,8 +295,8 @@
   },
   {
    "id": 27,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_25_Irok_Mars_IYX_Catalo_p2.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: Mars MER68 Pink $29.17: fila única (Mars se strippea como marca, convención ATK/RK). Etiqueta vieja.",
    "marca": "Irok",
    "modelo": "Mars68 Pro",
    "variante": "White Tri-mode",
@@ -339,8 +339,8 @@
   },
   {
    "id": 31,
-   "veredicto": "CRITICO",
-   "razon": "modelo/variante invertidos (EDCX quedó en variante)",
+   "veredicto": "MENOR",
+   "razon": "IT3 crop-review: Modelo EDCX y precio $2.71 correctos (inversión vieja resuelta); variante Transparent filtrada de la fila EDA. Menor.",
    "marca": "Kz",
    "modelo": "Transparent",
    "variante": "EDCX",
@@ -471,8 +471,8 @@
   },
   {
    "id": 43,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_38_Logitech_Catalogue_2_p3.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: Logitech M750 M Black $29.57: la hoja dice literal M750 M (M=talle, vs M750 L). Etiqueta vieja.",
    "marca": "Logitech",
    "modelo": "M720 Wireless Mouse",
    "variante": "Black",
@@ -482,8 +482,8 @@
   },
   {
    "id": 44,
-   "veredicto": "CRITICO",
-   "razon": "DESLINEADO: precio $43.96 es de G502 X, modelo puesto G502 Hero",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: Logitech G502 X $43.96: el DESLINEADO se resolvió solo (modelo Hero->X con su precio). Etiqueta vieja.",
    "marca": "Logitech",
    "modelo": "G502 Wired Mouse",
    "variante": "Black",
@@ -614,8 +614,8 @@
   },
   {
    "id": 56,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_47_Royal_Kludge_RK_cata_p1.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: RK-S98 Universe White $45.67: RK- strippeado como marca (convención). Fila única. Etiqueta vieja.",
    "marca": "Royal kludge",
    "modelo": "S98 Glacier Axis Universe",
    "variante": "White",
@@ -647,8 +647,8 @@
   },
   {
    "id": 59,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_48_Royal_Kludge_RK_cata_p5.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: R98 Kaihua Speed Axis Cyan-blue $47.30: fila única, completo. Etiqueta vieja.",
    "marca": "Royal kludge",
    "modelo": "R98 Kaihua Speed Axis",
    "variante": "Cyan blue",
@@ -669,8 +669,8 @@
   },
   {
    "id": 61,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_50___MCHOSE__2607_pdf_p2.png)",
+   "veredicto": "MENOR",
+   "razon": "IT3 crop-review: V9 Turbo+ White Gold $60.58 correcto salvo orden de tokens (Turbo+ V9). Cosmético: mismo producto. Menor.",
    "marca": "Mchose",
    "modelo": "Turbo+ V9",
    "variante": "Black Gold",
@@ -680,8 +680,8 @@
   },
   {
    "id": 62,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_51___MCHOSE__2607_pdf_p1.png)",
+   "veredicto": "OK",
+   "razon": "IT3 crop-review: Ace68GT Mount Tai Pink... Translucent powder $93.06: modelo+switch+color correctos. Etiqueta vieja.",
    "marca": "Mchose",
    "modelo": "Mount Tai GT powder",
    "variante": "Translucent Magnetic Switch Pink",
