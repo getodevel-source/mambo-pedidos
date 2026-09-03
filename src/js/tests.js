@@ -546,6 +546,11 @@ const Tests = {
     		this.assert(qr("MAD V2", "MOUSE", "MAD V2 Snowlight HE Switch Black Ice Carbon Fiber Dual Light RGB") === "YELLOW", "PIL5: celda con exceso de tokens → YELLOW");
     		this.assert(TextSanitizer.assessModelQuality("Ace68GT", "Mount Tai Pink Magnetic Switch", "TECLADO", "Ace68GT Mount Tai Pink Magnetic Switch GT Translucent powder").level === "GREEN", "PIL5 anti-overfit: corte completo → GREEN");
     		this.assert(TextSanitizer.assessModelQuality("G502 X", "Wired Mouse Black", "MOUSE", "Logitech G502 X Wired Mouse Black").level === "GREEN", "PIL5 anti-overfit: exceso < 4 → GREEN");
+    		// PIL6: variante huérfana — fragmento de switch/axis solo en variante
+    		// (caso #11: el split partió mal y el resto quedó en el modelo).
+    		this.assert(TextSanitizer.assessModelQuality("A87 Plum Pro Sea Salt", "axis", "TECLADO", "A87 Plum Pro Sea Salt axis").level === "YELLOW", "PIL6: variante 'axis' huérfana → YELLOW");
+    		this.assert(TextSanitizer.assessModelQuality("A87", "Plum axis Pro Sea Salt", "TECLADO", "ATK A87 Plum axis Pro Sea Salt").level === "GREEN", "PIL6 anti-overfit: switch completo en variante → GREEN");
+    		this.assert(TextSanitizer.assessModelQuality("G502 X", "Black", "MOUSE", "Logitech G502 X Black").level === "GREEN", "PIL6 anti-overfit: variante color normal → GREEN");
 		// SLICE 3 (tasks 3.3/3.5): the measured false negatives (design §IT17
 		// resolution rules 1-3) + clean guard that must NOT be flagged.
 		y(

@@ -174,3 +174,21 @@ FNs restantes (9, con causa): #5 (strip desambiguador), #8 (qualifier MAX),
 #11 (switch+color en modelo, var huérfana), #16 (modelo fusionado perdido),
 #23 (techo: ambigüedad Star/+Gift), #33 (qualifier de matriz), #57 (V2 del
 axis pegado), #63 (dígito de versión perdido upstream), #64 (colorway en modelo).
+
+## Iteración 4 — Gate variante huérfana PIL6 (2026-09-03)
+
+Patrón: split de celda roto deja un fragmento de switch/axis solo en la
+variante mientras el resto (switch+color) queda en el modelo. Caso #11:
+modelo='A87 Plum Pro Sea Salt' var='axis' (verdad: A87 / Plum axis Pro /
+Sea Salt, crop page_11_ATK_Price_list_2607__p4.png).
+
+Cambio (`src/js/textSanitizer.js` assessModelQuality): variante que matchea
+/^(axis|switch|switches)(\s+(pro|plus|max|ultra|v\d+))?$/i → YELLOW con razón.
+Riesgo FP medido: 0 casos en el snapshot n=65 (ninguna variante legítima es
+solo "axis"/"switch"). 3 tests (1 RED→GREEN + 2 anti-overfit).
+
+| Métrica | IT3 | IT4 |
+|---|---|---|
+| recall_dirty | 68% (19/28) | **71% (20/28)** |
+| FP_rate_clean | 0% (0/37) | **0% (0/37)** |
+| extracción (measure-extraction) | 0 cambiaron | 0 cambiaron (gate puro) |

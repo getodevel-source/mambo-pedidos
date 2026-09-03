@@ -837,6 +837,16 @@ const TextSanitizer = {
         if (/[()[\]{}]/.test(m)) {
           reasons.push("Residuo de celda en el modelo (paréntesis/llaves)");
         }
+    // PIL6: variante huérfana — un fragmento de switch/axis solo en la variante
+    // significa que el split de celda partió mal (el resto del switch + color
+    // quedaron en el modelo; caso #11: modelo='A87 Plum Pro Sea Salt' var='axis').
+    // Ninguna variante legítima es solo "axis"/"switch" (0 casos en n=65).
+    if (/^(axis|switch|switches)(\s+(pro|plus|max|ultra|v\d+))?$/i.test(String(variante || "").trim())) {
+      reasons.push(
+        "La variante es un fragmento de switch huérfano (split de celda roto)",
+      );
+    }
+
     // YELLOW: model has no alphanumeric code but the source row DID carry one
     // (EAN-13 or a code with digits) -> the real code was lost (merged cell / matrix).
     const r = raw || "";
