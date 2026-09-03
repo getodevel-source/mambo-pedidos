@@ -2035,6 +2035,11 @@ const Tests = {
 			blk[3].variante === "Pink" && blk[4].variante === "Black",
 			"PIL9: distinto precio o desacuerdo entre donantes no se toca",
 		);
+		// PIL9b (REVERTIDO): qualifier de matriz por ventana/traza ingenua
+		// unía basura de columnas vecinas (12 filas KZ degradadas en la
+		// medición: Mic without, Hot Harman Target...). La asociación correcta
+		// exige grupo-parentético atómico, fuera de alcance hoy. #33 queda
+		// sucio-documentado; el gate de colisiones (PIL7) lo cubre si colisiona.
 	},
 
 	testHonestModelQualityGate() {

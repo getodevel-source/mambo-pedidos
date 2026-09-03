@@ -1,7 +1,7 @@
 {
  "counts": {
-  "CAMPO": 11,
-  "MENOR": 20,
+  "CAMPO": 10,
+  "MENOR": 21,
   "CRITICO": 13,
   "OK": 21
  },
@@ -86,8 +86,8 @@
   },
   {
    "id": 8,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_08_AJAZZ_LIST_20260605__p11.png)",
+   "veredicto": "MENOR",
+   "razon": "IT9: AJ139P V3 identifica fila única ($24.58); Mc/MAX coexisten inconsistentes en la hoja (col1 MAX vs col2 Mc) sin forma de resolver — queda como ruido menor en variante.",
    "marca": "Ajazz",
    "modelo": "AJ139P NL V3",
    "variante": "Black Paw3950 Star",

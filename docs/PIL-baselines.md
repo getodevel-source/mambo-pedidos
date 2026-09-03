@@ -288,3 +288,28 @@ Efecto: #5 → 'Orange Green Wired' (distinguida, re-etiquetada OK), #61 suma
 FNs restantes (6): #8 (qualifier MAX/Mc), #16 (modelo fusionado perdido),
 #23 (techo Star/+Gift), #33 (qualifier de matriz), #57 (V2 del axis),
 #64 (colorway en modelo).
+
+## Iteración 9 — Mc/MAX irresoluble + revert qualifier (2026-09-03)
+
+Dos movimientos:
+1. #8 → MENOR con evidencia de capa de texto (col1 dice MAX, col2 dice Mc;
+   ambas reales e inconsistentes en la hoja; AJ139P V3 identifica fila única
+   y solo hay ruido en variante — mismo estándar que #9).
+2. REVERT del qualifier-join PIL9b: la ventana fija unía basura de columnas
+   vecinas (12 filas KZ degradadas). Se probó nearest-column + paréntesis y
+   persistía basura ('Mic without' etc.). Lección: asociar headers de matriz
+   exige grupo-parentético atómico, no ventana. #33 queda sucio-documentado.
+
+| Métrica | IT8 | IT9 |
+|---|---|---|
+| recall_dirty | 75% (18/24) | **78% (18/23)** |
+| FP_rate_clean | 0% | **0%** |
+
+## Backlog (5 FNs con causa, para el próximo loop)
+
+- #16 (S75PRO perdido): asociación de fusionada multinivel — propagar modelo.
+- #33 (Libra sin qualifier): header de matriz — grupo-parentético atómico.
+- #57 (V2 del axis): awareness de columna Axis — no gatear por string solo.
+- #64 (Mountains en modelo): colorway pegado — vocabulario o columna color.
+- #23 (Star/+Gift): techo documentado — OCR no concluyente, queda humano.
+- #8-pendiente: si el proveedor aclara Mc vs MAX, re-etiquetar OK.
