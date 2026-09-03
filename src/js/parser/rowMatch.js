@@ -696,7 +696,7 @@ extractPageProductsByTableRows(
 			const list = (typeof TextSanitizer !== "undefined" && TextSanitizer && TextSanitizer.KNOWN_BRANDS) || [];
 			const lw = String(w || "").trim().toLowerCase();
 			return Array.isArray(list) && list.some((b) => String(b).toLowerCase() === lw);
-		} catch (e) { return false; }
+		} catch { return false; }
 	},
 
 	// PIL9: una fila sin palabra de conexión (wired/wireless/bluetooth) la toma
