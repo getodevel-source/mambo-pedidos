@@ -163,8 +163,13 @@ const QuoteGenerator = {
       const pvpU = item.pvp || item.fob || 0;
       const sub = pvpU * (item.qty || 1);
       sumItems += sub;
-      const hasImage = typeof item.img === 'string' && /data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(item.img.trim());
-      const imgCell = hasImage ? `<img src="${this.esc(item.img)}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">-</span>`;
+      // Perf (spec process-quote): la cotización embebe UNA imagen por fila; el
+      // sub-thumb 36px (imgSm, creado en el import) baja el HTML de ~14MB a ~2MB.
+      const qImg = (typeof item.imgSm === 'string' && /data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(item.imgSm.trim()))
+        ? item.imgSm
+        : item.img;
+      const hasImage = typeof qImg === 'string' && /data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(String(qImg).trim());
+      const imgCell = hasImage ? `<img src="${this.esc(String(qImg))}" style="width: 36px; height: 36px; object-fit: contain; border-radius: 4px; border: 1px solid #cbd5e1;">` : `<span style="color: #cbd5e1;">-</span>`;
       const costCell = showCosts ? `<td style="padding: 8px; text-align: right; font-family: monospace; color: #64748b;">$${(item.fob || 0).toFixed(2)}</td>` : '';
       itemsHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">

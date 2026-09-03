@@ -489,6 +489,22 @@ const AppStorage = {
   // decode sincrónico (img.width justo después de src) devuelve 0 en Chromium/
   // WebKit, así que se espera onload. Sin canvas (tests/Node) devuelve null y
   // el caller conserva la imagen original.
+  // Encodo un canvas ya dibujado: JPEG si no hay alpha (más chico), PNG si la hay.
+  _encodeCanvas(c, quality = 0.82) {
+    try {
+      const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let opaque = true;
+      for (let i = 3; i < px.length && opaque; i += 4) if (px[i] < 250) opaque = false;
+      return opaque ? c.toDataURL('image/jpeg', quality) : c.toDataURL('image/png');
+    } catch {
+      return c.toDataURL('image/png');
+    }
+  },
+
+  // Genera thumbnails (112px para render + 36px para cotizaciones) de una
+  // dataURL en UNA decode. ASINCRÓNICO: img.width justo después de src da 0 en
+  // Chromium/WebKit; se espera onload. Sin canvas (tests/Node) devuelve null y
+  // el caller conserva la imagen original.
   async _makeThumb(dataUrl, maxSide = 112) {
     try {
       if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
@@ -506,17 +522,21 @@ const AppStorage = {
       const ctx = c.getContext && c.getContext('2d');
       if (!ctx) return null;
       ctx.drawImage(img, 0, 0, w, h);
-      // Fotos (sin alpha) → JPEG q0.82 (3-6KB c/u); con transparencia → PNG
-      // (el canvas transparente pintaría negro sobre JPEG). El ZOOM nunca usa
-      // este thumb: resuelve el archivo completo por _imageRef.
+      const thumb = this._encodeCanvas(c);
+      // Sub-thumb 36px para cotizaciones (spec process-quote): el HTML embebe
+      // la imagen por fila; 36px ≈ 1-2KB vs 12KB del thumb → quote 337→~120ms.
+      let sm = null;
       try {
-        const px = ctx.getImageData(0, 0, w, h).data;
-        let opaque = true;
-        for (let i = 3; i < px.length && opaque; i += 4) if (px[i] < 250) opaque = false;
-        return opaque ? c.toDataURL('image/jpeg', 0.82) : c.toDataURL('image/png');
-      } catch {
-        return c.toDataURL('image/png');
-      }
+        const s36 = document.createElement('canvas');
+        s36.width = Math.max(1, Math.round(img.width * (36 / Math.max(1, short))));
+        s36.height = Math.max(1, Math.round(img.height * (36 / Math.max(1, short))));
+        const sx = s36.getContext && s36.getContext('2d');
+        if (sx) {
+          sx.drawImage(img, 0, 0, s36.width, s36.height);
+          sm = this._encodeCanvas(s36);
+        }
+      } catch {}
+      return { thumb, sm };
     } catch { return null; }
   },
 
@@ -557,7 +577,11 @@ const AppStorage = {
       await Promise.all(chunk.map(async (item) => {
         if (item && item._imageRef && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
           const t = await this._makeThumb(item.img);
-          if (t) { item.img = t; thumbs++; }
+          if (t) {
+            item.img = t.thumb || item.img;
+            if (t.sm) item.imgSm = t.sm;
+            thumbs++;
+          }
         }
       }));
     }
@@ -579,7 +603,9 @@ const AppStorage = {
           try {
             const bytes = await fsApi.readBytes(item._imageRef.relativePath);
             const dataUrl = this._bytesToDataUrl(bytes, item._imageRef.mime);
-            item.img = (await this._makeThumb(dataUrl)) || dataUrl;
+            const t = await this._makeThumb(dataUrl);
+            item.img = (t && t.thumb) || dataUrl;
+            if (t && t.sm) item.imgSm = t.sm;
           } catch (e) { item.img = '-'; delete item._imageRef; }
         }
       }));

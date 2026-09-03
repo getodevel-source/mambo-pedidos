@@ -180,7 +180,7 @@ async function validarYOarmarPedido() {
   const bySku = new Map(catalog.map(c => [c.sku, c]));
   const items = Object.entries(selection).map(([sku, qty]) => {
     const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', imgSm: r ? r.imgSm : undefined, status: r.status, qty };
   });
   if (items.some(item => item.status === 'RED')) {
     toast('Hay productos en rojo que no pueden pasar a un pedido confirmado', 'error');
@@ -208,7 +208,7 @@ function armarPedido() {
   const bySku = new Map(catalog.map(c => [c.sku, c]));
   const items = sel.map(([sku, qty]) => {
     const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
-    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', status: r.status, qty };
+    return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', imgSm: r ? r.imgSm : undefined, status: r.status, qty };
   });
   currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');

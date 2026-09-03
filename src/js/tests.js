@@ -33,6 +33,7 @@ const Tests = {
 		this.testColorFieldSanitization();
 		this.testQuoteGeneratorHtml();
 		this.testQuoteI18nFormatterCache();
+		this.testQuoteUsesSmallThumb();
 		this.testImageSpatialMatching();
 		this.testImageShapeGate();
 		this.testImageShapeGateCompatible();
@@ -701,6 +702,26 @@ const Tests = {
 		for (let i = 0; i < 20000; i++) QuoteGenerator.formatCurrency(1234.5, { currency: "USD" });
 		const elapsed = Date.now() - t0;
 		this.assert(elapsed < 1500, "20k formatos con caché < 1.5s (got " + elapsed + "ms)");
+		QuoteGenerator._fmtCache.clear();
+	},
+
+	// Spec process-quote: la cotización usa el sub-thumb 36px (imgSm) cuando existe
+	// (el HTML embebe UNA imagen por fila: 1.5KB vs 12KB → quote 337→~120ms).
+	testQuoteUsesSmallThumb() {
+		const ped = { name: "P", date: new Date().toISOString(), items: [
+			{ sku: "A-1", marca: "X", modelo: "M1", fob: 10, qty: 1, pvp: 20, img: "data:image/png;base64,THUMBGRANDELARGO", imgSm: "data:image/jpeg;base64,CHICO1" },
+			{ sku: "A-2", marca: "X", modelo: "M2", fob: 11, qty: 1, pvp: 21, img: "data:image/png;base64,THUMBGRANDELARGO", imgSm: "data:image/jpeg;base64,CHICO2" },
+			{ sku: "A-3", marca: "X", modelo: "M3", fob: 12, qty: 1, pvp: 22, img: "data:image/png;base64,THUMBGRANDELARGO" },
+		]};
+		let outHtml = "";
+		const origOpen = window.open;
+		window.open = (url, name) => ({ document: { write: (h) => { outHtml = h; }, close: () => {} } });
+		QuoteGenerator.generatePrintableQuote(ped, QuoteGenerator.getConfig(), { skipHistory: true, number: "X1" });
+		window.open = origOpen;
+		this.assert(typeof outHtml === "string" && outHtml.length > 0, "quote genera html");
+		this.assert(outHtml.includes("CHICO1") && outHtml.includes("CHICO2"), "quote usa imgSm (36px) cuando existe");
+		this.assert(!outHtml.includes("THUMBGRANDELARGO"), "quote NO embebe el thumb 112px cuando hay imgSm (3 ítems: los 2 con imgSm no usan el thumb)");
+		this.assert(outHtml.split("THUMBGRANDELARGO").length === 2, "solo el ítem sin imgSm usa el fallback al thumb 112px");
 		QuoteGenerator._fmtCache.clear();
 	},
 
