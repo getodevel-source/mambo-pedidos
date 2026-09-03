@@ -80,6 +80,7 @@ global.RemediationConfig = require(jsPath("remediationConfig.js"));
 global.FileImporter = require(jsPath("fileImporter.js"));
 global.QuoteGenerator = require(jsPath("quoteGenerator.js"));
 global.ImportsTracker = require(jsPath("importsTracker.js"));
+global.ImportGuide = require(jsPath("importGuide.js"));
 global.AppUpdater = require(jsPath("updater.js"));
 global.CatalogAssignmentGates = require(jsPath("catalogAssignmentGates.js"));
 global.UINotifications = require(jsPath("ui/notifications.js"));

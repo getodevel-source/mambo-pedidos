@@ -29,6 +29,7 @@ const Tests = {
 		this.testInfallibilityGate();
 		this.testWeightBasedFreight();
 		this.testCourierWarnings();
+		this.testImportGuide();
 		this.testTextSanitizer();
 		this.testColorFieldSanitization();
 		this.testQuoteGeneratorHtml();
@@ -619,6 +620,125 @@ const Tests = {
 		this.assert(
 			hasWarning,
 			"Advertencia activada cuando el pedido Courier supera USD 3000 FOB",
+		);
+	},
+
+	// ── ImportGuide (Etapa A): plan exhaustivo + fail-closed ──
+	// Exhaustividad: los tests afirman el SET COMPLETO de pasos por régimen.
+	// Agregar un paso al motor sin actualizar estos sets = rojo en CI
+	// ("no nos falta nada" es verificable, no una promesa).
+	testImportGuide() {
+		const pedidoMixto = [
+			{ sku: "K1", cat: "TECLADO", modelo: "Kumara", fob: 30, qty: 5 },
+			{ sku: "M1", cat: "MOUSE", modelo: "Mamba BT", fob: 20, qty: 10, weightKg: 0.2 },
+			{ sku: "H1", cat: "HEADSET", modelo: "Nari", fob: 50, qty: 3 },
+			{ sku: "C1", cat: "CONTROLLER", modelo: "Pad", fob: 25, qty: 4 },
+		];
+		const door = { pesoKg: 10, costoPorKg: 12, fletePct: 0.15, seguroPct: 0.015, regimen: "importador" };
+
+		// 1) Marítimo con pedido mixto (cable + wireless) → SET COMPLETO de 14 pasos.
+		const planMar = ImportGuide.planFor(pedidoMixto, { regimen: "importador", fleteModo: "peso", pesoKg: 10, transporte: "maritimo", enacomTitular: "fabricante" }, door);
+		const idsMar = planMar.pasos.map((p) => p.id).join(",");
+		this.assert(
+			planMar.regimen === "maritimo" && planMar.valido,
+			"ImportGuide: plan marítimo válido para pedido mixto",
+		);
+		this.assert(
+			idsMar === "orden-compra,pago,produccion,documentacion,flete,arribo,despachante,sim,ncm-aforo,tributos,enacom,deposito,levante,recepcion",
+			"ImportGuide: marítimo genera el SET COMPLETO de 14 pasos (incluye ENACOM solo por wireless)",
+		);
+
+		// 2) Marítimo solo-cable → 13 pasos, SIN enacom.
+		const planCable = ImportGuide.planFor([pedidoMixto[0]], { regimen: "importador", fleteModo: "peso", pesoKg: 5, transporte: "maritimo" }, door);
+		this.assert(
+			planCable.pasos.length === 13 && !planCable.pasos.some((p) => p.id === "enacom"),
+			"ImportGuide: pedido solo-cable NO genera el paso ENACOM",
+		);
+
+		// 3) Courier personal cable-only → SET COMPLETO de 8 pasos, válido, sin aviso de reventa.
+		const planCp = ImportGuide.planFor([pedidoMixto[0]], { regimen: "courier", proposito: "personal", fleteModo: "peso", pesoKg: 5, transporte: "courier" }, door);
+		this.assert(
+			planCp.valido && planCp.regimen === "courier",
+			"ImportGuide: plan courier personal válido",
+		);
+		this.assert(
+			planCp.pasos.map((p) => p.id).join(",") === "compra,despacho-origen,limites,transito,arribo-simplificado,tributos-simplificados,entrega,registro",
+			"ImportGuide: courier personal genera el SET COMPLETO de 8 pasos",
+		);
+		this.assert(
+			!planCp.avisos.some((a) => a.includes("reventa")),
+			"ImportGuide: courier personal sin aviso de régimen fiscal",
+		);
+
+		// 4) Courier reventa + wireless → aviso d1 + ENACOM + litio; nunca silencioso.
+		const planCr = ImportGuide.planFor(pedidoMixto, { regimen: "courier", proposito: "reventa", fleteModo: "peso", pesoKg: 8, transporte: "courier", enacomTitular: "propia" }, door);
+		const idsCr = planCr.pasos.map((p) => p.id).join(",");
+		this.assert(
+			planCr.pasos.some((p) => p.id === "regimen-fiscal"),
+			"ImportGuide: courier reventa incluye el paso de régimen fiscal (d1)",
+		);
+		this.assert(
+			idsCr.includes("enacom") && idsCr.includes("litio-aereo"),
+			"ImportGuide: courier reventa wireless genera ENACOM + litio aéreo",
+		);
+		this.assert(
+			planCr.avisos.some((a) => a.includes("reventa") && a.includes("verificación")),
+			"ImportGuide: aviso d1 honesto (verificación de fuente) presente",
+		);
+
+		// 5) Courier fuera de límites → fail-closed: plan inválido + sugerencia barco.
+		const planOver = ImportGuide.planFor([{ sku: "X1", cat: "TECLADO", modelo: "K", fob: 4000, qty: 1 }], { regimen: "courier", fleteModo: "peso", pesoKg: 10, transporte: "courier" }, door);
+		this.assert(
+			planOver.valido === false && planOver.bloqueantes.some((b) => b.paso === "limites" && b.impacto.includes("barco")),
+			"ImportGuide: CIF > USD 3.000 invalida el courier y sugiere régimen importador",
+		);
+
+		// 6) Peso > 50kg (por ítems, sin peso manual) → fail-closed.
+		const planPeso = ImportGuide.planFor([{ sku: "K2", cat: "TECLADO", modelo: "K", fob: 5, qty: 60 }], { regimen: "courier", fleteModo: "peso", pesoKg: 0, transporte: "courier" }, { pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguroPct: 0.015 });
+		this.assert(
+			planPeso.valido === false && planPeso.bloqueantes.some((b) => b.queFalta.includes("60")),
+			"ImportGuide: 60kg de ítems invalida el courier (límite 50kg)",
+		);
+
+		// 7) Pesos: default de categoría + override editable por ítem.
+		this.assert(
+			ImportGuide.pesoItemKg({ cat: "TECLADO", modelo: "K" }) === 1.0 &&
+			ImportGuide.pesoItemKg({ cat: "MOUSE", modelo: "M" }) === 0.15,
+			"ImportGuide: peso default por categoría (teclado 1kg, mouse 0.15kg)",
+		);
+		this.assert(
+			ImportGuide.pesoTotalKg([{ cat: "MOUSE", modelo: "M", weightKg: 0.3, qty: 4 }]) === 1.2,
+			"ImportGuide: item.weightKg editable gana sobre el default (0.3kg × 4)",
+		);
+
+		// 8) Fail-closed por datos: sin flete (% 0) → paso flete y tributos incompletos,
+		//    con impacto explícito, pero el RESTO del plan sigue siendo informe.
+		const planSinFlete = ImportGuide.planFor([pedidoMixto[0]], { regimen: "importador", fleteModo: "pct", fletePct: 0, transporte: "maritimo" }, { pesoKg: 0, fletePct: 0, seguroPct: 0.015 });
+		const pasoFlete = planSinFlete.pasos.find((p) => p.id === "flete");
+		const pasoTributos = planSinFlete.pasos.find((p) => p.id === "tributos");
+		this.assert(
+			pasoFlete && !pasoFlete.completo && pasoFlete.faltantes[0].impacto.includes("CIF"),
+			"ImportGuide: sin flete el paso flete queda incompleto con impacto sobre CIF",
+		);
+		this.assert(
+			pasoTributos && !pasoTributos.completo,
+			"ImportGuide: sin flete también el paso tributos queda incompleto (depende de CIF)",
+		);
+
+		// 9) Checklist documental: el paso se completa SOLO cuando se confirma.
+		const sinDocs = ImportGuide.planFor([pedidoMixto[0]], { regimen: "importador", fleteModo: "peso", pesoKg: 5, transporte: "maritimo" }, door);
+		const conDocs = ImportGuide.planFor([pedidoMixto[0]], { regimen: "importador", fleteModo: "peso", pesoKg: 5, transporte: "maritimo", checks: { documentacion: true } }, door);
+		this.assert(
+			!sinDocs.pasos.find((p) => p.id === "documentacion").completo &&
+			conDocs.pasos.find((p) => p.id === "documentacion").completo,
+			"ImportGuide: paso documentación solo completa con check confirmado",
+		);
+
+		// 10) Sin pedido → plan inválido con bloqueante explícito.
+		const planVacio = ImportGuide.planFor([], { regimen: "importador" }, door);
+		this.assert(
+			planVacio.valido === false && planVacio.bloqueantes.some((b) => b.queFalta === "No hay pedido"),
+			"ImportGuide: sin pedido el plan es inválido y lo dice",
 		);
 	},
 
