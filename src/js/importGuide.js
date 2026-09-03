@@ -23,7 +23,13 @@ const ImportGuide = {
   },
   PESO_DEFAULT_KG: 0.5,
 
-  // Límites del régimen courier (Decreto 333/25, ya base del motor IT21).
+  // Límites del régimen courier — VERIFICADO con fuente primaria (BO 02/12/2024,
+  // Decreto 1065/2024 Art. 1º + RG AFIP 4450/19 citada en su VISTO): 5 envíos/año por
+  // persona, franquicia USD 400 FOB, sin finalidad comercial; tope operativo USD 3.000
+  // y 50kg por paquete (Decreto 1187/93 art. 1º bis, citado en el VISTO: el peso se
+  // refiere a cada paquete, no al total — la app usa el total como criterio
+  // conservador). El arancel 50% sobre el excedente y el IVA 21% vienen de la
+  // normativa complementaria ARCA (base del motor IT21).
   COURIER_LIMITS: { MAX_CIF_USD: 3000, MAX_PESO_KG: 50, FRANQUICIA_USD: 400, ARANCEL_EXCEDENTE: 0.50 },
 
   // ── helpers sobre el pedido ──
@@ -121,8 +127,8 @@ const ImportGuide = {
       'DHL/FedEx/UPS: pasá dirección, DNI/CUIT y declaración de contenido. Te dan el tracking.',
       'proveedor', 0, '1-3 días', 'couriers ✓'),
     (s) => s.pasoSeco('limites', 'Chequeo de límites del régimen courier',
-      'Máximo USD 3.000 CIF y 50kg por envío (Decreto 333/25). Si lo superás, el envío NO entra por courier: hay que pasar a régimen importador (barco). Si es para uso personal, también hay tope de 5 envíos/año.',
-      'vos', 0, 'antes de comprar', 'Decreto 333/25 ✓',
+      'Máximo USD 3.000 y 50kg por envío, franquicia de USD 400 (sobre valor FOB) y tope de 5 envíos/año por persona (Decreto 1065/2024 Art. 1º). Si lo superás, el envío NO entra por courier: hay que pasar a régimen importador (barco).',
+      'vos', 0, 'antes de comprar', 'Decreto 1065/2024 ✓ (BO 02/12/2024, Art. 1º)',
       [{ queFalta: 'CIF y peso dentro de los límites courier', impacto: 'fuera de límites el régimen courier no aplica: el plan es inválido', check: (p, st, meta) => meta.cifUsd <= ImportGuide.COURIER_LIMITS.MAX_CIF_USD && meta.pesoTotal <= ImportGuide.COURIER_LIMITS.MAX_PESO_KG }]),
     (s) => s.pasoSeco('transito', 'Tránsito aéreo internacional',
       '2 a 7 días hasta Argentina. Seguilo con el tracking del courier.',
@@ -130,9 +136,9 @@ const ImportGuide = {
     (s) => s.pasoSeco('arribo-simplificado', 'Arribo: el courier despacha solo',
       'NO necesitás despachante de aduana: el courier presenta el despacho simplificado ante Aduana. Te cobra sus gastos (paso 5 del asistente).',
       'courier', 0, 'al llegar', 'AFIP ✓'),
-    (s) => s.pasoSeco('tributos-simplificados', 'Tributos simplificados',
-      'Si el CIF supera USD 400: 50% de arancel sobre el excedente + IVA 21% sobre el total. El courier te los factura antes de entregar. Sin anticipos (Ganancias/IIBB/IVA adicional).',
-      'courier', 0, 'antes de entregar', 'Decreto 333/25 ✓',
+    (s) => s.pasoSeco('tributos-simplificados', 'Tributos simplificados (solo uso personal)',
+      'Si el valor supera la franquicia de USD 400 (FOB; la app compara el CIF como criterio conservador): 50% de arancel sobre el excedente + IVA 21% sobre el total. El courier te los factura antes de entregar. Sin anticipos (Ganancias/IIBB/IVA adicional).',
+      'courier', 0, 'antes de entregar', 'Decreto 1065/2024 + normativa complementaria ARCA ✓',
       [{ queFalta: 'CIF conocido (flete + seguro definidos)', impacto: 'sin CIF real no se sabe si pagás arancel ni cuánto', check: (p, st, meta) => meta.cifUsd != null }]),
     (s) => s.pasoSeco('entrega', 'Entrega y verificación contra factura',
       'Recibí, contá contra la factura del vendedor y guardala para contabilidad.',
@@ -142,12 +148,23 @@ const ImportGuide = {
       'vos', 0, '1 minuto', 'app ✓')
   ],
 
-  // Paso de aviso cuando courier + reventa: el simplificado es de consumidor
-  // final. Condicional y documentado como verificación pendiente (d1).
+  // Paso de aviso cuando courier + reventa: CONFIRMADO con fuente primaria (Decreto
+  // 1065/2024 Art. 1º: el simplificado rige "sin finalidad comercial"; el excedente
+  // "no quedará alcanzado por los beneficios"). Con reventa la app calcula la
+  // matriz NCM completa automáticamente (ver motor) — este paso lo explica.
   COURIER_REVENTA_AVISO() {
     return ImportGuide.pasoSeco('regimen-fiscal', 'Régimen fiscal: uso comercial',
-      'El régimen simplificado courier es para consumo final. Si revendés, los tributos reales son los de la matriz NCM completa (el courier despacha \"por cuenta y orden\"). El motor aún calcula el simplificado: esto está en verificación de fuente (AFIP/couriers) — no lo des por cerrado sin confirmar.',
-      'vos', 0, '—', 'AFIP/couriers ⚠️ verificar (d1)');
+      'El régimen simplificado courier rige "sin finalidad comercial" (Decreto 1065/2024 Art. 1º). Como este envío es para reventa, la app lo calcula con la matriz NCM completa (DI + TE + IVA + IVA adicional + Ganancias + IIBB): el courier despacha por cuenta y orden y te los factura antes de entregar.',
+      'vos', 0, '—', 'Decreto 1065/2024 Art. 1º ✓ (BO 02/12/2024)');
+  },
+
+  // En courier + reventa el paso de tributos simplificados NO aplica: se reemplaza
+  // por el de matriz completa (mismo dato requerido: CIF conocido).
+  COURIER_TRIBUTOS_COMPLETOS() {
+    return ImportGuide.pasoSeco('tributos-completos', 'Tributos completos (matriz NCM)',
+      'Con finalidad comercial el simplificado no aplica: pagás DI + TE + IVA + IVA adicional + Ganancias + IIBB según el NCM de cada producto (la app ya los calcula). El courier los liquida por cuenta y orden.',
+      'courier', 0, 'antes de entregar', 'Decreto 1065/2024 Art. 1º ✓ + matriz NCM ✓',
+      [{ queFalta: 'CIF conocido (flete + seguro definidos)', impacto: 'sin CIF real los tributos no son los reales', check: (p, st, meta) => meta.cifUsd != null }]);
   },
 
   // Paso de recargo por batería de litio en AÉREO (documental: el costo ya
@@ -174,15 +191,35 @@ const ImportGuide = {
       try {
         const res = Calculator.calculateDoorToDoorExactCost(items, doorConfig);
         if (res && res.summary) cifUsd = Number(res.summary.cifTotalUsd) || null;
-      } catch (e) { /* si el motor falla, el plan queda sin CIF y la validación lo marca */ }
+      } catch { /* si el motor falla, el plan queda sin CIF y la validación lo marca */ }
     }
     const pesoTotal = Number(doorConfig.pesoKg) > 0 ? Number(doorConfig.pesoKg) : ImportGuide.pesoTotalKg(items);
     const meta = { cifUsd, pesoTotal, items };
 
+    const pasos = ImportGuide._planSteps(regimen, proposito, items, st);
+    const { bloqueantes, avisos } = ImportGuide._planValidity(regimen, proposito, items, st, meta);
+
+    // Validación por paso (fail-closed).
+    const pasosOut = pasos.map((paso) => {
+      const faltantes = (paso.requiere || [])
+        .filter((r) => !r.check(items, st, meta))
+        .map((r) => ({ queFalta: r.queFalta, impacto: r.impacto }));
+      return Object.assign({}, paso, { completo: faltantes.length === 0, faltantes });
+    });
+
+    return {
+      regimen, proposito, valido: bloqueantes.length === 0,
+      bloqueantes, avisos,
+      cifUsd, pesoTotal,
+      pasos: pasosOut
+    };
+  },
+
+  // Pasos por régimen + condicionales (ENACOM, régimen-fiscal, litio).
+  _planSteps(regimen, proposito, items, st) {
     const base = regimen === 'courier' ? ImportGuide.COURIER : ImportGuide.MARITIMO;
     let pasos = base.map((f) => f(ImportGuide));
 
-    // Condicionales.
     if ((regimen === 'maritimo' || proposito === 'reventa') && ImportGuide.tieneInalambricos(items)) {
       // ENACOM vive acá y solo acá (la base MARITIMO no lo trae): un pedido
       // solo-cable no lo necesita. Mismo id en ambos regímenes para que el
@@ -196,27 +233,27 @@ const ImportGuide = {
       const ancla = regimen === 'courier' ? 'tributos-simplificados' : 'tributos';
       const i = pasos.findIndex((p) => p.id === ancla);
       if (i >= 0) pasos.splice(i + 1, 0, conEnacom);
-      else pasos = [...pasos, conEnacom];
+      else pasos.push(conEnacom);
     }
     if (regimen === 'courier' && proposito === 'reventa') {
       pasos = [ImportGuide.COURIER_REVENTA_AVISO(), ...pasos];
+      // El simplificado no aplica con finalidad comercial: se sale el paso de
+      // tributos simplificados y entra el de matriz completa (mismo lugar).
+      const j = pasos.findIndex((p) => p.id === 'tributos-simplificados');
+      if (j >= 0) pasos.splice(j, 1, ImportGuide.COURIER_TRIBUTOS_COMPLETOS());
     }
     if ((st.transporte === 'aereo' || st.transporte === 'courier') && ImportGuide.tieneInalambricos(items)) {
-      pasos = [...pasos, ImportGuide.LITIO_AEREO(regimen)];
+      pasos.push(ImportGuide.LITIO_AEREO(regimen));
     }
+    return pasos;
+  },
 
-    // Validación por paso (fail-closed).
+  // Bloqueantes (plan inválido) + avisos: límites courier, peso, franquicia.
+  _planValidity(regimen, proposito, items, st, meta) {
+    const cifUsd = meta.cifUsd;
+    const pesoTotal = meta.pesoTotal;
     const bloqueantes = [];
     const avisos = [];
-    const pasosOut = pasos.map((paso) => {
-      const faltantes = (paso.requiere || [])
-        .filter((r) => !r.check(items, st, meta))
-        .map((r) => ({ queFalta: r.queFalta, impacto: r.impacto }));
-      const completo = faltantes.length === 0;
-      return Object.assign({}, paso, { completo, faltantes });
-    });
-
-    // Bloqueantes de plan.
     if (!items.length) {
       bloqueantes.push({ paso: 'orden-compra', queFalta: 'No hay pedido', impacto: 'sin pedido no hay plan de importación' });
     }
@@ -227,7 +264,7 @@ const ImportGuide = {
       bloqueantes.push({ paso: 'limites', queFalta: `Peso ${Math.round(pesoTotal)}kg supera 50kg`, impacto: 'este envío NO entra por courier: cambiá a régimen importador (barco)' });
     }
     if (regimen === 'courier' && proposito === 'reventa') {
-      avisos.push('Propósito de reventa con régimen courier: el simplificado es de consumidor final; los tributos reales de reventa (matriz completa por cuenta y orden) están en verificación de fuente (d1).');
+      avisos.push('Reventa con régimen courier: se calcula con la matriz NCM completa (Decreto 1065/2024 Art. 1º — el simplificado rige "sin finalidad comercial").');
     }
     if (st.fleteModo === 'peso' && !(Number(st.pesoKg) > 0) && ImportGuide.pesoTotalKg(items) > 0) {
       avisos.push(`Sin peso manual definido: el estimado calculado de tus productos es ${Math.round(ImportGuide.pesoTotalKg(items) * 100) / 100}kg. Podés editarlo por ítem o fijar el peso total.`);
@@ -235,13 +272,7 @@ const ImportGuide = {
     if (regimen === 'courier' && cifUsd != null && cifUsd > ImportGuide.COURIER_LIMITS.FRANQUICIA_USD) {
       avisos.push(`CIF $${Math.round(cifUsd)} supera la franquicia de USD ${ImportGuide.COURIER_LIMITS.FRANQUICIA_USD}: pagás 50% de arancel sobre el excedente + IVA 21%.`);
     }
-
-    return {
-      regimen, proposito, valido: bloqueantes.length === 0,
-      bloqueantes, avisos,
-      cifUsd, pesoTotal,
-      pasos: pasosOut
-    };
+    return { bloqueantes, avisos };
   }
 };
 

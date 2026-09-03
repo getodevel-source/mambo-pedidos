@@ -71,7 +71,11 @@ const Calculator = {
     vigenciaHasta: '2027-12-31',
     // Último control humano de la matriz contra el Boletín Oficial.
     actualizada: '2026-08-01',
-    fuentes: 'Decreto 557/23 + Decreto 1140/24 (Bienes de Tecnología de la Información)',
+    // Fuentes verificadas 2026-09-03 con texto primario del BO: el 333/2025
+    // (BO 20/05/2025) modifica el BIT 557/23 — Art. 1 (Anexo IV DIE), Art. 2
+    // (9504.50.00 sale del Anexo V y tributa AEC 20%: confirma controllers), Art. 3
+    // (II 9,5% a celulares/monitores: la app lo avisa, fuera del scope periféricos).
+    fuentes: 'Decreto 557/23 + Decreto 1140/24 + Decreto 333/25 (Bienes de Tecnología de la Información)',
   },
 
   // Estado de vigencia, para que la UI avise. `today` se puede forzar (tests y
@@ -357,7 +361,19 @@ const Calculator = {
     // IT21: régimen de importación. courier = ≤USD 3.000/50kg, arancel simplificado
     // 50% sobre excedente de USD 400, IVA total, SIN anticipos (Ganancias/IIBB/IVA adic).
     // importador = despacho general (matriz NCM completa).
+    // Etapa A (d1 CONFIRMADO con fuente primaria): Decreto 1065/2024, Art. 1º — la
+    // importación PSP/Courier queda desgravada "sin finalidad comercial", 5 envíos/año
+    // por persona, franquicia USD 400 FOB; "el excedente no quedará alcanzado por los
+    // beneficios". Un envío courier CON finalidad comercial (reventa) tributa con la
+    // matriz NCM completa (el courier despacha por cuenta y orden). doorConfig.proposito
+    // ('personal' | 'reventa') selecciona el camino; sin proposito se mantiene el
+    // simplificado (byte-identical a la salida auditada del motor).
     const regimen = doorConfig.regimen || (doorConfig.logisticaModo === 'courier' ? 'courier' : 'importador');
+    if (regimen === 'courier' && (doorConfig.proposito === 'reventa')) {
+      const gen = this.calculateDoorToDoorExactCost(items, Object.assign({}, doorConfig, { regimen: 'importador' }));
+      gen.regimen = 'courier';
+      return gen;
+    }
     if (regimen === 'courier') {
       const excedente = Math.max(0, cifTotal - 400);
       const arancelSimplificado = excedente * 0.50;

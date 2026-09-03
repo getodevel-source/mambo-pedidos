@@ -98,12 +98,12 @@ Cada paso del plan:
 |---|---|---|---|---|
 | 1 | Compra directa — ¿precio DDP (impuestos+envío incluidos) o DDU (pagás acá)? | vos | — | práctica ⚠️ decisión d3 |
 | 2 | El vendedor despacha con courier (DHL/FedEx): dirección, DNI/CUIT, tracking | proveedor | flete (ya en wizard) | couriers ✓ |
-| 3 | Chequeo de límites ANTES de comprar: ≤ USD 3.000 CIF y ≤ 50kg; >5 envíos/año (personal) | vos | — | Decreto 333/25 ✓ (matriz) |
+| 3 | Chequeo de límites ANTES de comprar: ≤ USD 3.000 y ≤ 50kg por envío; franquicia USD 400 (FOB); >5 envíos/año (personal) | vos | — | Decreto 1065/2024 ✓ (BO 02/12/2024, Art. 1º: "sin finalidad comercial"; el excedente "no quedará alcanzado") |
 | 4 | Tránsito aéreo internacional (2-7 días) | courier | — | couriers ⚠️ |
 | 5 | Arribo: el courier hace el despacho simplificado (no necesitás despachante) | courier | gastos del courier (ya en wizard) | AFIP ✓ |
-| 6 | Tributos si CIF > USD 400: 50% del excedente + IVA 21% — los cobra el courier | courier | ya en wizard | Decreto 333/25 ✓ |
+| 6 | Tributos si supera USD 400 (FOB; la app usa CIF, conservador): 50% del excedente + IVA 21% — los cobra el courier | courier | ya en wizard | Decreto 1065/2024 + normativa complementaria ARCA ✓ |
 | 7 | Entrega en domicilio + verificación contra factura | courier | — | práctica ✓ |
-| 8 | Registrar en la app (IMP-xxxx) + contador de envíos del año | vos | — | Decreto 333/25 ✓ |
+| 8 | Registrar en la app (IMP-xxxx) + contador de envíos del año | vos | — | Decreto 1065/2024 ✓ (5 envíos/año por persona) |
 
 **Pasos condicionales (el "no nos falte nada" por producto)**:
 

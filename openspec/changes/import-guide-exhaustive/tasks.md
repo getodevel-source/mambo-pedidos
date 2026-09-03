@@ -52,17 +52,25 @@
       completado persistiendo al registro).
 - [x] Tests: guardado bloqueado/plan adjunto/overrides/checkpoints (suite wizard).
 
-## Iteración A5 — Verificación de fuentes y cierre
+## Iteración A5 — Verificación de fuentes y cierre (investigación 2026-09-03: BO)
 
-- [ ] **Pendiente humano (con fuente primaria, sitios con JS no accesibles por script)**:
-  - Pago/LC: comisiones bancarias reales (el % no está modelado — paso 2 marítimo).
-  - Requisitos exactos SIM (AFIP) y plazos ENACOM (semanas — paso "enacom").
-  - Excepción IATA batería integrada (paso litio-aéreo).
-  - Plazos courier DHL/FedEx reales.
-  - **d1 — courier comercial**: confirmar AFIP RG 3826/2016 + consulta al courier que
-    una empresa que recibe mercadería para reventa tributa matriz completa ("por cuenta
-    y orden") y no el simplificado. Hasta confirmar, la app AVISA (no calcula en
-    silencio): el motor NO se tocó.
+- [x] **d1 CERRADO con fuente primaria** (texto del Boletín Oficial): Decreto 1065/2024
+      (BO 02/12/2024, Art. 1º) — el simplificado PSP/Courier rige "sin finalidad
+      comercial", 5 envíos/año por persona, franquicia USD 400 FOB; el excedente "no
+      quedará alcanzado por los beneficios". 50kg por paquete: Decreto 1187/93 art. 1º
+      bis (citado en su VISTO). Motor ajustado (courier+reventa = matriz completa) con
+      regresión pineada. Ver tasks de import-profitability-compare.
+- [x] **Citas corregidas**: courier → 1065/2024; BIT/aranceles → 333/2025 (BO
+      20/05/2025: Art. 1 modifica 557/23, Art. 2 confirma controllers 9504.50 → AEC
+      20%, Art. 3 crea II 9,5% a celulares/monitores — la app lo avisa aunque no lo
+      calcula, fuera del scope periféricos).
+- [x] **Decreto 334/2025 verificado**: solo Tierra del Fuego (Ley 19.640), 3 unidades/
+      año + USD 3.000 FOB por envío — no aplica a periféricos de Asia; documentado en
+      el comparador.
+- [ ] **Pendiente humano**: base FOB vs CIF del excedente courier (decreto dice FOB;
+      la app usa CIF, conservador — FAQ lo explica), costo/plazos ENACOM, excepción
+      IATA batería integrada, requisitos SIM, plazos DHL/FedEx, comisiones bancarias
+      (pasos ⚠️ en el plan).
 - [x] Auditoría de integración (d3/d4): editar cualquier valor editable en cualquier paso →
       motor, resumen y plan recalculan y coinciden (validate + _effectiveItems + planFor
       comparten el mismo doorConfig); wizard→saveAsImport→Tracker→plan→marcar roundtrip

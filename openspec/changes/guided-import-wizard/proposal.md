@@ -13,10 +13,23 @@ flete, modal Puerta a Puerta con NCM) pero NO acompaña al usuario: hay que sabe
 qué tocar y en qué orden. Un impuesto mal calculado o un costo olvidado (depósito,
 despachante, certificación) se traduce directo en pérdida de ganancia.
 
-## 1. Base auditada (IT19, fuentes: ARCA, AFIP, Decreto PEN 333/2025, CNCE)
+## 1. Base auditada (IT19 + verificación primaria 2026-09-03: textos del Boletín Oficial)
 
-Matriz impositiva VALIDADA para periféricos esports, régimen general, SAS/responsable
-inscripto:
+Tres normas distintas (la app las citaba juntas como "333/25" — corregido):
+
+- **Régimen courier** → **Decreto 1065/2024** (BO 02/12/2024, Art. 1º): importación PSP/Courier
+  "sin finalidad comercial", 5 envíos/año por persona, franquicia USD 400 FOB (DI desgravado
+  + TE exenta); el excedente "no quedará alcanzado por los beneficios". 50kg por paquete
+  (Decreto 1187/93 art. 1º bis, citado en su VISTO); tope operativo USD 3.000 (RG AFIP
+  4450/19, citada en el VISTO). **Decreto 334/2025** (régimen simplificado de pequeños
+  envíos) es SOLO para Tierra del Fuego (Ley 19.640): no aplica a periféricos de Asia.
+- **Aranceles BIT** → **Decreto 333/2025** (BO 20/05/2025): modifica el Decreto 557/23 — Art. 1
+  (Anexo IV DIE), Art. 2 (9504.50.00 sale del Anexo V → tributa AEC 20%: confirma
+  controllers), Art. 3 (Impuestos Internos 9,5% a celulares 8517.13.00, monitores
+  8528.52.00 y aires: la app lo avisa aunque no lo calcula — fuera del scope periféricos).
+
+Matriz impositiva para periféricos esports, régimen general, SAS/responsable
+inscripto (fuentes: ARCA, AFIP, CNCE):
 
 | Concepto | Alícuota 2026 | Fuente | Estado |
 |---|---|---|---|

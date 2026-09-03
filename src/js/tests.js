@@ -29,6 +29,8 @@ const Tests = {
 		this.testInfallibilityGate();
 		this.testWeightBasedFreight();
 		this.testCourierWarnings();
+		this.testCourierReventaFullMatrix();
+		this.testProfitabilityAndCompare();
 		this.testImportGuide();
 		await this.testImportGuideWizard();
 		this.testTextSanitizer();
@@ -624,6 +626,46 @@ const Tests = {
 		);
 	},
 
+	// d1 CONFIRMADO (Decreto 1065/2024 Art. 1º: el simplificado rige "sin finalidad
+	// comercial"): courier + reventa tributa con la matriz NCM completa, igual que el
+	// despacho general. courier + personal mantiene el simplificado auditado IT21
+	// (byte-identical: la rama nueva solo corre con proposito 'reventa').
+	testCourierReventaFullMatrix() {
+		const items = [
+			{ sku: "T1", cat: "TECLADO", modelo: "Kumara", fob: 100, qty: 2 },
+			{ sku: "H1", cat: "HEADSET", modelo: "Nari", fob: 80, qty: 1 },
+		];
+		const base = {
+			pesoKg: 10, costoPorKg: 12, fletePct: 0.15, seguroPct: 0.015,
+			depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
+			iibbPct: 0.03, bpPct: 0,
+		};
+		const simplificado = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "courier" }, base));
+		const reventa = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "courier", proposito: "reventa" }, base));
+		const general = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "importador" }, base));
+		this.assert(
+			simplificado.regimen === "courier" && simplificado.summary.totalAnticiposRecuperablesUsd === 0,
+			"courier personal: régimen simplificado sin anticipos (IT21 intacto)",
+		);
+		this.assert(
+			reventa.regimen === "courier" &&
+				reventa.summary.totalPuertaConIvaUsd === general.summary.totalPuertaConIvaUsd &&
+				reventa.summary.totalAnticiposRecuperablesUsd === general.summary.totalAnticiposRecuperablesUsd &&
+				reventa.summary.totalPuertaConIvaUsd > simplificado.summary.totalPuertaConIvaUsd,
+			"courier reventa: números idénticos al despacho general (matriz completa, más alto que el simplificado)",
+		);
+		this.assert(
+			(reventa.certificationsRequired || []).length >= 0 && general.certificationsRequired.length === reventa.certificationsRequired.length,
+			"courier reventa: certificaciones iguales a las del despacho general",
+		);
+		// Sin propósito explícito no cambia nada (default personal).
+		const sinProposito = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "courier" }, base));
+		this.assert(
+			sinProposito.summary.totalPuertaConIvaUsd === simplificado.summary.totalPuertaConIvaUsd,
+			"courier sin propósito: default personal, salida idéntica a la auditada",
+		);
+	},
+
 	// ── ImportGuide (Etapa A): plan exhaustivo + fail-closed ──
 	// Exhaustividad: los tests afirman el SET COMPLETO de pasos por régimen.
 	// Agregar un paso al motor sin actualizar estos sets = rojo en CI
@@ -683,8 +725,13 @@ const Tests = {
 			"ImportGuide: courier reventa wireless genera ENACOM + litio aéreo",
 		);
 		this.assert(
-			planCr.avisos.some((a) => a.includes("reventa") && a.includes("verificación")),
-			"ImportGuide: aviso d1 honesto (verificación de fuente) presente",
+			planCr.avisos.some((a) => a.includes("Reventa") && a.includes("1065/2024")),
+			"ImportGuide: aviso d1 cita Decreto 1065/2024 Art. 1º (fuente primaria)",
+		);
+		this.assert(
+			planCr.pasos.some((p) => p.id === "tributos-completos") &&
+				!planCr.pasos.some((p) => p.id === "tributos-simplificados"),
+			"ImportGuide: courier reventa reemplaza tributos simplificados por matriz completa",
 		);
 
 		// 5) Courier fuera de límites → fail-closed: plan inválido + sugerencia barco.
@@ -870,6 +917,80 @@ const Tests = {
 			global.toast = prevToast;
 			AppStorage.loadImports = origLoad;
 			AppStorage.saveImports = origSave;
+		}
+	},
+
+	// ── Etapa B/C: rentabilidad por ítem + comparador de regímenes ──
+	testProfitabilityAndCompare() {
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		if (!IW || typeof IW._profitRows !== "function" || typeof IW._compareHtml !== "function") {
+			this.assert(false, "RED: _profitRows/_compareHtml no accesibles");
+			return;
+		}
+		const prevPedido = global.currentPedido;
+		const prevState = IW.state;
+		try {
+			IW.state = {
+				fleteModo: "pct", pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+				transporte: "maritimo", regimen: "importador", proposito: "personal",
+				enacomTitular: null, itemEdits: {}, checks: {},
+				depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
+				recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
+				ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null,
+				origen: "China", margenObjetivo: 0.40
+			};
+			global.currentPedido = { items: [
+				{ sku: "T1", cat: "TECLADO", modelo: "Kumara", fob: 30, qty: 2 },
+				{ sku: "H1", cat: "HEADSET", modelo: "Nari", fob: 80, qty: 1 },
+			] };
+			const items = IW._effectiveItems();
+			const res = Calculator.calculateDoorToDoorExactCost(items, IW._doorConfig());
+			const p = IW._profitRows(res);
+
+			// 1) Orden: el headset (DI 20%) tiene multiplicador mayor que el teclado (DI 0).
+			this.assert(
+				p.rows.length === 2 && p.rows[0].modelo === "Nari" && p.rows[0].multiplicador >= p.rows[1].multiplicador,
+				"rentabilidad: el ítem con mayor multiplicador (DI 20%) va primero",
+			);
+			// 2) Precio sugerido = neto × (1 + margen objetivo 40%).
+			this.assert(
+				p.rows.every((r) => Math.abs(r.sugeridoUnit - r.netoUnit * 1.4) < 1e-6),
+				"rentabilidad: precio sugerido = costo neto × 1.4",
+			);
+			// 3) El margen es editable y recalcula.
+			IW.state.margenObjetivo = 0.5;
+			const p2 = IW._profitRows(res);
+			this.assert(
+				p2.rows.every((r) => Math.abs(r.sugeridoUnit - r.netoUnit * 1.5) < 1e-6),
+				"rentabilidad: cambiar el margen recalcula el sugerido (×1.5)",
+			);
+			IW.state.margenObjetivo = 0.4;
+			// 4) Total sugerido = suma de sugeridos por cantidad.
+			this.assert(
+				Math.abs(p.precioTotalSugerido - p.rows.reduce((a, r) => a + r.sugeridoUnit * r.qty, 0)) < 1e-6,
+				"rentabilidad: el total sugerido es la suma por cantidad",
+			);
+			// 5) Comparador: ambas tarjetas + recomendación.
+			const html = IW._compareHtml(items);
+			this.assert(
+				html.includes("Comparador de regímenes") && html.includes("Despacho general") && html.includes("Courier (uso personal)"),
+				"comparador: muestra ambas tarjetas para el mismo pedido",
+			);
+			this.assert(
+				html.includes("No aplican") && html.includes("334/2025"),
+				"comparador: explica qué regímenes NO aplican (postal/zona franca/TdF)",
+			);
+			// 6) Pedido fuera de límites → courier no entra, solo barco.
+			global.currentPedido = { items: [{ sku: "X1", cat: "TECLADO", modelo: "K", fob: 4000, qty: 1 }] };
+			const html2 = IW._compareHtml(IW._effectiveItems());
+			this.assert(
+				html2.includes("No entra") && html2.includes("barco"),
+				"comparador: CIF > 3000 deja fuera al courier y recomienda barco",
+			);
+		} finally {
+			global.currentPedido = prevPedido;
+			IW.state = prevState;
 		}
 	},
 

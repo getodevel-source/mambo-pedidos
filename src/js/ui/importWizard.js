@@ -40,7 +40,10 @@ const ImportWizard = {
     // seguro explícito en USD (override del %). Persisten en mamboImportWizardState.
     precioLocalUsd: null,
     bpPct: 0,
-    seguroUsdOverride: null
+    seguroUsdOverride: null,
+    // Etapa B (rentabilidad): margen objetivo sobre el costo neto real
+    // (default 40%). El precio sugerido = costo neto × (1 + margen).
+    margenObjetivo: 0.40
   },
   CACHE_KEY: 'mamboImportWizardState',
   // persistence-fix: clave del state auto-guardado. CACHE_KEY queda solo como
@@ -587,6 +590,109 @@ const ImportWizard = {
     if (modal) modal.style.display = 'none';
   },
 
+  // ── Etapa B: rentabilidad por producto ──
+  // Cada fila: multiplicador (caja unit / FOB unit), costo neto unit (con crédito
+  // fiscal recuperado y gastos fijos prorrateados por CIF) y precio sugerido
+  // (neto × (1 + margenObjetivo)). Ordenadas por multiplicador desc: lo primero
+  // es lo que más se come tu margen. No toca el motor: deriva de res.items.
+  _profitRows(res) {
+    const sum = (res && res.summary) ? res.summary : {};
+    const items = (res && Array.isArray(res.items)) ? res.items : [];
+    const m = Number(ImportWizard.state.margenObjetivo);
+    const margen = Number.isFinite(m) && m > 0 ? m : 0.40;
+    const cifTotal = Number(sum.cifTotalUsd) || 0;
+    const gastosFijos = Number(sum.totalGastosFijosDestinoUsd) || 0;
+    const totalQty = items.reduce((a, i) => a + (Number(i.qty) || 0), 0);
+    const rows = items.map((it) => {
+      const qty = Math.max(1, Number(it.qty) || 0);
+      const itemCif = Number(it.itemCif) || 0;
+      const frac = cifTotal > 0 ? itemCif / cifTotal : (totalQty > 0 ? (Number(it.qty) || 0) / totalQty : 0);
+      const gf = gastosFijos * frac;
+      // costoRealItemUsd ya es NETO (itemCif + DI + TE, sin recuperables):
+      // el neto suma solo los gastos fijos prorrateados. La caja suma todo.
+      const netoTotal = (Number(it.costoRealItemUsd) || 0) + gf;
+      const netoUnit = netoTotal / qty;
+      const fobUnit = Number(it.fob) || 0;
+      const cajaTotal = (Number(it.costoRealItemUsd) || 0) + (Number(it.ivaUsd) || 0) + (Number(it.ivaAddUsd) || 0) + (Number(it.percGanUsd) || 0) + (Number(it.iibbUsd) || 0) + (Number(it.bpUsd) || 0) + gf;
+      const mult = fobUnit > 0 ? (cajaTotal / qty) / fobUnit : 0;
+      return {
+        modelo: it.modelo || it.sku, sku: it.sku, qty, fobUnit,
+        multiplicador: mult, netoUnit, sugeridoUnit: netoUnit * (1 + margen),
+        netoTotal, gastosProrrateados: gf
+      };
+    });
+    rows.sort((a, b) => b.multiplicador - a.multiplicador);
+    const precioTotalSugerido = rows.reduce((a, r) => a + r.sugeridoUnit * r.qty, 0);
+    const costoNetoTotal = rows.reduce((a, r) => a + r.netoTotal, 0);
+    return { rows, precioTotalSugerido, costoNetoTotal, margen };
+  },
+
+  _profitHtml(res) {
+    const p = ImportWizard._profitRows(res);
+    const s = ImportWizard.state;
+    const rows = p.rows.map((r) => `<tr>
+      <td style="padding:6px 8px;font-size:12px;">${ImportWizard._esc(r.modelo)}</td>
+      <td style="padding:6px 8px;font-size:12px;text-align:right;">$${r.fobUnit.toFixed(2)}</td>
+      <td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700;">${r.multiplicador.toFixed(2)}x</td>
+      <td style="padding:6px 8px;font-size:12px;text-align:right;">$${r.netoUnit.toFixed(2)}</td>
+      <td style="padding:6px 8px;font-size:12px;text-align:right;color:var(--green-hover);">$${r.sugeridoUnit.toFixed(2)}</td>
+    </tr>`).join('');
+    const precioLocal = s.precioLocalUsd;
+    let totalLine = '';
+    if (precioLocal != null && precioLocal > 0) {
+      const diff = precioLocal - p.precioTotalSugerido;
+      const pct = p.precioTotalSugerido > 0 ? (diff / p.precioTotalSugerido) * 100 : 0;
+      totalLine = `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Tu precio total sugerido ($${Math.round(p.precioTotalSugerido).toLocaleString()}) está <b>${diff >= 0 ? 'por debajo' : 'por encima'}</b> del precio local de referencia ($${Math.round(precioLocal).toLocaleString()}): ${diff >= 0 ? '' : '⚠️ '}margen real ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%${pct < 0 ? ' — con este margen el local te gana' : pct < p.margen * 50 ? ' — margen justo, revisá qué ítem tiene el multiplicador más alto' : ' — hay colchón'}</div>`;
+    }
+    return `<div class="iw-kpi-lbl" style="margin-top:14px;">Rentabilidad por producto (ordenado: el que más te come el margen primero)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;">
+        <label style="font-size:12px;color:var(--text-muted);">Margen objetivo</label>
+        <input type="number" step="1" min="0" class="input" style="width:80px;" value="${Math.round(p.margen * 100)}" onchange="ImportWizard.state.margenObjetivo=Number(this.value)/100;ImportWizard.render()"> <span style="font-size:12px;color:var(--text-muted);">%</span>
+      </div>
+      <div class="table-scroll"><table><thead><tr><th>Producto</th><th>FOB</th><th>Multiplicador</th><th>Costo neto unit</th><th>Precio sugerido</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${totalLine}`;
+  },
+
+  // ── Etapa C: comparador de regímenes (mismo pedido, ambos motores) ──
+  // Compara despacho general vs courier-personal con la MISMA config (una sola
+  // fuente de verdad: el motor). courier+reventa calcula igual que el general
+  // (d1/1065/24) y por eso no se compara dos veces. Regímenes que NO aplican a
+  // periféricos para reventa local se explican en una línea (postal, zona franca,
+  // Decreto 334/2025 solo Tierra del Fuego).
+  _compareHtml(items) {
+    if (typeof Calculator === 'undefined' || !items.length) return '';
+    const base = ImportWizard._doorConfig();
+    const gen = Calculator.calculateDoorToDoorExactCost(items, Object.assign({}, base, { regimen: 'importador' }));
+    const cou = Calculator.calculateDoorToDoorExactCost(items, Object.assign({}, base, { regimen: 'courier', proposito: 'personal' }));
+    const lim = (typeof ImportGuide !== 'undefined') ? ImportGuide.COURIER_LIMITS : { MAX_CIF_USD: 3000, MAX_PESO_KG: 50 };
+    const cifCou = (cou.summary && cou.summary.cifTotalUsd) || 0;
+    const pesoCou = Number(base.pesoKg) > 0 ? Number(base.pesoKg) : ((typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg) ? ImportGuide.pesoTotalKg(items) : 0);
+    const courierEntra = cifCou <= lim.MAX_CIF_USD && pesoCou <= lim.MAX_PESO_KG;
+    const fob = Number(gen.summary.fobTotalUsd) || 1;
+    const card = (titulo, s, entra) => {
+      if (!entra) return `<div style="flex:1;min-width:200px;padding:12px;border-radius:8px;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.05);"><div style="font-size:12px;font-weight:700;">${titulo}</div><div style="font-size:12px;color:#ef4444;margin-top:4px;">No entra en este régimen (CIF $${Math.round(cifCou).toLocaleString()} / ${Math.round(pesoCou * 100) / 100}kg).</div></div>`;
+      return `<div style="flex:1;min-width:200px;padding:12px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.02);"><div style="font-size:12px;font-weight:700;">${titulo}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Caja: <b>$${Math.round(s.totalPuertaConIvaUsd).toLocaleString()}</b></div>
+        <div style="font-size:12px;color:var(--text-muted);">Costo neto: <b style="color:var(--green-hover);">$${Math.round(s.costoNetoRealUsd).toLocaleString()}</b></div>
+        <div style="font-size:12px;color:var(--text-muted);">Multiplicador: <b>${(s.totalPuertaConIvaUsd / fob).toFixed(2)}x</b></div></div>`;
+    };
+    let reco = '';
+    if (!courierEntra) {
+      reco = 'Este pedido supera los límites del courier: solo entra por <b>despacho general (barco)</b>.';
+    } else if (cou.summary.totalPuertaConIvaUsd < gen.summary.totalPuertaConIvaUsd) {
+      reco = 'En este pedido el <b>courier personal</b> sale más barato en caja (menos gastos fijos). Ojo: si es para reventa, el courier tributa la matriz completa igual que el general.';
+    } else {
+      reco = 'En este pedido el <b>despacho general</b> sale igual o más barato en caja, con el mismo costo neto real y sin el tope de 5 envíos/año.';
+    }
+    return `<div class="iw-kpi-lbl" style="margin-top:14px;">Comparador de regímenes (mismo pedido, ambos cálculos)</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
+        ${card('🚢 Despacho general (barco)', gen.summary, true)}
+        ${card('✈️ Courier (uso personal)', cou.summary, courierEntra)}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${reco}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">No aplican a periféricos importados para reventa local: servicio postal internacional (límites menores, sin trazabilidad comercial), zona franca (solo re-exportación) y Decreto 334/2025 (solo productos de Tierra del Fuego, Ley 19.640).</div>`;
+  },
+
   render() {
     const stepsEl = document.getElementById('iwSteps');
     const body = document.getElementById('importWizardBody');
@@ -689,7 +795,7 @@ const ImportWizard = {
             <option value="personal" ${s.proposito==='personal'?'selected':''}>Uso personal / compra puntual</option>
             <option value="reventa" ${s.proposito==='reventa'?'selected':''}>Reventa / uso comercial</option>
           </select>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.proposito==='reventa' ? '⚠️ El régimen simplificado courier es de consumidor final: si revendés, los tributos reales son los de la matriz completa ("por cuenta y orden", en verificación de fuente). La guía te avisa en cada paso.' : 'El régimen simplificado courier (USD 400 exento + 50% del excedente) aplica a consumo final.'}</div></div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.proposito==='reventa' ? '⚠️ Decreto 1065/2024 Art. 1º: el simplificado courier rige "sin finalidad comercial". Para reventa la app calcula los tributos completos (matriz NCM).' : 'El régimen simplificado courier (USD 400 exentos + 50% del excedente) aplica a consumo final (Decreto 1065/2024).'}</div></div>
         <div><label class="wz-lbl">Régimen de importación</label>
           <select class="select" onchange="ImportWizard.state.regimen=this.value;if(this.value==='courier'){ImportWizard.state.transporte='courier';ImportWizard.state.fleteModo='peso';}ImportWizard.render()">
             <option value="importador" ${s.regimen==='importador'?'selected':''}>Importador (despacho general)</option>
@@ -983,6 +1089,8 @@ const ImportWizard = {
         ${paisLine ? `<span>${paisLine.label}: ${paisLine.ratePct}% — ${paisLine.status === 'eliminated' ? 'eliminado (no se paga)' : ''}</span>` : ''}
       </div>
       ${verdictHtml}
+      ${ImportWizard._profitHtml(res)}
+      ${ImportWizard._compareHtml(items)}
       <div class="table-scroll" style="margin-top:14px;"><table><thead><tr><th>Producto</th><th>NCM</th><th>Qty</th><th>Tributos</th><th>Costo unit+IVA</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="ImportWizard.saveAsImport()">💾 Guardar como importación</button>
@@ -1042,7 +1150,7 @@ const ImportWizard = {
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
     return {
       tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
-      regimen: s.regimen, bpPct: s.bpPct,
+      regimen: s.regimen, proposito: s.proposito || 'personal', bpPct: s.bpPct,
       iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides, ncmBySku: s.ncmBySku || {},
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
       simDigitalizacionUsd: s.simDigitalizacionUsd, fleteInternoUsd: s.fleteInternoUsd
@@ -1195,7 +1303,9 @@ const ImportWizard = {
     { q: '¿Qué es la TE (Tasa de Estadística) y la exención BIT?', a: 'La TE es un tributo del 3% sobre el CIF (con tope por tramo: máx USD 180 hasta 10k, USD 3.000 hasta 100k, USD 30.000 hasta 1M, USD 150.000 sobre 1M). Está EXENTA (0%) para bienes BIT y BK nuevos (Decreto 1140/24). Por eso teclados/mouse/monitores/celulares no la pagan.' },
     { q: '¿Qué es RE y me aplica?', a: 'RE = Reintegros a la Exportación (recupero al EXPORTAR). Es una columna del NCM que NO aplica a tus importaciones — no es un costo de importación.' },
     { q: 'IIBB: ¿cuánto pago según mi provincia?', a: 'Ingresos Brutos sobre la importación varía por jurisdicción: Santa Fe 3%, CABA 2.5%, PBA 3.5%. Elegí tu provincia en el Paso 4 del asistente; es configurable.' },
-    { q: '¿Régimen courier o importador?', a: 'Courier: ≤ USD 3.000 y 50kg. Primeros USD 400 exentos, arancel simplificado 50% sobre el excedente, IVA 21%, sin anticipos (Ganancias/IIBB/IVA adicional). Importador (despacho general): matriz NCM completa. Para revender en volumen conviene importador; courier solo para muestras o compras puntuales.' },
+    { q: '¿Régimen courier o importador?', a: 'Courier (solo uso personal): ≤ USD 3.000 y 50kg por envío, franquicia de USD 400 (FOB), tope de 5 envíos/año por persona. Sobre el excedente: arancel 50% + IVA 21%, sin anticipos (Decreto 1065/2024 Art. 1º). Importador (despacho general): matriz NCM completa. Para revender conviene importador; si revendés por courier, tributás la matriz completa igual (el simplificado rige "sin finalidad comercial").' },
+    { q: '¿La franquicia de USD 400 es sobre FOB o CIF?', a: 'El Decreto 1065/2024 Art. 1º dice "valor FOB equivalente a USD 400 por envío". La app compara el CIF (FOB + flete + seguro) como criterio conservador: calcula un poco más de arancel cuando el flete es alto. Si tu flete es chico, la diferencia es mínima.' },
+    { q: '¿Los celulares y monitores pagan algo más?', a: 'Sí: el Decreto 333/2025 Art. 3 les aplica Impuestos Internos del 9,5% (celulares 8517.13.00, monitores 8528.52.00, aires, etc.). Los periféricos (teclados, mouses, headsets, controllers, mousepads) NO pagan impuestos internos. Si importás celulares o monitores, sumá ese 9,5% al cálculo.' },
     { q: '¿La suspensión de IVA adicional y Ganancias (RG 5807) me aplica?', a: 'NO. La RG 5807 (vigente hasta 30/06/2026) suspende esas percepciones SOLO para canasta básica, medicamentos e insumos MiPyME con Certificado MiPyME. Los periféricos no están alcanzados: se pagan.' },
     { q: '¿Hay antidumping en periféricos de China?', a: 'Actualmente NO hay derechos antidumping vigentes sobre teclados, mouse, auriculares ni controllers de China (CNCE medidas vigentes). Pero hay "valores criterio": AFIP puede ajustar valores subdeclarados si el FOB va muy bajo.' },
     { q: '¿Qué gastos portuarios/operativos sumo?', a: 'Despachante de aduana (USD 300-800), depósito fiscal/TCA (USD 150-300), digitalización SIM, flete interno a depósito, THC portuario (USD 150-300) y certificaciones (ENACOM USD 350 para inalámbricos, S-Mark para monitores).' },
