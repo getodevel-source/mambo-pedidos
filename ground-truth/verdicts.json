@@ -175,7 +175,7 @@
   {
    "id": 16,
    "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_15_AULA_Catalogue_20260_p15.png)",
+   "razon": "PIL13: PARKED con evidencia — S75PRO fusionado a 174px de la fila; toda ventana de distancia que lo alcanza ([174,229]) es sintonizada a esta fila (68HE a 230px). El fix real es asociación por bloques de grilla (ruling lines, subsistema nuevo). CONTENIDO: pipeline RED (marca/categoría no identificadas) — no se importa en silencio.",
    "marca": "Aula",
    "modelo": "Xinghe Dream",
    "variante": "Green",

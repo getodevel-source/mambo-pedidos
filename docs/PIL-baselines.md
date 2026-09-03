@@ -398,3 +398,22 @@ documentado para futuras iteraciones).
 | KZ (88 filas) | — | 6 mejoras p7, 0 colateral |
 
 FNs restantes (1): #16 (modelo fusionado S75PRO).
+
+## Iteración 14 — #16 PARKED con evidencia (2026-09-03)
+
+Geometría medida (AULA p15): S75PRO fusionado en (41,632), fila #16 en
+y=458 (dy=174), bloque competidor 68HE a dy=230. Cualquier ventana que
+alcanza S75PRO ([174,229]) incluye/excluye al competidor por 4px de margen:
+sintonizado a la fila, no una regla. El "nearest code" sin margen falla en
+filas de borde; con margen (>=60px o ratio) no dispara acá (56px / 1.32).
+El fix real es asociación por BLOQUES delimitados por ruling lines del PDF
+(subsistema nuevo: operator list de pdfjs + reconstrucción de celdas), no
+distancias. Estado: dato mal (CAMPO) pero CONTENIDO — pipeline RED por
+marca/categoría no identificadas, no se importa en silencio; el humano lo ve
+con crop en revisión. Siguiente diseño documentado, no pendiente oculto.
+
+| Métrica final | Inicio noche | Cierre |
+|---|---|---|
+| recall_dirty | 48% (19/40) | **95% (18/19)** |
+| FP_rate_clean | 0% | **0%** |
+| FNs | 21 | **1 (contenido)** |
