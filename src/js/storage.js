@@ -303,7 +303,18 @@ const AppStorage = {
   },
 
   async loadCatalog() {
-    const data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
+    let data = await this.getItem(this.KEYS.CATALOG, { items: [], sel: {} });
+    // Spec process-storage-backup: si el primary vino vacío/corrupto, intentar
+    // el backup de disco (tauri) antes de devolver catálogo vacío.
+    if (!data || !data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      if (typeof Reliability !== 'undefined' && typeof Reliability._readBackup === 'function') {
+        const bk = await Reliability._readBackup();
+        if (bk && bk.data && Array.isArray(bk.data.items) && bk.data.items.length) {
+          data = bk.data;
+          if (typeof toast === 'function') toast('⚠️ Catálogo recuperado del respaldo (' + bk.data.items.length + ' productos)', 'warning');
+        }
+      }
+    }
     // photo-quality (FASE B): resuelve _imageRef → item.img (dataURL) leyendo archivo.
     await this._embedImagesFromFiles(data && data.items);
     if (data && data.items && Array.isArray(data.items)) {

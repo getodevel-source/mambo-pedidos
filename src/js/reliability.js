@@ -226,7 +226,6 @@ const Reliability = {
       if (typeof localStorage === 'undefined') return { data: null, recovered: false, backupAge: null };
       const raw = localStorage.getItem(this.BACKUP_KEY);
       if (!raw) return { data: null, recovered: false, backupAge: null };
-
       const backup = JSON.parse(raw);
       if (backup && backup.data && backup.data.items && Array.isArray(backup.data.items)) {
         return { data: backup.data, recovered: true, backupAge: backup.timestamp || 'unknown' };

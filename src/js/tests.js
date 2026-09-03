@@ -720,8 +720,7 @@ const Tests = {
 		window.open = origOpen;
 		this.assert(typeof outHtml === "string" && outHtml.length > 0, "quote genera html");
 		this.assert(outHtml.includes("CHICO1") && outHtml.includes("CHICO2"), "quote usa imgSm (36px) cuando existe");
-		this.assert(!outHtml.includes("THUMBGRANDELARGO"), "quote NO embebe el thumb 112px cuando hay imgSm (3 ítems: los 2 con imgSm no usan el thumb)");
-		this.assert(outHtml.split("THUMBGRANDELARGO").length === 2, "solo el ítem sin imgSm usa el fallback al thumb 112px");
+		this.assert(outHtml.split("THUMBGRANDELARGO").length === 2, "el único thumb 112px embebido es el del ítem sin imgSm (fallback)");
 		QuoteGenerator._fmtCache.clear();
 	},
 
