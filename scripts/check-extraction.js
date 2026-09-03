@@ -63,6 +63,7 @@ const GREEN = '\x1b[32m', RED = '\x1b[31m', BOLD = '\x1b[1m', RESET = '\x1b[0m';
   };
 
   let totalExpected = 0, fobExact = 0, modeloMatch = 0, redStructural = 0;
+  let foreignTotal = 0, foreignCatOk = 0;
   const perFile = [];
   for (const f of files) {
     if (process.env.CHECK_ONLY && f !== process.env.CHECK_ONLY) continue;
@@ -78,6 +79,12 @@ const GREEN = '\x1b[32m', RED = '\x1b[31m', BOLD = '\x1b[1m', RESET = '\x1b[0m';
         const modelNorm = String(hit.modelo || '').toLowerCase();
         const want = String(exp.modelo).toLowerCase();
         if (modelNorm.includes(want) || want.includes(modelNorm)) mm++;
+        // PIL6 (cualquier rubro): lo ajeno degrada a OTRO, nunca se fuerza.
+        if (exp.cat) {
+          foreignTotal++;
+          if (String(hit.cat || '').toUpperCase() === exp.cat) foreignCatOk++;
+          else console.error(`  ⚠️ ${f}: ${JSON.stringify(exp.modelo)} clasificado ${JSON.stringify(hit.cat)} (esperado ${exp.cat})`);
+        }
       }
     }
     fobExact += fe;
@@ -89,10 +96,11 @@ const GREEN = '\x1b[32m', RED = '\x1b[31m', BOLD = '\x1b[1m', RESET = '\x1b[0m';
   const pct = (n) => Math.round((n / Math.max(1, totalExpected)) * 100);
   const fobPct = pct(fobExact);
   const modelPct = pct(modeloMatch);
-  const ok = fobPct >= 90 && modelPct >= 70 && redStructural === 0;
+  const foreignOk = foreignTotal === 0 || foreignCatOk === foreignTotal;
+  const ok = fobPct >= 90 && modelPct >= 70 && redStructural === 0 && foreignOk;
   console.log(`${BOLD}${ok ? GREEN + '✅' : RED + '❌'}${RESET} extracción sobre corpus sintético (${files.length} PDFs, ${totalExpected} filas): ` +
-    `FOB exacto ${fobExact}/${totalExpected} (${fobPct}%, gate >=90) · modelo ${modelPct}% (gate >=70) · RED estructurales ${redStructural}${RESET}`);
-  if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ ok, perFile, fobPct, modelPct, redStructural }, null, 1));
+    `FOB exacto ${fobExact}/${totalExpected} (${fobPct}%, gate >=90) · modelo ${modelPct}% (gate >=70) · RED estructurales ${redStructural} · rubro ajeno→OTRO ${foreignCatOk}/${foreignTotal}${RESET}`);
+  if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ ok, perFile, fobPct, modelPct, redStructural, foreignCatOk, foreignTotal }, null, 1));
   if (!ok) { console.error('❌ el motor no cumple el ground-truth sintético'); process.exit(1); }
   process.exit(0);
 })().catch(e => { console.error('check-extraction falló:', e.message || e); process.exit(2); });

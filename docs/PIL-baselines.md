@@ -214,3 +214,17 @@ sirve para cualquier catálogo. 2 tests (grupo colisionado + 4 anti-overfit:
 | FP_rate_clean | 0% | 0% |
 | extracción (measure-extraction) | 0 cambiaron | 0 cambiaron (ningún caso del snapshot colisiona) |
 | cobertura real | — | **~90 grupos / 191 filas marcadas en el catálogo completo** |
+
+## Iteración 6 — Corpus sintético multi-rubro (2026-09-03)
+
+Pregunta del dueño: ¿la app está preparada para cualquier producto de cualquier
+catálogo? El corpus sintético solo tenía teclados: la degradación a OTRO no se
+medía en ningún lado.
+
+Cambio (`scripts/gen-synthetic-corpus.js` + `scripts/check-extraction.js`):
+8 filas ajenas en 2 PDFs (Ferrum herramientas, HogarPlus cocina/hogar) con cat
+esperada OTRO. El check nuevo exige rubro-ajeno→OTRO al 100% (forzar una
+categoría daría NCM e impuestos equivocados) + lo reporta en el JSON del CI.
+
+Resultado: FOB 24/24 (100%), modelo 83%, RED 0, OTRO 8/8. El gate corre en CI
+(`ci.yml` extraction quality gate) con el `ok` ya incluyendo lo extranjero.

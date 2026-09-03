@@ -29,6 +29,21 @@ const BRANDS = [
   ['Keyster', 'RK68', 'Black', 23.4],
 ];
 
+// PIL6 (cualquier rubro): productos AJENOS a periféricos. El parser debe
+// extraerlos igual (modelo+FOB) y el clasificador degradar a OTRO sin
+// forzarlos a una categoría (eso daría NCM e impuestos equivocados).
+// Formato: [marca, modelo, variante, fob] — la cat esperada es OTRO.
+const FOREIGN = [
+  ['Ferrum', 'Claw Hammer 16oz', 'Steel', 12.4],
+  ['Ferrum', 'Hammer Drill 750W', 'Black', 58.9],
+  ['Ferrum', 'Screwdriver Set 12pc', 'Red', 21.3],
+  ['Ferrum', 'Tape Measure 8m', 'Yellow', 8.75],
+  ['HogarPlus', 'Non-stick Frying Pan 28cm', 'Black', 24.5],
+  ['HogarPlus', 'Stainless Knife Set 6pc', 'Silver', 39.9],
+  ['HogarPlus', 'LED Desk Lamp RGB', 'White', 31.2],
+  ['HogarPlus', 'Yoga Mat 6mm', 'Purple', 14.6],
+];
+
 function escapePdfText(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
@@ -86,6 +101,15 @@ function main() {
       gt[path.basename(file)] = rows.map(([, modelo, variante, fob]) => ({ marca: brand, modelo, variante, fob }));
       idx++;
     }
+  }
+  // Rubros ajenos: 2 marcas × 1 PDF c/u (4 filas c/u). cat esperada OTRO.
+  const foreignBrands = [...new Set(FOREIGN.map(b => b[0]))];
+  for (const brand of foreignBrands) {
+    const rows = FOREIGN.filter(b => b[0] === brand);
+    const file = path.join(outDir, `${brand}-foreign-2026.pdf`);
+    fs.writeFileSync(file, buildPdf(brand, rows));
+    gt[path.basename(file)] = rows.map(([, modelo, variante, fob]) => ({ marca: brand, modelo, variante, fob, cat: 'OTRO' }));
+    idx++;
   }
   fs.writeFileSync(path.join(outDir, 'ground-truth.json'), JSON.stringify(gt, null, 1));
   console.log(`Corpus sintético: ${idx} PDFs en ${outDir}`);
