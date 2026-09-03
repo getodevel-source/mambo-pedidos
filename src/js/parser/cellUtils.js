@@ -315,15 +315,138 @@ detectModelNameRows(rawElements, isPageNoise) {
 			// The row must sit right under a "Model Name" header label.
 			const rowY = toks[0].y;
 			if (!headerLabels.some((hy) => Math.abs(hy - rowY) <= 45)) continue;
-			const tokens = clusters.map((c) => ({
-				x: c.tokens[0].x,
-				text: c.tokens.map((t) => t.text).join(" "),
-			}));
-			rows.push({ y: rowY, tokens });
+			// PIL13 v4: el join + completion SOLO corren en filas-matriz LIMPIAS
+			// (stubs cortos, sin slashes interiores, sin badges/mic). Las filas
+			// con sopa (p4-y308, listas de colores, multis) quedan en v0 exacto.
+			const COLOR_STUB_RE =
+				/^(transparent|black|white|silver|grey|gray|blue|red|pink|green|purple|gold|cyan|orange|brown|coffee|cream|teal|navy|crystal|clear|blk|wukong)$/i;
+			// Descriptores que aparecen como "columna" en páginas-sopa pero nunca
+			// son modelo (trazable a p5-y323/p15: Bass/High/Cable/... sueltos).
+			const DESCRIPTOR_STUB_RE =
+				/^(bass|high|cable|version|balanced|switch|switches|mic|mics)$/i;
+			const baseIsMatrixStub = (b) => {
+				const bs = String(b || "");
+				const w = bs.split(/\s+/).filter(Boolean);
+				if (w.length === 0 || w.length > 2) return false;
+				if (w.length === 1 && b.length < 3) return false;
+				// Marca como stub ("KZ Pro") o descriptor suelto ("Bass", "High"):
+				// nunca es columna-modelo.
+				if (
+					w.some(
+						(x) =>
+							DESCRIPTOR_STUB_RE.test(x) ||
+							(typeof this.isBrandWord === "function" && this.isBrandWord(x)),
+					)
+				)
+					return false;
+				// Listas de colores (Black/Silver/Green, BLK//Golden) y colores
+				// sueltos (Transparent, Crystal) no son columnas-modelo.
+				if (/\/\//.test(bs)) return false;
+				if (COLOR_STUB_RE.test(bs.trim())) return false;
+				if (
+					/\//.test(bs) &&
+					bs
+						.split("/")
+						.filter(Boolean)
+						.some((seg) => COLOR_STUB_RE.test(seg.trim()))
+				)
+					return false;
+				if (/[^/]\/[^/]/.test(bs) && !/\/$/.test(bs)) return false;
+				return !this.isDirtyColumnText(b);
+			};
+			const rowClean = clusters.every((c) =>
+				baseIsMatrixStub(c.tokens.map((tok) => tok.text).join(" ")),
+			);
+			// PIL13: qualifier de matriz (nearest-column + paréntesis en crudo +
+			// sin badges/dimensión mic). Ver matrixQualifierBelow.
+			const qual = rowClean
+				? this.matrixQualifierBelow(band, Number(key), clusters, rawElements)
+				: clusters.map(() => "");
+			const tokens = clusters.map((c, i) => {
+				const base = c.tokens.map((t) => t.text).join(" ");
+				return {
+					x: c.tokens[0].x,
+					base,
+					text: base + (qual[i] ? " " + qual[i] : ""),
+					dirty: this.isDirtyColumnText(base),
+				};
+			});
+			rows.push({ y: rowY, tokens, clean: rowClean });
 		}
 		return rows.sort((a, b) => a.y - b.y);
 	},
-findModelNameRowAbove(modelNameRows, anchorY) {
+// PIL13: una columna-basura se delata sola (badge promo o pareja mic en su
+// texto base). Se usa para el qualifier (v3) y para no instalar su identidad
+// en filas (SLICE 3): nunca reemplaza el texto propio de la fila.
+isDirtyColumnText(s) {
+	const txt = String(s || "");
+	if (/\b(hot|new|sales?|promo|offers?|discounts?|clearance)\b/i.test(txt)) return true;
+	return /\bmics?\b/i.test(txt) && /\b(with|without)\b/i.test(txt);
+},
+// PIL13: qualifiers de matriz en las bandas de abajo, asignados a la
+// columna MÁS CERCANA, y solo si hay un paréntesis cerca en el TEXTO CRUDO.
+// Excluye badges promo, la dimensión mic (with/without mic) y duplicados.
+// Devuelve un qualifier por columna ("" si no hay). Puro y testeable.
+matrixQualifierBelow(band, key, clusters, rawElements) {
+	const BADGE_RE = /^(hot|new|sales?|promo|offers?|discounts?|clearance)$/i;
+	const DIRTY_WORD_RE = /\b(hot|new|sales?|promo|offers?|discounts?|clearance)\b/i;
+	// Pareja mic + with/without en el MISMO texto (orden indistinto): dimensión
+	// mic, no qualifier. Se evalúa sobre columna y qualifier unidos.
+	const hasMicPair = (s) => /\bmics?\b/i.test(s) && /\b(with|without)\b/i.test(s);
+	const buckets = (clusters || []).map(() => []);
+	for (const dk of [key + 1, key + 2, key + 3]) {
+		const toks = ((band && band[String(dk)]) || []).slice().sort((a, b) => a.x - b.x);
+		for (const tok of toks) {
+			const s = String(tok.text || "").trim();
+			if (s.length < 2) continue;
+			let bi = -1, bd = Infinity;
+			(clusters || []).forEach((c, idx) => {
+				const d = Math.abs((Number(tok.x) || 0) - (Number(c.x) || 0));
+				if (d < bd) { bd = d; bi = idx; }
+			});
+			if (bi < 0) continue;
+			buckets[bi].push({ x: Number(tok.x) || 0, s });
+		}
+	}
+	const parenNear = (colX) =>
+		(Array.isArray(rawElements) ? rawElements : []).some((el) => {
+			const txt = String((el && (el.text != null ? el.text : el.str)) || "");
+			if (!/[()（）[\]{}]/.test(txt)) return false;
+			const ey = Number(el.y) || 0;
+			return Math.abs(ey - (Number(key) + 2) * 8) <= 24 && Math.abs((Number(el.x) || 0) - colX) <= 100;
+		});
+	return (clusters || []).map((c, i) => {
+		const colText = String((c.tokens || []).map((t) => t.text).join(" "));
+		// La columna-basura se delata sola: si ella o su qualifier unido traen
+		// badge o pareja mic, no se une nada (default seguro).
+		if (DIRTY_WORD_RE.test(colText) || hasMicPair(colText)) return "";
+		const colWords = new Set(
+			colText.toLowerCase().split(/\s+/).filter(Boolean),
+		);
+		const mine = (buckets[i] || []).sort((a, b) => a.x - b.x);
+		if (!parenNear(Number(c.x) || 0)) return "";
+		const words = [];
+		for (const w of mine) {
+			const bare = w.s.replace(/^[()（）[\]{}]+|[()（）[\]{}]+$/g, "");
+			if (!bare || bare.length < 2) continue;
+			// El qualifier es un descriptor de versión en letras (Balanced,
+			// High Resolution): códigos (ZS10) o CJK (均衡版) no califican.
+			if (/\d/.test(bare)) continue;
+			if (/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\uFF00-\uFFEF]/.test(bare)) continue;
+			const bl = bare.toLowerCase();
+			if (BADGE_RE.test(bl)) continue;
+			if (colWords.has(bl)) continue;
+			colWords.add(bl);
+			words.push(bare);
+		}
+		const joined = words.join(" ");
+		if (!joined) return "";
+		if (DIRTY_WORD_RE.test(joined) || hasMicPair(joined)) return "";
+		return joined;
+	});
+	},
+
+	findModelNameRowAbove(modelNameRows, anchorY) {
 		let best = null;
 		for (const r of modelNameRows) {
 			if (r.y >= anchorY - 5) continue;
@@ -338,7 +461,7 @@ findModelNameTokenAt(mnr, anchorX) {
 			if (!best || Math.abs(t.x - anchorX) < Math.abs(best.x - anchorX))
 				best = t;
 		}
-		return best ? best.text : null;
+		return best || null;
 	},
 findBlockCodeAbove(rawElements, isPageNoise, y, xMin, xMax, maxDist = 250) {
 		const codeLike = /(?:^|[\s-])(?!paw\d)([A-Za-z]{1,6}\d{1,4}[\w+]*)/i;

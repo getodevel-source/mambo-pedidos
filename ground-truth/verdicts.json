@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 7,
+  "CAMPO": 6,
   "MENOR": 21,
   "CRITICO": 13,
-  "OK": 24
+  "OK": 25
  },
  "n": 65,
  "items": [
@@ -361,8 +361,8 @@
   },
   {
    "id": 33,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_30_KZ_Catalog_Zhenzhou__p7.png)",
+   "veredicto": "OK",
+   "razon": "IT13: qualifier de matriz — extracción ahora Libra High Resolution (era Libra ambiguo entre 3 versiones). Fila única correcta.",
    "marca": "Kz",
    "modelo": "High Resolution",
    "variante": "",

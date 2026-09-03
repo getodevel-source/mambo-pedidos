@@ -1178,33 +1178,59 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 					/\b[A-Za-z]+\b/.test(rawModelo || "") && !/\d/.test(rawModelo || "");
 				const mnr = this.findModelNameRowAbove(modelNameRows, anchor.y);
 				if (mnr && (firstLineIsColor || !rawModelo || codeLess)) {
-					const colTok = this.findModelNameTokenAt(mnr, anchor.x);
+					const colTokObj = this.findModelNameTokenAt(mnr, anchor.x);
+					const colTok = colTokObj ? colTokObj.text : null;
 					if (colTok) {
-						// Only override when the current model does NOT already contain a
-						// token of the model-name row (keep ZVX PRO, AM16).
-						const curTokens = (rawModelo || "")
-							.split(/\s+/)
-							.map((w) => w.toLowerCase());
-						const mnrHasToken = curTokens.some((w) =>
-							mnr.tokens.some((t) =>
-								t.text.toLowerCase().split(/\s+/).includes(w),
-							),
-						);
-						if (firstLineIsColor || !rawModelo || !mnrHasToken) {
-							// Keep the color as variant instead of model.
-							if (firstLineIsColor) {
-								rawVariante = (rawModelo + " " + rawVariante)
-									.replace(/\s+/g, " ")
-									.trim();
-							}
-							rawModelo = colTok;
-							// The Model Name token may also appear inside the cell text — drop
-							// it from the variant to avoid duplication (KZ matrix).
-							const tokLower = colTok.toLowerCase();
-							rawVariante = rawVariante
+						if (mnr.clean) {
+							// Fila-matriz limpia (PIL13 v4): completar solo si la fila
+							// enuncia una PARTE ESTRICTA de la identidad ganadora
+							// ("Libra" o "High Resolution" -> "Libra High Resolution",
+							// caso #33). Identidades propias se conservan.
+							const curTokens = (rawModelo || "")
+								.toLowerCase()
 								.split(/\s+/)
-								.filter((w) => w.toLowerCase() !== tokLower)
-								.join(" ");
+								.filter(Boolean);
+							const colWords = colTok.toLowerCase().split(/\s+/).filter(Boolean);
+							const isSubsetOfWinner =
+								colWords.length > 0 &&
+								curTokens.every((w) => colWords.includes(w)) &&
+								curTokens.length < colWords.length;
+							if (firstLineIsColor || !rawModelo || isSubsetOfWinner) {
+								if (firstLineIsColor) {
+									rawVariante = (rawModelo + " " + rawVariante)
+										.replace(/\s+/g, " ")
+										.trim();
+								}
+								rawModelo = colTok;
+								const tokWords = new Set(colTok.toLowerCase().split(/\s+/));
+								rawVariante = rawVariante
+									.split(/\s+/)
+									.filter((w) => !tokWords.has(w.toLowerCase()))
+									.join(" ");
+							}
+						} else {
+							// Fila con sopa: comportamiento v0 exacto (bit-idéntico).
+							const curTokens = (rawModelo || "")
+								.split(/\s+/)
+								.map((w) => w.toLowerCase());
+							const mnrHasToken = curTokens.some((w) =>
+								mnr.tokens.some((t) =>
+									t.text.toLowerCase().split(/\s+/).includes(w),
+								),
+							);
+							if (firstLineIsColor || !rawModelo || !mnrHasToken) {
+								if (firstLineIsColor) {
+									rawVariante = (rawModelo + " " + rawVariante)
+										.replace(/\s+/g, " ")
+										.trim();
+								}
+								rawModelo = colTok;
+								const tokLower = colTok.toLowerCase();
+								rawVariante = rawVariante
+									.split(/\s+/)
+									.filter((w) => w.toLowerCase() !== tokLower)
+									.join(" ");
+							}
 						}
 					}
 				}

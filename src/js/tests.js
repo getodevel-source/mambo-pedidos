@@ -2100,6 +2100,97 @@ const Tests = {
 			g23c.modelo === "Turbo+ V9",
 			"PIL12 anti-overfit: + pegado (Turbo+) no se toca",
 		);
+		// PIL13 (pin): qualifier de matriz solo en filas limpias, con higiene
+		// (sin dígitos/CJK/dimensión mic) y columnas sucias marcadas.
+		this.assert(
+			PdfParser.isDirtyColumnText("Krila Hot") === true &&
+				PdfParser.isDirtyColumnText("Libra") === false &&
+				PdfParser.isDirtyColumnText("With Mic") === true,
+			"PIL13: columna-basura se delata (Hot/Mic-dimensión)",
+		);
+		const qband = {
+			3: [{ x: 317, y: 20, text: "Libra" }],
+			4: [
+				{ x: 318, y: 35, text: "High" },
+				{ x: 344, y: 35, text: "Resolution" },
+			],
+			6: [{ x: 390, y: 50, text: "Version" }],
+		};
+		const qcols = [{ x: 317, tokens: [{ x: 317, text: "Libra" }] }];
+		const qraw = [
+			{ x: 308, y: 35, text: "（" },
+			{ x: 430, y: 50, text: ")" },
+		];
+		this.assert(
+			PdfParser.matrixQualifierBelow(qband, 3, qcols, qraw)[0] ===
+				"High Resolution Version",
+			"PIL13: qualifier limpio se une a su columna",
+		);
+		const qmic = {
+			3: [{ x: 100, y: 20, text: "ZVX" }],
+			4: [
+				{ x: 100, y: 35, text: "Mic" },
+				{ x: 120, y: 35, text: "without" },
+			],
+		};
+		this.assert(
+			PdfParser.matrixQualifierBelow(
+				qmic,
+				3,
+				[{ x: 100, tokens: [{ x: 100, text: "ZVX" }] }],
+				[{ x: 95, y: 35, text: "(" }],
+			)[0] === "",
+			"PIL13: pareja mic/without no es qualifier",
+		);
+		const qdig = {
+			3: [{ x: 200, y: 20, text: "Vader" }],
+			4: [
+				{ x: 200, y: 35, text: "ZS10" },
+				{ x: 230, y: 35, text: "均衡版" },
+			],
+		};
+		this.assert(
+			PdfParser.matrixQualifierBelow(
+				qdig,
+				3,
+				[{ x: 200, tokens: [{ x: 200, text: "Vader" }] }],
+				[{ x: 195, y: 35, text: "(" }],
+			)[0] === "",
+			"PIL13: códigos y CJK no califican",
+		);
+		// Fila-matriz limpia integra, fila con sopa queda bare (v0).
+		const mraw = [
+			{ x: 10, y: 10, text: "Model" },
+			{ x: 10, y: 18, text: "Name" },
+			{ x: 185, y: 22, text: "Libra" },
+			{ x: 318, y: 22, text: "Libra" },
+			{ x: 308, y: 35, text: "（" },
+			{ x: 318, y: 35, text: "High" },
+			{ x: 344, y: 35, text: "Resolution" },
+		];
+		const mrows = PdfParser.detectModelNameRows(mraw, (s) => !s || s.length < 2);
+		this.assert(
+			mrows.length === 1 &&
+				mrows[0].clean === true &&
+				mrows[0].tokens.some((x) => x.text === "Libra High Resolution"),
+			"PIL13: fila limpia une qualifier (caso #33)",
+		);
+		const sraw = [
+			{ x: 10, y: 10, text: "Model" },
+			{ x: 10, y: 18, text: "Name" },
+			{ x: 100, y: 28, text: "Krila" },
+			{ x: 160, y: 28, text: "Hot" },
+			{ x: 300, y: 28, text: "ZVX" },
+			{ x: 100, y: 35, text: "Mic" },
+			{ x: 120, y: 35, text: "without" },
+		];
+		const srows = PdfParser.detectModelNameRows(sraw, (s) => !s || s.length < 2);
+		this.assert(
+			srows.length === 1 &&
+				srows[0].clean === false &&
+				srows[0].tokens.every((x) => x.text.indexOf("Mic") < 0),
+			"PIL13: fila con sopa queda bare (v0)",
+		);
 	},
 
 	testHonestModelQualityGate() {

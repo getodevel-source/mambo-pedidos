@@ -372,3 +372,29 @@ pierde). No toca "+" pegados ("Turbo+"). 3 tests. Único cambio en 65 casos.
 | FP_rate_clean | 0% | **0%** |
 
 FNs restantes (2): #16 (modelo fusionado), #33 (qualifier de matriz).
+
+## Iteración 13 — Qualifier de matriz (2026-09-03)
+
+Patrón (#33): columnas-matriz con stub compartido ("Libra" ×3 versiones)
+perdían el qualifier ("(High Resolution Version)" 100px abajo). Tres
+intentos: v1 ventana-y (basura: pegaba sopa vecina, revert), v2
+nearest-column + paréntesis (misma basura por otra vía, revert), v3 final:
+nearest-column + paréntesis en crudo + la columna-basura se delata sola
+(badge/dimensión mic en ella o en el qualifier unido) + join SOLO en filas
+limpias (stubs cortos, sin colores/marcas/descriptores) + completion por
+subconjunto-estricto del ganador + dedup de variante a nivel palabra +
+higiene de qualifier (sin dígitos/CJK). Filas con sopa: v0 bit-idéntico
+(verificado por diff 88 filas KZ vs baseline real con stash).
+Lecciones: el baseline propio hay que reconstruirlo con stash (un dump
+"base" intermedio contaminó un diff); instrumentar con logs propios exige
+verificar que el instrumento observa lo real (TDZ, argv, copias stale);
+los cambios chicos cascadean por existingProducts cross-page (peligro
+documentado para futuras iteraciones).
+
+| Métrica | IT12 | IT13 |
+|---|---|---|
+| recall_dirty | 90% (18/20) | **95% (18/19)** |
+| FP_rate_clean | 0% | **0%** |
+| KZ (88 filas) | — | 6 mejoras p7, 0 colateral |
+
+FNs restantes (1): #16 (modelo fusionado S75PRO).
