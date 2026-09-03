@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 10,
+  "CAMPO": 9,
   "MENOR": 21,
   "CRITICO": 13,
-  "OK": 21
+  "OK": 22
  },
  "n": 65,
  "items": [
@@ -625,8 +625,8 @@
   },
   {
    "id": 57,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_48_Royal_Kludge_RK_cata_p5.png)",
+   "veredicto": "OK",
+   "razon": "IT10: fix V2 del axis — extracción ahora R98 + Misty Axis V2 Green (era R98 V2). Fila única correcta.",
    "marca": "Royal kludge",
    "modelo": "Misty Axis R98",
    "variante": "Green V2",

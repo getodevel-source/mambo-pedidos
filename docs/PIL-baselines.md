@@ -313,3 +313,24 @@ Dos movimientos:
 - #64 (Mountains en modelo): colorway pegado — vocabulario o columna color.
 - #23 (Star/+Gift): techo documentado — OCR no concluyente, queda humano.
 - #8-pendiente: si el proveedor aclara Mc vs MAX, re-etiquetar OK.
+
+## Iteración 10 — V2 del axis a variante (2026-09-03)
+
+Patrón (#57): versão suelta en territorio switch sin cabecera que la ubique
+(RK p5 sin header detectado → fallback posicional; 'V2' de "Misty Axis V2"
+caía al catch-all del modelo). Fix en la rama media (relX 0.45-0.85):
+/^v\d+$/ solo si hay switch/axis en su MISMA línea (si no —mochila
+"Backpack V2"— no se toca; en banda modelo nunca se toca). 1 test de ruta
+TABLE con elementos sintéticos + 2 asserts de comportamiento.
+
+Efecto: #57 → 'R98' + 'Misty Axis V2 Green' (re-etiquetado OK con evidencia);
+#55 intacto tras el refinamiento (primera versión lo movía mal).
+
+| Métrica | IT9 | IT10 |
+|---|---|---|
+| recall_dirty | 78% (18/23) | **82% (18/22)** |
+| FP_rate_clean | 0% | **0%** |
+| extracción | 0 cambiaron | 1 mejora estricta, resto idéntico |
+
+FNs restantes (4): #16 (modelo fusionado), #23 (techo), #33 (qualifier matriz),
+#64 (colorway en modelo).

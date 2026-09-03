@@ -306,6 +306,12 @@ extractPageProductsByTableRows(
 						el.y > firstCodeY + 5
 					) {
 						typeParts.push(txt);
+					} else if (/^v\d+$/i.test(txt.trim()) && allItems.some((o) => o !== el && Math.abs((Number(o.y) || 0) - (Number(el.y) || 0)) <= 6 && /\b(axis|switch)\b/i.test(String(o.text || "")))) {
+					// PIL10: versión suelta JUNTO A switch/axis en su misma línea
+					// ("Misty Axis V2") — es la versión del switch, no del modelo.
+					// Sin switch en la línea (mochila "Backpack V2") no se toca.
+					// En la banda modelo (relX<0.45) tampoco se toca nunca.
+					typeParts.push(txt);
 					} else {
 						nameParts.push(txt);
 						if (firstCodeY === null && /\d/.test(txt)) firstCodeY = el.y;

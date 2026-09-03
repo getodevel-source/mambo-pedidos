@@ -2040,6 +2040,23 @@ const Tests = {
 		// medición: Mic without, Hot Harman Target...). La asociación correcta
 		// exige grupo-parentético atómico, fuera de alcance hoy. #33 queda
 		// sucio-documentado; el gate de colisiones (PIL7) lo cubre si colisiona.
+		// PIL10 (RED): versión suelta en territorio switch (sin cabecera que la
+		// ubique) no va al modelo — caso #57: el V2 es de "Misty Axis V2".
+		const rkEls = [
+			{ x: 72, y: 264, text: "R98" },
+			{ x: 131, y: 264, text: "Green" },
+			{ x: 190, y: 241, text: "Misty" },
+			{ x: 221, y: 241, text: "Axis" },
+			{ x: 247, y: 241, text: "V2" },
+			{ x: 422, y: 241, text: "264.50" },
+			{ x: 485, y: 241, text: "$37.52" },
+		];
+		const rkAnchors = [{ x: 485, y: 241, price: 37.52, rawLine: "$37.52", pageNum: 1 }];
+		const rkOut = PdfParser.extractPageProductsByTableRows(rkEls, rkAnchors, 800, 1, [], "OTRO", [], [], (s) => !s || s.length < 2, () => false);
+		this.assert(
+			rkOut.length === 1 && rkOut[0].modelo === "R98" && /V2/.test(rkOut[0].variante || ""),
+			"PIL10: V2 suelto en territorio switch va a variante, no al modelo (" + JSON.stringify(rkOut[0] && { m: rkOut[0].modelo, v: rkOut[0].variante }) + ")",
+		);
 	},
 
 	testHonestModelQualityGate() {
