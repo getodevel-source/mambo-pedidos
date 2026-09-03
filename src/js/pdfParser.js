@@ -12,6 +12,15 @@
 const envFlag = (name) => { try { return typeof process !== "undefined" && process.env ? process.env[name] : undefined; } catch { return undefined; } };
 
 const PdfParser = {
+	// Rend (spawning): cede el hilo principal entre pasos pesados del parse.
+	// SOLO timing (setTimeout): la lógica de extracción no cambia → el golden
+	// (hash de productos) queda idéntico. Permite que la UI pinte y que la
+	// máquina no quede clavada durante la carga (decisión usuario: preferir
+	// carga un poco más larga y tolerable).
+	async _yieldToUI() {
+		await new Promise((r) => setTimeout(r, 0));
+	},
+
 	async processPdfFile(
 		file,
 		catalogLength = 0,
@@ -74,6 +83,7 @@ const content = await page.getTextContent();
 						content.items, viewport.height, pageNum, [],
 						currentBrand, customBrands, allProducts,
 					);
+					await this._yieldToUI();
 					if (pageProducts.length > 0) {
 						const pageImages = await this.extractImagesFromPage(page, viewport, pageNum);
 						allImages.push(...pageImages);
@@ -85,6 +95,7 @@ const content = await page.getTextContent();
 							if (withImages.length) { pageProducts.length = 0; pageProducts.push(...withImages); }
 						}
 					}
+					await this._yieldToUI();
 
 					if (pageProducts.length > 0) {
 						allProducts.push(...pageProducts);
@@ -588,6 +599,10 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 						});
 					}
 				}
+				// Rend: yield por imagen — la fase de imágenes es la dominante del
+				// parse (37.6s de 69.5s); partirla por imagen deja bloques de ~30-80ms
+				// en vez de 300-500ms por página (solo timing, golden intacto).
+				await this._yieldToUI();
 			}
 
 			// Imágenes INLINE (iconos chicos, baratas): camino original intacto

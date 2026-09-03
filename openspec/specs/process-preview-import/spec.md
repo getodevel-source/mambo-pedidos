@@ -6,7 +6,7 @@
 
 ## Proceso
 
-Modal de preview: render lazy por chunks, scroll, búsqueda, edición con re-validación coalescida (trailing 350ms), semáforo final idéntico a la verificación directa.
+Modal de preview: render lazy por chunks (virtualizado), scroll, búsqueda; la EDICIÓN NO re-valida en el momento (decisión usuario 2026-09-03): la verificación completa corre una vez al procesar y una vez al confirmar — el semáforo final sale de esa verificación única.
 
 ## Estado actual (2026-09-02, corpus real)
 
@@ -25,4 +25,4 @@ Scroll <30ms/chunk y 10 ediciones <1s gateados; virtualización del grid (solo l
 
 - perf:audit --check: búsqueda <700ms (debounce incluido), edición dictada <2s.
 - Test de semáforo final === verificación directa (sliceB).
-- Invalidación: re-validar por tecla sin coalescing.
+- Invalidación: reintroducir re-validación automática por edición (anti-decisión usuario).

@@ -65,6 +65,9 @@ const ImportFlow = {
         console.error('Error procesando ' + f.name, err);
         toast(f.name + ': ' + err.message, 'error');
       }
+      // Rend: entre archivos se cede el hilo para que la UI/OS respiren
+      // durante la carga de un catálogo completo (solo timing).
+      await new Promise((r) => setTimeout(r, 0));
     }
 
     // Mem (import-2026): los items viven en memoria con su dataURL completa
@@ -357,32 +360,11 @@ const ImportFlow = {
       ? (parseFloat(String(value).replace(',', '.')) || 0)
       : String(value || '').trim();
 
-    // Perf (perf-sprint Slice B): las ediciones rápidas (dictado) ya no corren
-    // la verificación completa + re-render por tecla: se coalescen en un
-    // trailing de 350ms. El semáforo FINAL es idéntico al de una verificación
-    // directa; el contador del botón de confirmar se refresca al instante.
+    // UX (decisión usuario): NO se vuelve a fijar/validar resultados en el
+    // momento de editar — la verificación completa ya corrió UNA vez al
+    // procesar los archivos (semáforo inicial) y vuelve a correr UNA vez al
+    // confirmar. La edición solo actualiza el valor y el contador del botón.
     ImportFlow.updateConfirmCount();
-    if (ImportFlow._verifyTimer) clearTimeout(ImportFlow._verifyTimer);
-    ImportFlow._verifyTimer = setTimeout(() => {
-      ImportFlow._verifyTimer = null;
-      const wrap = document.getElementById('pvGridWrap');
-      const prevScroll = wrap ? wrap.scrollTop : 0;
-      const validation = ImportGates.runImportVerification(ImportFlow.pendingPreviewItems);
-      ImportFlow.pendingPreviewItems = validation.products;
-      validation.rejected.forEach(p => { p._selected = false; });
-      window._previewValidation = validation;
-      ImportFlow.renderImportPreviewModal(validation);
-      if (wrap) wrap.scrollTop = prevScroll;
-      // Refocus del último campo editado si el usuario sigue en el mismo ítem.
-      const edited = wrap ? wrap.querySelector(`[data-edit-idx="${idx}"][data-edit-field="${field}"]`) : null;
-      if (edited) {
-        edited.focus();
-        if (typeof edited.setSelectionRange === 'function') {
-          const len = edited.value.length;
-          edited.setSelectionRange(len, len);
-        }
-      }
-    }, 350);
   },
 
   toggleSelectAllPreview(checked) {
