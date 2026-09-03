@@ -78,3 +78,31 @@ Dos ejes: **Rend** = tiempo/eficiencia · **Fiab** = fiabilidad/correctitud.
 - **Para llegar al 10:** (1) worker de parse (diseño listo, requiere
   re-validación golden), (2) revisión humana de los 65 crops, (3) gates con
   corpus real en CI, (4) backup completo del payload en disco.
+## ¿9-10 REAL para todo? — viabilidad honesta por proceso
+
+"Real" = medido por el harness, gateado (cae la release si regresa), con
+margen sobre el umbral. No es un sticker: es un número reproducible.
+
+| Proceso | Nota hoy | ¿9-10 real alcanzable? | Qué falta | Riesgo/Esfuerzo |
+|---|---|---|---|---|
+| Boot / Restauración | 10/9 | ✅ YA ES 10 real | gates corriendo (perf:audit --check) | ninguno |
+| Confirm / Save / GC | 9 | ✅ un paso | nada de código; gates | ninguno |
+| Import CSV/XLSX | 9/8 | ✅ un paso | gates de los nuevos umbrales | bajo |
+| Render catálogo / historial / modales | 9-10 | ✅ YA ES techo | nada | ninguno |
+| Updater | 10/10 | ✅ YA ES 10 real | autoupdate-live en cada release (manual dispatch) | bajo |
+| Export JSON | 9 | ✅ un paso | gates en CI (perf-smoke ya lo cubre) | bajo |
+| Persistencia/backup | 9/8 | ✅ un paso | backup del payload completo a disco en modo tauri | bajo/medio |
+| **Parse 43s → <25s sin jank (worker)** | 6 | 🟡 SÍ, con programa | spike → worker OffscreenCanvas; NO toca el golden sin re-validar; gate de jank <2s | medio/alto; 1-2 sprints; riesgo de coordenadas para gates de imagen — mitigado con la batería ground-truth (rebaselineada) como piso |
+| Cotización 337 → <200ms | 8 | 🟡 SÍ, acotado | filas precompiladas + formatters (ya cacheados) + juntar chunks; techo <200ms | bajo; medio sprint |
+| Dashboard calidad 7 → 9 | 7 | 🟡 SÍ | remediación por proveedor con resumen + más tests + gates | medio sprint |
+| Perf gates 8 → 10 | 8 | 🟡 SÍ, con decisión | corpus SINTÉTICO con ground-truth conocido (PDFs generados con texto/precios conocidos) → recall/FP y perf medibles en CI de verdad (los catálogos reales son del cliente: no van al repo) | medio; alta fiabilidad del gate |
+| Ground-truth / calidad del parser (recall 48%, FP 0%) | 7/7 | 🟠 PARCIAL — techo realista 8.5-9 | 65 crops (humano) + ampliar etiquetado a ~150-300 + heurísticas nuevas con FP=0 atado + (para 9-10 pleno) capa LLM de enriquecimiento con verificación determinista — el repo ya la contempla | el recall determinista puro topa ~70-80% sin FP; el 90%+ real sale del LLM verificado: coste de runtime + no-determinismo controlado por gates |
+| **Todo 10 realista** | — | ⚪ NO en el corto plazo | hay techo natural de calidad determinista (parser); el 10 pleno requiere la capa LLM + corpus sintético + etiquetado ampliado | programa de semanas-mes, iterativo |
+
+### Lectura corta
+- **~10 procesos ya están en 9-10 real o a UN paso** (un gate o un cambio chico).
+- **Los 2 únicos "no-triviales" son parse (tiempo) y calidad del modelo (recall)**:
+  el parse es alcanzable con el worker (programa acotado, riesgo controlado por la
+  batería golden); el recall determinista tiene techo honesto ~70-80% con FP=0 —
+  pasar de ahí (9-10 pleno) exige la capa LLM verificada, que es un proyecto.
+- **Regla de oro**: nada sube de nota si rompe FP=0, golden o el semáforo honesto.
