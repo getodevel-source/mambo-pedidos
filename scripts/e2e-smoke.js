@@ -124,10 +124,29 @@ function rc(client, expression) {
   return client.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }).then(r => r.result.value);
 }
 
+// ── espera por condición (poll): los sleeps fijos mienten en runners fríos ───
+// El boot real tarda 7-8s en frío; medir el rect antes del primer layout da 0x0
+// y voltea el gate sin que haya ningún bug. Todo lo que depende del render
+// espera por condición con timeout; el mensaje de fallo no cambia.
+async function waitFor(client, expr, timeoutMs = 15000, intervalMs = 250) {
+  const t0 = Date.now();
+  for (;;) {
+    let v = null;
+    try { v = await rc(client, expr); } catch (e) { v = null; }
+    if (v) return v;
+    if (Date.now() - t0 >= timeoutMs) return null;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+}
+
 // ── click real en selector (mouse sintético, no JS) ─────────────────────────
 async function realClick(client, sel) {
-  const p = await rc(client, `(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return { ok: false }; const r = b.getBoundingClientRect(); return { ok: r.width > 0 && r.height > 0, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) }; })()`);
-  if (!p.ok) return { clicked: false, w: p.w, h: p.h };
+  const rectOf = `(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return null; const r = b.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`;
+  const p = await waitFor(client, `(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return null; const r = b.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) }; })()`);
+  if (!p) {
+    const q = await rc(client, rectOf).catch(() => null);
+    return { clicked: false, w: (q && q.w) || 0, h: (q && q.h) || 0 };
+  }
   await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
   await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', clickCount: 1 });
   await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
@@ -165,15 +184,14 @@ async function main() {
   for (const view of ['catalogo', 'pedido', 'historial']) {
     const before = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
     const click = await realClick(client, `.nav-item[data-view="${view}"]`);
-    await new Promise(r => setTimeout(r, 350));
-    const after = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
+    let after = await waitFor(client, `(() => { const el = document.querySelector('.nav-item.active'); const v = el ? el.dataset.view : null; return v === ${JSON.stringify(view)} ? v : null; })()`, 5000, 200);
+    if (after === null) after = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
     navStatus[view] = { click, before, after };
-    if (!click.clicked) bugs.push(`nav "${view}": botón invisible (rect ${click.w || 0}x${click.h || 0})`);
+    if (!click.clicked) bugs.push(`nav "${view}": botón invisible tras 15s (rect ${click.w || 0}x${click.h || 0})`);
     else if (after === view) logSkips.push(`nav "${view}" ok`);
     else bugs.push(`nav "${view}": click terminó en "${after}" (esperado "${view}")`);
   }
   await realClick(client, '.nav-item[data-view=catalogo]');
-  await new Promise(r => setTimeout(r, 400));
 
   // 3) puente de plugins + store real + roundtrip de imagen en images/
   const persist = await rc(client, `(async () => {
@@ -223,9 +241,8 @@ async function main() {
 
   // 4) catálogo carga filas
   await rc(client, `(() => { try { typeof loadDemoCatalog === 'function' && loadDemoCatalog(); } catch(e){} })()`);
-  await new Promise(r => setTimeout(r, 1500));
-  const rows = await rc(client, `document.querySelectorAll('tbody tr').length`);
-  if (!rows) bugs.push('catálogo: 0 filas tras cargar demo');
+  const rows = await waitFor(client, `document.querySelectorAll('tbody tr').length`, 10000, 300);
+  if (!rows) bugs.push('catálogo: 0 filas tras 10s de cargar demo');
 
   // reporte
   // boot-interactivity: marcas de arranque (performance.mark de app.js)
