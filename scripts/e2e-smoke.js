@@ -131,8 +131,7 @@ function rc(client, expression) {
 async function waitFor(client, expr, timeoutMs = 15000, intervalMs = 250) {
   const t0 = Date.now();
   for (;;) {
-    let v = null;
-    try { v = await rc(client, expr); } catch (e) { v = null; }
+    const v = await rc(client, expr).catch(() => null);
     if (v) return v;
     if (Date.now() - t0 >= timeoutMs) return null;
     await new Promise(r => setTimeout(r, intervalMs));
@@ -154,6 +153,17 @@ async function realClick(client, sel) {
 }
 
 const fail = bugs => { console.error('\n❌ E2E FAIL — ' + bugs.length + ' bug(s):'); bugs.forEach(b => console.error('  • ' + b)); process.exit(1); };
+
+// Un check de nav aislado (baja la complejidad de main y se puede leer solo).
+async function checkNavView(client, view) {
+  const before = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
+  const click = await realClick(client, `.nav-item[data-view="${view}"]`);
+  let after = await waitFor(client, `(() => { const el = document.querySelector('.nav-item.active'); const v = el ? el.dataset.view : null; return v === ${JSON.stringify(view)} ? v : null; })()`, 5000, 200);
+  if (after === null) after = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
+  if (!click.clicked) return { click, before, after, bug: `nav "${view}": botón invisible tras 15s (rect ${click.w || 0}x${click.h || 0})` };
+  if (after !== view) return { click, before, after, bug: `nav "${view}": click terminó en "${after}" (esperado "${view}")` };
+  return { click, before, after, bug: null };
+}
 
 async function main() {
   // El WebSocket global existe desde Node 22. Con 20 el harness descubre el
@@ -182,14 +192,10 @@ async function main() {
   // 2) botones de navegación vivos + cambio de vista
   const navStatus = {};
   for (const view of ['catalogo', 'pedido', 'historial']) {
-    const before = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
-    const click = await realClick(client, `.nav-item[data-view="${view}"]`);
-    let after = await waitFor(client, `(() => { const el = document.querySelector('.nav-item.active'); const v = el ? el.dataset.view : null; return v === ${JSON.stringify(view)} ? v : null; })()`, 5000, 200);
-    if (after === null) after = await rc(client, `document.querySelector('.nav-item.active')?.dataset.view`);
-    navStatus[view] = { click, before, after };
-    if (!click.clicked) bugs.push(`nav "${view}": botón invisible tras 15s (rect ${click.w || 0}x${click.h || 0})`);
-    else if (after === view) logSkips.push(`nav "${view}" ok`);
-    else bugs.push(`nav "${view}": click terminó en "${after}" (esperado "${view}")`);
+    const s = await checkNavView(client, view);
+    navStatus[view] = s;
+    if (s.bug) bugs.push(s.bug);
+    else logSkips.push(`nav "${view}" ok`);
   }
   await realClick(client, '.nav-item[data-view=catalogo]');
 
