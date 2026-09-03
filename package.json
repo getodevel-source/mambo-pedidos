@@ -29,6 +29,8 @@
     "perf:audit:check": "node scripts/perf-audit.mjs --check",
     "perf:export": "node scripts/perf-export.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
+    "corpus:gen": "node scripts/gen-synthetic-corpus.js",
+    "qa:extraction": "node scripts/check-extraction.js",
     "audit:full": "node scripts/audit-app.js --json audit-app-report.json",
     "photo:baseline": "node scripts/photo-baseline.js catalog-export.json --json ground-truth/photo-baseline.json",
     "audit:assignment": "node scripts/assignment-audit.js catalog-export.json --json assignment-audit-report.json",

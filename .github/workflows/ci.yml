@@ -106,3 +106,10 @@ jobs:
         run: |
           [ -x /usr/bin/chromium ] || { echo "no /usr/bin/chromium"; exit 1; }
           PLAYWRIGHT_CHROMIUM=/usr/bin/chromium npm run perf:smoke
+      - name: Extraction quality gate (synthetic corpus with known ground truth)
+        run: |
+          node scripts/gen-synthetic-corpus.js /tmp/synth-corpus
+          node scripts/check-extraction.js /tmp/synth-corpus --json /tmp/synth-corpus/report.json
+      - name: Verify extraction report
+        run: |
+          node -e "const r=require('/tmp/synth-corpus/report.json'); if(!r.ok) process.exit(1); console.log('FOB', r.fobPct+'%', 'modelo', r.modelPct+'%', 'RED', r.redStructural);" 

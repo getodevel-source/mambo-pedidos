@@ -71,11 +71,26 @@ La implementación vive en el proyecto parser (FASE 2 reabierta, golden
 4. **Fallback**: si OffscreenCanvas no está disponible (WebKitGTK viejo),
    degradar a render en main con el flujo actual (feature-detect).
 
-## Verdict (a completar con la medición del spike)
+## Verdict (MEDIDO 2026-09-02, 3 PDFs reales, Node)
 
-- [ ] Pendiente: corrida de perfil por fase + hash + jank en branch
-      (`spike/worker-parse`), sin merge.
-- [ ] Pendiente: decisión documentada: habilitar worker / mantener main.
+| PDF | texto | render | full (parser) | render/full |
+|---|---|---|---|---|
+| 8BitDo (10 págs) | 338ms | 4.7s | 11.3s | 41% |
+| AJAZZ (17 págs) | 318ms | 9.5s | 27.8s | 34% |
+| ATK (16 págs) | 167ms | 2.5s | 9.9s | 25% |
+
+- [x] Perfil por fase: **el render es 25-41% del tiempo y el texto 1-4%** — el
+  resto (55-75%) es JS puro del motor (clasificación espacial, rowMatch,
+  dataURLs de imágenes embebidas) que no se va a un worker sin reescribirlo.
+- [x] Decisión: **mover render+texto a un worker OFRECE el jank (todo el
+  canvas pesado fuera del hilo principal) pero NO cumple solo el target de
+  <25s** — el offloadable es ~30-45% del total. Para el "10" del spec hace
+  falta worker + optimización del JS path del motor + golden revalidado.
+- [ ] Pendiente: hash worker-vs-main (idéntico esperado: la lógica de
+  clasificación no cambia; solo el runtime de render) en el branch
+  `spike/worker-parse`, antes de cualquier merge.
+- [ ] Pendiente: decisión final de habilitación tras el hash + battery
+  ground-truth completa.
 
 Mientras tanto: el jank actual (9.8s) está bajo el umbral del gate
 (`perf:audit --check` <15s) y el overlay de progreso comunica el estado.
