@@ -17,6 +17,11 @@ const ImportWizard = {
   step: 0,
   state: {
     fleteModo: 'peso', pesoKg: 15, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+    // P2 (precisión del flete): monto fijo USD de la cotización del forwarder
+    // (modo 'usd') + peso volumétrico en kg (modo 'peso': se cobra el mayor).
+    fleteUsd: 0, pesoVolKg: 0,
+    // P3 (TC real): 0 = automático (usa el tipo de cambio de la app o 1400).
+    tipoCambio: 0,
     transporte: 'maritimo', regimen: 'importador',
     // Etapa A (d1): propósito del envío — personal usa el simplificado courier;
     // reventa muestra el aviso honesto de régimen fiscal (verificación d1).
@@ -369,6 +374,50 @@ const ImportWizard = {
 
   _esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
 
+  // ── P2/P3: peso cobrable (máx real/volumétrico) y tipo de cambio ──
+  // El courier y el aéreo cobran el mayor entre peso real y volumétrico; el
+  // marítimo LCL se cotiza por CBM (monto USD directo, modo 'usd').
+  _pesoRealKg() {
+    const s = ImportWizard.state;
+    if (Number(s.pesoKg) > 0) return Number(s.pesoKg);
+    return (typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg)
+      ? ImportGuide.pesoTotalKg(ImportWizard._effectiveItems()) : 0;
+  },
+
+  _chargeableKg() {
+    const s = ImportWizard.state;
+    return Math.max(ImportWizard._pesoRealKg(), Number(s.pesoVolKg) || 0);
+  },
+
+  // TC: manual si se cargó (>0), si no el de la app (cTasaCambio con dólar en
+  // vivo), si no 1400. Nunca silencioso: el resumen muestra el TC usado.
+  _tc() {
+    const m = Number(ImportWizard.state.tipoCambio);
+    if (m > 0) return m;
+    let v = NaN;
+    try {
+      const el = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cTasaCambio') : null;
+      v = el ? Number(el.value) : NaN;
+    } catch {}
+    return v > 0 ? v : 1400;
+  },
+
+  useAppTc() {
+    let v = NaN;
+    try {
+      const el = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cTasaCambio') : null;
+      v = el ? Number(el.value) : NaN;
+    } catch {}
+    if (v > 0) {
+      ImportWizard.state.tipoCambio = v;
+      ImportWizard._save();
+      ImportWizard.render();
+      if (typeof toast === 'function') toast(`Tipo de cambio de la app aplicado: $${v}`, 'success');
+    } else if (typeof toast === 'function') {
+      toast('La app no tiene un tipo de cambio cargado (cargá el dólar o escribilo a mano).', 'warning');
+    }
+  },
+
   // ── Etapa A / A3: ítems efectivos con overrides editables (FOB, peso) ──
   // El catálogo no se toca: el override vive en state.itemEdits y viaja a todos
   // los cálculos (motor, resumen, export, plan). Editar en cualquier momento
@@ -421,6 +470,26 @@ const ImportWizard = {
     if (!items.length) {
       faltantes.push({ paso: 'pedido', queFalta: 'No hay pedido', impacto: 'sin pedido no hay importación que planificar ni guardar', blocking: true });
     }
+    // P1 (sin errores): FOB o cantidad inválidos por ítem son BLOCKING — un
+    // producto sin precio o sin cantidad rompe el CIF y todos los tributos.
+    // El plan también lo marca (paso orden-compra), pero el wizard lo bloquea.
+    const nombre = (it) => String((it && (it.modelo || it.sku)) || 's/n');
+    const sinFob = items.filter((it) => !(Number(it.fob) > 0));
+    if (sinFob.length) {
+      faltantes.push({ paso: 'pedido', queFalta: `FOB en 0 o inválido en: ${sinFob.slice(0, 3).map(nombre).join(', ')}${sinFob.length > 3 ? '…' : ''}`, impacto: 'un producto sin precio rompe el CIF y todos los tributos', blocking: true });
+    }
+    const sinQty = items.filter((it) => !(Number(it.qty) > 0));
+    if (sinQty.length) {
+      faltantes.push({ paso: 'pedido', queFalta: `Cantidad en 0 en: ${sinQty.slice(0, 3).map(nombre).join(', ')}${sinQty.length > 3 ? '…' : ''}`, impacto: 'revisá las cantidades en el catálogo antes de guardar', blocking: true });
+    }
+    // Ítems sin clasificar (NCM genérico OTRO 8473.30.99): el DI puede estar
+    // mal. No bloquea, pero se muestra (nunca silencioso).
+    if (typeof ImportGuide !== 'undefined' && ImportGuide.ncmKey) {
+      const sinClasificar = items.filter((it) => ImportGuide.ncmKey(it) === 'OTRO');
+      if (sinClasificar.length) {
+        avisos.push(`Sin clasificar (NCM genérico): ${sinClasificar.slice(0, 3).map(nombre).join(', ')}${sinClasificar.length > 3 ? '…' : ''} — revisá su categoría en el paso 4 o el derecho puede estar mal.`);
+      }
+    }
     if (typeof ImportGuide !== 'undefined' && typeof ImportGuide.planFor === 'function') {
       plan = ImportGuide.planFor(items, ImportWizard.state, ImportWizard._doorConfig());
       (plan.bloqueantes || []).forEach((b) => {
@@ -428,7 +497,8 @@ const ImportWizard = {
       });
       (plan.avisos || []).forEach((a) => avisos.push(a));
       (plan.pasos || []).forEach((p) => {
-        const mapa = { 'orden-compra': 'pedido', flete: 'flete', tributos: 'flete', enacom: 'impuestos' };
+        // 'orden-compra' no se mapea: el wizard lo cubre con blocking propio (P1).
+        const mapa = { flete: 'flete', tributos: 'flete', enacom: 'impuestos' };
         const pasoWizard = mapa[p.id];
         if (!pasoWizard) return;
         (p.faltantes || []).forEach((f) => {
@@ -439,8 +509,11 @@ const ImportWizard = {
     if (s.fleteModo === 'pct' && Number(s.fletePct) <= 0) {
       faltantes.push({ paso: 'flete', queFalta: 'Flete en 0%', impacto: 'sin flete el CIF y todos los tributos dejan de ser reales', blocking: true });
     }
-    if (s.fleteModo === 'peso' && !(Number(s.pesoKg) > 0)) {
-      avisos.push('Peso total en 0: el motor usa el % de flete por default (15%) y el costo NO es el real. Cargá el peso total o usá el estimado de tus productos.');
+    if (s.fleteModo === 'usd' && !(Number(s.fleteUsd) > 0)) {
+      faltantes.push({ paso: 'flete', queFalta: 'Flete en USD sin monto', impacto: 'si el forwarder te cotizó un total, cargalo: sin flete el CIF no es real', blocking: true });
+    }
+    if (s.fleteModo === 'peso' && Number(s.pesoVolKg) > 0 && Number(s.pesoVolKg) > ImportWizard._pesoRealKg()) {
+      avisos.push(`Peso volumétrico (${s.pesoVolKg}kg) mayor que el real: el courier/aéreo cobra el volumétrico.`);
     }
     if (Number(s.seguro) <= 0 && s.seguroUsdOverride == null) {
       avisos.push('Seguro en 0%: el envío no está asegurado; si se pierde en tránsito no cobrás nada.');
@@ -638,11 +711,13 @@ const ImportWizard = {
       <td style="padding:6px 8px;font-size:12px;text-align:right;color:var(--green-hover);">$${r.sugeridoUnit.toFixed(2)}</td>
     </tr>`).join('');
     const precioLocal = s.precioLocalUsd;
-    let totalLine = '';
+    const gananciaTotal = p.precioTotalSugerido - p.costoNetoTotal;
+    const margenReal = p.precioTotalSugerido > 0 ? (gananciaTotal / p.precioTotalSugerido) * 100 : 0;
+    let totalLine = `<div style="font-size:12.5px;margin-top:8px;">Ganancia total estimada: <b style="color:var(--green-hover);">$${Math.round(gananciaTotal).toLocaleString()} USD</b> <span style="color:var(--text-muted);">(precio sugerido − costo neto · margen real ${margenReal.toFixed(1)}%)</span></div>`;
     if (precioLocal != null && precioLocal > 0) {
       const diff = precioLocal - p.precioTotalSugerido;
       const pct = p.precioTotalSugerido > 0 ? (diff / p.precioTotalSugerido) * 100 : 0;
-      totalLine = `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Tu precio total sugerido ($${Math.round(p.precioTotalSugerido).toLocaleString()}) está <b>${diff >= 0 ? 'por debajo' : 'por encima'}</b> del precio local de referencia ($${Math.round(precioLocal).toLocaleString()}): ${diff >= 0 ? '' : '⚠️ '}margen real ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%${pct < 0 ? ' — con este margen el local te gana' : pct < p.margen * 50 ? ' — margen justo, revisá qué ítem tiene el multiplicador más alto' : ' — hay colchón'}</div>`;
+      totalLine += `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Tu precio total sugerido ($${Math.round(p.precioTotalSugerido).toLocaleString()}) está <b>${diff >= 0 ? 'por debajo' : 'por encima'}</b> del precio local de referencia ($${Math.round(precioLocal).toLocaleString()}): ${diff >= 0 ? '' : '⚠️ '}margen real ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%${pct < 0 ? ' — con este margen el local te gana' : pct < p.margen * 50 ? ' — margen justo, revisá qué ítem tiene el multiplicador más alto' : ' — hay colchón'}</div>`;
     }
     return `<div class="iw-kpi-lbl" style="margin-top:14px;">Rentabilidad por producto (ordenado: el que más te come el margen primero)</div>
       <div style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;">
@@ -813,14 +888,26 @@ const ImportWizard = {
           <select id="iwFleteModo" class="select" onchange="ImportWizard.state.fleteModo=this.value;ImportWizard.render()">
             <option value="peso" ${s.fleteModo==='peso'?'selected':''}>Por peso (USD/kg)</option>
             <option value="pct" ${s.fleteModo==='pct'?'selected':''}>% del FOB</option>
-          </select></div>
+            <option value="usd" ${s.fleteModo==='usd'?'selected':''}>Monto USD (cotización forwarder)</option>
+          </select>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${s.fleteModo==='usd' ? 'El monto que te pasó el forwarder/courier manda sobre cualquier cálculo.' : 'Si tenés la cotización total en USD, usá el modo monto: es lo más preciso.'}</div></div>
         <div><label class="wz-lbl">Seguro (% del FOB)</label>
           <input type="number" step="0.001" class="input" value="${s.seguro}" onchange="ImportWizard.state.seguro=Number(this.value)/100;ImportWizard.state.seguroUsdOverride=null;ImportWizard.render()" oninput="ImportWizard.state.seguro=Number(this.value)/100;ImportWizard.state.seguroUsdOverride=null"></div>
         ${s.fleteModo==='peso'
-          ? `<div><label class="wz-lbl">Peso total (kg)</label><input type="number" class="input" value="${s.pesoKg}" onchange="ImportWizard.state.pesoKg=Number(this.value)" oninput="ImportWizard.state.pesoKg=Number(this.value)"></div>
-             <div><label class="wz-lbl">Costo por kg (USD)</label><input type="number" class="input" value="${s.costoPorKg}" onchange="ImportWizard.state.costoPorKg=Number(this.value)" oninput="ImportWizard.state.costoPorKg=Number(this.value)"></div>`
+          ? `<div><label class="wz-lbl">Peso total (kg)</label><input type="number" class="input" value="${s.pesoKg}" onchange="ImportWizard.state.pesoKg=Number(this.value)" oninput="ImportWizard.state.pesoKg=Number(this.value)">
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">En 0 se usa el peso calculado de tus productos.</div></div>
+             <div><label class="wz-lbl">Costo por kg (USD)</label><input type="number" class="input" value="${s.costoPorKg}" onchange="ImportWizard.state.costoPorKg=Number(this.value)" oninput="ImportWizard.state.costoPorKg=Number(this.value)"></div>
+             <div><label class="wz-lbl">Peso volumétrico (kg, opcional)</label><input type="number" class="input" value="${s.pesoVolKg || ''}" placeholder="lo cobra el courier" onchange="ImportWizard.state.pesoVolKg=Number(this.value)" oninput="ImportWizard.state.pesoVolKg=Number(this.value)">
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Aéreo/courier cobran el mayor entre real y volumétrico.</div></div>
+             <div><label class="wz-lbl">Tipo de cambio (ARS/USD)</label><input type="number" class="input" value="${ImportWizard._tc()}" onchange="ImportWizard.state.tipoCambio=Number(this.value);ImportWizard.render()">
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${Number(s.tipoCambio) > 0 ? '<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.state.tipoCambio=0;ImportWizard.render()">volver a automático</a> · ' : ''}<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.useAppTc()">usar el de la app</a> · tributos al oficial vendedor</div></div>`
+          : s.fleteModo==='usd'
+          ? `<div><label class="wz-lbl">Flete total cotizado (USD)</label><input type="number" step="0.01" class="input" value="${s.fleteUsd || ''}" onchange="ImportWizard.state.fleteUsd=Number(this.value);ImportWizard.render()" oninput="ImportWizard.state.fleteUsd=Number(this.value)"></div>
+             <div><label class="wz-lbl">Tipo de cambio (ARS/USD)</label><input type="number" class="input" value="${ImportWizard._tc()}" onchange="ImportWizard.state.tipoCambio=Number(this.value);ImportWizard.render()">
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${Number(s.tipoCambio) > 0 ? '<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.state.tipoCambio=0;ImportWizard.render()">volver a automático</a> · ' : ''}<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.useAppTc()">usar el de la app</a> · tributos al oficial vendedor</div></div>`
           : `<div><label class="wz-lbl">Flete (% del FOB)</label><input type="number" step="0.01" class="input" value="${s.fletePct*100}" onchange="ImportWizard.state.fletePct=Number(this.value)/100" oninput="ImportWizard.state.fletePct=Number(this.value)/100"></div>
-             <div></div>`}
+             <div><label class="wz-lbl">Tipo de cambio (ARS/USD)</label><input type="number" class="input" value="${ImportWizard._tc()}" onchange="ImportWizard.state.tipoCambio=Number(this.value);ImportWizard.render()">
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${Number(s.tipoCambio) > 0 ? '<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.state.tipoCambio=0;ImportWizard.render()">volver a automático</a> · ' : ''}<a href="#" style="color:var(--text-muted);" onclick="event.preventDefault();ImportWizard.useAppTc()">usar el de la app</a> · tributos al oficial vendedor</div></div>`}
       </div>
       <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Sugerencia de seguro: ~1.1% de FOB + flete</div>
@@ -1141,15 +1228,15 @@ const ImportWizard = {
   // Config del motor puerta a puerta con los inputs del asistente (incluye BP).
   _doorConfig() {
     const s = ImportWizard.state;
-    // Etapa A (A3): si no hay peso manual, se usa el peso REAL calculado de los
-    // ítems (defaults por categoría + overrides editables). Así el flete courier
-    // y el chequeo de 50kg/3.000 USD describen el pedido, no un default ciego.
-    const pesoItems = (typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg) ? ImportGuide.pesoTotalKg(ImportWizard._effectiveItems()) : 0;
-    const pesoKg = s.fleteModo === 'peso' ? (Number(s.pesoKg) > 0 ? s.pesoKg : pesoItems) : 0;
+    // Etapa A (A3) + P2: si no hay peso manual, se usa el peso REAL calculado de
+    // los ítems; en modo peso se cobra el mayor con el volumétrico. En modo usd
+    // el motor usa el monto explícito.
+    const pesoKg = s.fleteModo === 'peso' ? ImportWizard._chargeableKg() : 0;
     const costoPorKg = s.fleteModo === 'peso' ? s.costoPorKg : 0;
     const fletePct = s.fleteModo === 'pct' ? s.fletePct : 0.15;
+    const fleteUsd = s.fleteModo === 'usd' ? s.fleteUsd : 0;
     return {
-      tipoCambio: 1400, pesoKg, costoPorKg, fletePct, seguroPct: s.seguro,
+      tipoCambio: ImportWizard._tc(), pesoKg, costoPorKg, fletePct, fleteUsd, seguroPct: s.seguro,
       regimen: s.regimen, proposito: s.proposito || 'personal', bpPct: s.bpPct,
       iibbPct: ImportWizard._iibbPct(), ncmOverrides: s.ncmOverrides, ncmBySku: s.ncmBySku || {},
       depositoFiscalUsd: s.depositoFiscalUsd, despachanteUsd: s.despachanteUsd,
@@ -1162,14 +1249,12 @@ const ImportWizard = {
     return items.reduce((a, i) => a + (i.fob || 0) * (i.qty || 0), 0);
   },
 
-  // Mismo criterio que el motor: flete por peso (kg × USD/kg) o % del FOB.
+  // Mismo criterio que el motor: flete explícito USD, o peso (kg × USD/kg) o % del FOB.
   _estimateFlete() {
     const s = ImportWizard.state;
+    if (s.fleteModo === 'usd') return Number(s.fleteUsd) || 0;
     const fob = ImportWizard._currentFobTotal();
-    if (s.fleteModo === 'peso') {
-      const peso = Number(s.pesoKg) > 0 ? Number(s.pesoKg) : ((typeof ImportGuide !== 'undefined' && ImportGuide.pesoTotalKg) ? ImportGuide.pesoTotalKg(ImportWizard._effectiveItems()) : 0);
-      return peso * (s.costoPorKg || 0);
-    }
+    if (s.fleteModo === 'peso') return ImportWizard._chargeableKg() * (s.costoPorKg || 0);
     return fob * (s.fletePct != null ? s.fletePct : 0.15);
   },
 

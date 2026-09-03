@@ -31,6 +31,7 @@ const Tests = {
 		this.testCourierWarnings();
 		this.testCourierReventaFullMatrix();
 		this.testProfitabilityAndCompare();
+		this.testPrecisionNoErrors();
 		this.testImportGuide();
 		await this.testImportGuideWizard();
 		this.testTextSanitizer();
@@ -816,11 +817,12 @@ const Tests = {
 			};
 			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
 
-			// 1) Peso en 0 con flete por peso → NO blocking, pero aviso de default activo.
+			// 1) Peso en 0 con flete por peso → NO blocking y NO default ciego: se usa
+			// el peso calculado de los productos (precisión P2).
 			let v = IW.validate();
 			this.assert(
-				v.avisos.some((a) => a.includes("Peso total en 0")),
-				"validate avisa el default de flete activo (peso 0 → % 15%)",
+				v.avisos.some((a) => a.includes("Sin peso manual definido")),
+				"validate avisa que usa el peso estimado de los productos",
 			);
 			this.assert(
 				!v.faltantes.some((f) => f.blocking),
@@ -991,6 +993,110 @@ const Tests = {
 		} finally {
 			global.currentPedido = prevPedido;
 			IW.state = prevState;
+		}
+	},
+
+	// ── Precisión sin errores (P1-P4): validación dura, flete exacto, TC real ──
+	testPrecisionNoErrors() {
+		require("./ui/importWizard.js");
+		const IW = global.window.ImportWizard;
+		if (!IW || typeof IW.validate !== "function" || typeof IW._tc !== "function") {
+			this.assert(false, "RED: validate/_tc no accesibles");
+			return;
+		}
+		const prevPedido = global.currentPedido;
+		const prevState = IW.state;
+		const prevToast = global.toast;
+		const mkState = () => ({
+			fleteModo: "peso", pesoKg: 10, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+			fleteUsd: 0, pesoVolKg: 0, tipoCambio: 0,
+			transporte: "maritimo", regimen: "importador", proposito: "personal",
+			enacomTitular: null, itemEdits: {}, checks: {},
+			depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
+			recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
+			ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null,
+			origen: "China", margenObjetivo: 0.40
+		});
+		try {
+			// P1a: FOB en 0 → blocking y saveAsImport no guarda.
+			IW.state = mkState();
+			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 0, qty: 2 }] };
+			let v = IW.validate();
+			this.assert(
+				v.faltantes.some((f) => f.blocking && f.queFalta.includes("FOB en 0")),
+				"P1: FOB en 0 es blocking",
+			);
+			// P1b: cantidad en 0 → blocking.
+			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 0 }] };
+			v = IW.validate();
+			this.assert(
+				v.faltantes.some((f) => f.blocking && f.queFalta.includes("Cantidad en 0")),
+				"P1: cantidad en 0 es blocking",
+				);
+			// P1c: ítem sin clasificar (OTRO) → aviso visible, no blocking.
+			global.currentPedido = { items: [{ sku: "Z9", cat: "COSA RARA", modelo: "???", fob: 10, qty: 1 }] };
+			v = IW.validate();
+			this.assert(
+				v.avisos.some((a) => a.includes("Sin clasificar")) && !v.faltantes.some((f) => f.blocking),
+				"P1: NCM genérico avisa sin bloquear",
+			);
+			// P2a: motor — fleteUsd explícito gana; ausente = idéntico a antes.
+			const items = [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 100, qty: 1 }];
+			const cfgBase = { pesoKg: 10, costoPorKg: 12, fletePct: 0.15, seguroPct: 0.015 };
+			const rPeso = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "importador" }, cfgBase));
+			const rUsd = Calculator.calculateDoorToDoorExactCost(items, Object.assign({ regimen: "importador", fleteUsd: 500 }, cfgBase));
+			this.assert(
+				rPeso.summary.fleteTotalUsd === 120 && rUsd.summary.fleteTotalUsd === 500,
+				"P2: flete USD explícito (500) gana sobre peso (120)",
+			);
+			// P2b: peso cobrable = máx(real, volumétrico).
+			IW.state = mkState();
+			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
+			IW.state.pesoKg = 10; IW.state.pesoVolKg = 25;
+			this.assert(IW._chargeableKg() === 25, "P2: volumétrico mayor → se cobra el volumétrico");
+			this.assert(IW._doorConfig().pesoKg === 25, "P2: el doorConfig lleva el peso cobrable");
+			IW.state.pesoVolKg = 0;
+			this.assert(IW._chargeableKg() === 10, "P2: sin volumétrico se cobra el real");
+			// P2c: modo usd sin monto → blocking; con monto → plan flete completo.
+			IW.state.fleteModo = "usd"; IW.state.fleteUsd = 0;
+			v = IW.validate();
+			this.assert(
+				v.faltantes.some((f) => f.blocking && f.queFalta.includes("Flete en USD sin monto")),
+				"P2: modo USD sin monto es blocking",
+			);
+			IW.state.fleteUsd = 300;
+			v = IW.validate();
+			this.assert(
+				!v.faltantes.some((f) => f.blocking) && v.plan.pasos.find((p) => p.id === "flete").completo,
+				"P2: modo USD con monto deja el paso flete completo",
+			);
+			// P3a: TC manual gana; 0 = automático (1400 sin app).
+			IW.state.tipoCambio = 1500;
+			this.assert(IW._tc() === 1500, "P3: TC manual se usa");
+			IW.state.tipoCambio = 0;
+			this.assert(IW._tc() === 1400, "P3: TC automático cae a 1400 sin app");
+			// P3b: el TC fluye al motor y escala los ARS.
+			IW.state.fleteModo = "peso"; IW.state.pesoKg = 5;
+			const r1400 = Calculator.calculateDoorToDoorExactCost(IW._effectiveItems(), IW._doorConfig());
+			IW.state.tipoCambio = 2800;
+			const r2800 = Calculator.calculateDoorToDoorExactCost(IW._effectiveItems(), IW._doorConfig());
+			this.assert(
+				r1400.summary.tipoCambio === 1400 && r2800.summary.tipoCambio === 2800 &&
+					r2800.summary.totalPuertaConIvaArs === r1400.summary.totalPuertaConIvaArs * 2,
+				"P3: el TC del wizard fluye al motor y escala los pesos",
+			);
+			// P4: ganancia total explícita en el resumen de rentabilidad.
+			IW.state.tipoCambio = 0;
+			const res = Calculator.calculateDoorToDoorExactCost(IW._effectiveItems(), IW._doorConfig());
+			const html = IW._profitHtml(res);
+			this.assert(
+				html.includes("Ganancia total estimada") && html.includes("margen real"),
+				"P4: el resumen muestra ganancia total y margen real",
+			);
+		} finally {
+			global.currentPedido = prevPedido;
+			IW.state = prevState;
+			global.toast = prevToast;
 		}
 	},
 

@@ -353,7 +353,11 @@ const Calculator = {
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
     const fletePct = doorConfig.fletePct != null ? doorConfig.fletePct : 0.15;
-    const fleteTotal = pesoTotal > 0 ? pesoTotal * costoPorKg : totalFob * fletePct;
+    // Precisión (guía exhaustiva): el forwarder cotiza un monto total en USD (LCL
+    // por CBM, aéreo, courier). Si viene fleteUsd explícito (>0) gana sobre peso
+    // y % — sin él, el criterio es el de siempre (byte-identical).
+    const fleteUsdExplicit = (doorConfig.fleteUsd != null && Number.isFinite(Number(doorConfig.fleteUsd)) && Number(doorConfig.fleteUsd) > 0) ? Number(doorConfig.fleteUsd) : 0;
+    const fleteTotal = fleteUsdExplicit > 0 ? fleteUsdExplicit : (pesoTotal > 0 ? pesoTotal * costoPorKg : totalFob * fletePct);
     const seguroPct = doorConfig.seguroPct != null ? doorConfig.seguroPct : 0.015;
     const seguroTotal = totalFob * seguroPct;
     const cifTotal = totalFob + fleteTotal + seguroTotal;
