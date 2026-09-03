@@ -260,3 +260,31 @@ este cambio.
 FNs restantes (7): #5 (strip desambiguador), #8 (qualifier MAX/Mc), #16
 (modelo fusionado perdido), #23 (techo Star/+Gift), #33 (qualifier de matriz),
 #57 (V2 del axis), #64 (colorway en modelo).
+
+## Iteración 8 — Fill de conexión desde gemelas PIL9 (2026-09-03)
+
+Patrón: filas de bloques fusionados que pierden su desambiguador (caso #5:
+'Ultimate 2C'+'Orange Green' $15.45 indistinguible de su gemela wireless
+$19.40). Diagnóstico con copia instrumentada en /tmp: el texto "Wired" está
+72px fuera del bbox de la fila (celda fusionada centrada) y la herencia
+propaga el modelo ya limpio; el forward-fill SLICE-4 no dispara porque los
+modelos ya coinciden.
+
+Cambio (`src/js/parser/rowMatch.js` fillMissingConnectionWords): la fila sin
+wired/wireless/bluetooth la toma de una gemela con evidencia textual (mismo
+modelo+precio+página, modelo no heredado, <1.5 filas) solo con acuerdo total
+(si discrepan no se toca) y preservando el case de la hoja. 3 tests + caso
+límite (distinto precio / desacuerdo intactos).
+
+Efecto: #5 → 'Orange Green Wired' (distinguida, re-etiquetada OK), #61 suma
+'Wireless' verdadero. 0 cambios en el resto.
+
+| Métrica | IT7 | IT8 |
+|---|---|---|
+| recall_dirty | 72% (18/25) | **75% (18/24)** |
+| FP_rate_clean | 0% | **0%** |
+| extracción | 0 cambiaron | 2 mejoras estrictas, resto idéntico |
+
+FNs restantes (6): #8 (qualifier MAX/Mc), #16 (modelo fusionado perdido),
+#23 (techo Star/+Gift), #33 (qualifier de matriz), #57 (V2 del axis),
+#64 (colorway en modelo).

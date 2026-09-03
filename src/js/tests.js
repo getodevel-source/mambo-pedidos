@@ -2011,6 +2011,30 @@ const Tests = {
 			PdfParser.hasGluedNameNeighbor(neighEls, { x: 140, y: 760, text: "3" }) === false,
 			"PIL8: misma columna pero otra línea no cuenta como vecino",
 		);
+		// PIL9 (RED): fila sin palabra de conexión la hereda de una gemela con
+		// evidencia textual (mismo modelo+precio+página, una sola palabra en
+		// desacuerdo cero). Conflictos y solitarias no se tocan.
+		const blk = [
+			{ sku: "F1", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Orange Green", fob: 15.45, status: "GREEN", warnings: [], y: 528, pageNum: 2, _inheritedModel: true },
+			{ sku: "F2", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Wired Controller Green", fob: 15.45, status: "GREEN", warnings: [], y: 600, pageNum: 2 },
+			{ sku: "F3", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Purple", fob: 15.45, status: "GREEN", warnings: [], y: 672, pageNum: 2 },
+			{ sku: "S4", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Pink", fob: 19.4, status: "GREEN", warnings: [], y: 455, pageNum: 2 },
+			{ sku: "E5", marca: "X", cat: "MOUSE", modelo: "M1", variante: "Black", fob: 10, status: "GREEN", warnings: [], y: 100, pageNum: 2 },
+			{ sku: "E6", marca: "X", cat: "MOUSE", modelo: "M1", variante: "Wired White", fob: 10, status: "GREEN", warnings: [], y: 130, pageNum: 2 },
+			{ sku: "E7", marca: "X", cat: "MOUSE", modelo: "M1", variante: "Bluetooth Red", fob: 10, status: "GREEN", warnings: [], y: 160, pageNum: 2 },
+		];
+		this.assert(
+			PdfParser.fillMissingConnectionWords(blk, 60) === 2,
+			"PIL9: rellena las 2 filas sin conexión del grupo de acuerdo",
+		);
+		this.assert(
+			blk[0].variante === "Orange Green Wired" && blk[2].variante === "Purple Wired",
+			"PIL9: la palabra faltante llega a la variante (no se inventa modelo)",
+		);
+		this.assert(
+			blk[3].variante === "Pink" && blk[4].variante === "Black",
+			"PIL9: distinto precio o desacuerdo entre donantes no se toca",
+		);
 	},
 
 	testHonestModelQualityGate() {

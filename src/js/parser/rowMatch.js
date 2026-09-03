@@ -658,12 +658,73 @@ extractPageProductsByTableRows(
 			}
 		}
 
+		// PIL9: completar la palabra de conexión faltante desde gemelas con
+		// evidencia textual (mismo modelo+precio+página, acuerdo total). Va acá:
+		// todavía existen los flags _inheritedModel para filtrar donantes.
+		this.fillMissingConnectionWords(pageProducts, avgRowHeight);
+
 		for (const p of pageProducts) {
 			delete p._needsModel;
 			delete p._inheritedModel;
 			delete p._inheritedFromPrice;
 		}
 		return pageProducts;
+	},
+
+	// PIL9: una fila sin palabra de conexión (wired/wireless/bluetooth) la toma
+	// de una gemela con evidencia textual: mismo modelo+precio+página, modelo NO
+	// heredado (tiene su texto en la hoja) y a menos de 1.5 filas de distancia.
+	// Solo si TODAS las donantes de acuerdo traen la MISMA palabra (si discrepan
+	// no se puede saber cuál vale → no se toca, fail-closed). No inventa modelo:
+	// solo completa la variante. Devuelve cuántas rellenó.
+	fillMissingConnectionWords(products, avgRowHeight) {
+		if (!Array.isArray(products)) return 0;
+		// Se preserva el case original de la hoja ("Wired", no "wired").
+		const connsOf = (v) => {
+			const seenLc = new Set();
+			const out = [];
+			for (const tok of String(v || "").split(/\s+/)) {
+				const lc = tok.toLowerCase();
+				if ((lc === "wired" || lc === "wireless" || lc === "bluetooth") && !seenLc.has(lc)) {
+					seenLc.add(lc);
+					out.push(tok);
+				}
+			}
+			return out;
+		};
+		const win =
+			(Number(avgRowHeight) > 0 ? Number(avgRowHeight) : 60) * 1.5;
+		let filled = 0;
+		for (const p of products) {
+			if (!p || typeof p !== "object") continue;
+			if (connsOf(p.variante).length > 0) continue;
+			if (typeof p.fob !== "number" || Number.isNaN(p.fob)) continue;
+			const pModelo = String(p.modelo || "").trim().toLowerCase();
+			if (!pModelo) continue;
+			const seen = new Map();
+			for (const q of products) {
+				if (q === p || !q || typeof q !== "object") continue;
+				if (q.pageNum !== p.pageNum) continue;
+				if (String(q.modelo || "").trim().toLowerCase() !== pModelo) continue;
+				if (typeof q.fob !== "number" || Math.abs(q.fob - p.fob) >= 0.01) continue;
+				if (q._inheritedModel) continue;
+				if (Math.abs((Number(q.y) || 0) - (Number(p.y) || 0)) > win) continue;
+				for (const tok of connsOf(q.variante)) {
+				const lc = tok.toLowerCase();
+				if (!seen.has(lc)) seen.set(lc, tok);
+			}
+			}
+			if (seen.size === 1) {
+				const w = [...seen.values()][0];
+				p.variante = (String(p.variante || "").trim() + " " + w).trim();
+				p.rawText = (String(p.modelo || "") + " " + p.variante)
+					.replace(/\s+/g, " ")
+					.trim();
+				p.cellRawText = p.rawText;
+				filled++;
+		}
+		}
+		return filled;
 	},
 sanitizeProductNames(
 		rawModelo,

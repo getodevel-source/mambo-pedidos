@@ -1,9 +1,9 @@
 {
  "counts": {
-  "CAMPO": 12,
+  "CAMPO": 11,
   "MENOR": 20,
   "CRITICO": 13,
-  "OK": 20
+  "OK": 21
  },
  "n": 65,
  "items": [
@@ -53,8 +53,8 @@
   },
   {
    "id": 5,
-   "veredicto": "CAMPO",
-   "razon": "regresión vs etiquetado: extracción distinta a la etiquetada (revisar crop page_05_8BitDo_2026__pdf_p2.png)",
+   "veredicto": "OK",
+   "razon": "IT8: fill PIL9 distingue wired (Orange Green Wired $15.45 vs Wireless twin $19.40). Fila única correcta.",
    "marca": "8bitdo",
    "modelo": "Ultimate 2C Wired Controller",
    "variante": "Green",
