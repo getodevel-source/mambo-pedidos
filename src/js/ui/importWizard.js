@@ -529,7 +529,7 @@ const ImportWizard = {
   _checkpointsHtml(stepId) {
     const v = ImportWizard.validate();
     const faltantes = stepId === 'resumen' ? v.faltantes : v.faltantes.filter((f) => f.paso === stepId);
-    const avisos = (stepId === 'resumen' || stepId === 'flete') ? v.avisos : [];
+    const avisos = [...new Set((stepId === 'resumen' || stepId === 'flete') ? v.avisos : [])];
     const bloq = faltantes.filter((f) => f.blocking);
     const noBloq = faltantes.filter((f) => !f.blocking);
     let html = '';
@@ -540,22 +540,22 @@ const ImportWizard = {
       html += `<div class="alert-banner warning" style="margin:0 0 8px;">⚠️ <b>Falta:</b> ${ImportWizard._esc(f.queFalta)} — ${ImportWizard._esc(f.impacto)}</div>`;
     });
     avisos.forEach((a) => {
-      const ya = html.includes(ImportWizard._esc(a.slice(0, 40)));
-      if (!ya) html += `<div class="alert-banner warning" style="margin:0 0 8px;">ℹ️ ${ImportWizard._esc(a)}</div>`;
+      html += `<div class="alert-banner warning" style="margin:0 0 8px;">ℹ️ ${ImportWizard._esc(a)}</div>`;
     });
     return html;
   },
 
   // ── Etapa A / A4: vista Plan + Seguimiento (checklist) ──
-  _pendientesDe(plan, checks) {
-    return (plan && plan.pasos ? plan.pasos : []).filter((p) => !(checks && checks[p.id]));
+  async _loadRecordPlan(number) {
+    const payload = await AppStorage.loadImports();
+    return { payload, rec: (payload.records || []).find((r) => r.number === number) || null };
   },
 
   _planHtml(plan, isRecord, checks, recordNumber) {
     const lblReg = plan.regimen === 'courier' ? 'Courier' : 'Marítimo (despacho general)';
     const lblProp = plan.proposito === 'reventa' ? 'Reventa' : 'Uso personal';
     const checksSrc = checks || {};
-    const pendientes = ImportWizard._pendientesDe(plan, checksSrc);
+    const pendientes = plan.pasos.filter((p) => !checksSrc[p.id]);
     let html = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
       <div style="font-size:13px;"><b>${lblReg}</b> · ${lblProp} · ${plan.pasos.length} pasos · <span style="color:var(--text-muted);">${pendientes.length} pendientes</span></div>
       ${recordNumber ? `<div style="font-size:12px;color:var(--text-muted);">${ImportWizard._esc(recordNumber)}</div>` : ''}
@@ -620,11 +620,11 @@ const ImportWizard = {
   // Plan guardado en un registro IMP-xxxx (Tracker): se marca y persiste al
   // registro mismo (mismo patrón AppStorage), no al state del wizard.
   async openPlanFromRecord(number) {
-    let payload;
+    let found;
     try {
-      payload = await AppStorage.loadImports();
+      found = await ImportWizard._loadRecordPlan(number);
     } catch (e) { return; }
-    const rec = (payload.records || []).find((r) => r.number === number);
+    const rec = found && found.rec;
     if (!rec || !rec.plan) {
       if (typeof toast === 'function') toast('Este registro no tiene plan (guardalo desde el asistente de importación).', 'warning');
       return;
@@ -639,12 +639,13 @@ const ImportWizard = {
   async toggleRecordCheck(id) {
     const number = ImportWizard._planRecordNumber;
     if (!number) return;
-    let payload;
+    let found;
     try {
-      payload = await AppStorage.loadImports();
+      found = await ImportWizard._loadRecordPlan(number);
     } catch (e) { return; }
-    const rec = (payload.records || []).find((r) => r.number === number);
-    if (!rec || !rec.plan) return;
+    const payload = found && found.payload;
+    const rec = found && found.rec;
+    if (!payload || !rec || !rec.plan) return;
     rec.plan.checks = rec.plan.checks || {};
     rec.plan.checks[id] = !rec.plan.checks[id];
     try {
@@ -1214,12 +1215,7 @@ const ImportWizard = {
     ].map(r => r.length ? r.map(x => q(x)).join(sep) : '');
     res.items.forEach(i => lines.push([i.sku, i.ncm, i.qty, Math.round(i.derechosUsd + i.tasaUsd + i.ivaAddUsd + i.percGanUsd + i.iibbUsd), Math.round(i.costoRealItemUsd + i.ivaUsd)].map(x => q(x)).join(sep)));
     const csv = '\uFEFF' + lines.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'importacion-mambo.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    FileImporter.download(csv, 'importacion-mambo.csv', 'text/csv;charset=utf-8;');
     if (typeof toast === 'function') toast('Resumen exportado a CSV', 'success');
   },
 

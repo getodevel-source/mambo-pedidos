@@ -298,12 +298,7 @@ const QuoteGenerator = {
     rows.push([]);
     rows.push(['TOTAL', '', '', '', '', t.qty || 0, '', (t.facturacion || 0).toFixed(2)]);
     const csv = rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `cotizacion-${QuoteGenerator.nextNumber()}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    FileImporter.download('\uFEFF' + csv, `cotizacion-${QuoteGenerator.nextNumber()}.csv`, 'text/csv;charset=utf-8;');
     QuoteGenerator.saveToHistory({ number: 'CSV', clientName: cfg.clientName || 'Cliente', date: new Date().toISOString(), currency, total: t.facturacion || 0, items: pedido.items.length, snapshot: QuoteGenerator.historySnapshot(pedido) });
   },
 

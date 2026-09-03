@@ -49,9 +49,9 @@ const RemediationConfig = {
    */
   deepMerge(base, overrides) {
     if (!overrides || typeof overrides !== "object") {
-      return JSON.parse(JSON.stringify(base || {}));
+      return structuredClone(base || {});
     }
-    const out = JSON.parse(JSON.stringify(base || {}));
+    const out = structuredClone(base || {});
     for (const key of Object.keys(overrides)) {
       const ov = overrides[key];
       if (
@@ -68,34 +68,6 @@ const RemediationConfig = {
       }
     }
     return out;
-  },
-
-  /**
-   * Loads the effective remediation config: DEFAULT_REMEDIATION_CONFIG
-   * deep-merged with an optional repo-root `remediation-config.json` (when the
-   * file exists and is valid JSON). Node-only file read; returns the defaults
-   * untouched when no file / no fs / no working directory (browser).
-   * @returns {Object} effective config
-   */
-  loadRemediationConfig() {
-    try {
-      if (typeof process === "undefined" || typeof require !== "function") {
-        return this.deepMerge(this.DEFAULT_REMEDIATION_CONFIG, null);
-      }
-      // Guarded line: the browser-runtime check requires `typeof process` on
-      // the same line as any process access (WebView2 has no process).
-      const cwd = (typeof process !== 'undefined' && typeof process.cwd === 'function') ? process.cwd() : '.';
-      const fs = require("fs");
-      const path = require("path");
-      const file = path.join(cwd, "remediation-config.json");
-      if (fs.existsSync(file)) {
-        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-        return this.deepMerge(this.DEFAULT_REMEDIATION_CONFIG, parsed);
-      }
-    } catch (_e) {
-      // File missing/corrupt → defaults (fail open to the safe baseline).
-    }
-    return this.deepMerge(this.DEFAULT_REMEDIATION_CONFIG, null);
   },
 };
 

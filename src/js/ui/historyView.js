@@ -127,7 +127,7 @@ const HistoryView = {
       selection[it.sku] = it.qty;
     });
 
-    currentPedido = JSON.parse(JSON.stringify(p));
+    currentPedido = structuredClone(p);
     currentPedido.name = p.name + ' (Copia)';
     currentPedido.date = new Date().toISOString();
 

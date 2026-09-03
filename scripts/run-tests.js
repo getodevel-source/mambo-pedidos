@@ -31,6 +31,7 @@ global.document = {
 		return {
 			style: {},
 			click() {},
+			remove() {},
 			setAttribute() {},
 			appendChild() {},
 			getContext() {

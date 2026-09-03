@@ -1286,16 +1286,8 @@ const CatalogValidator = {
       return;
     }
     const data = CatalogValidator.buildCatalogExportJSON(items, opts);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
     const scopeName = opts.scope === "preview" ? "preview" : "productos";
-    a.download = `mambo-${scopeName}-${items.length}items-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    FileImporter.download(data, `mambo-${scopeName}-${items.length}items-${new Date().toISOString().slice(0, 10)}.json`, "application/json");
     if (typeof toast === "function") {
       const withImgs = opts.images !== "none" ? " con imágenes" : "";
       toast(`📥 Catálogo exportado (${items.length}${withImgs}) → carpeta Descargas`, "success");

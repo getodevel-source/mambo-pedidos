@@ -671,6 +671,19 @@ const Tests = {
 	// Exhaustividad: los tests afirman el SET COMPLETO de pasos por régimen.
 	// Agregar un paso al motor sin actualizar estos sets = rojo en CI
 	// ("no nos falta nada" es verificable, no una promesa).
+	// State base del wizard para las suites (los tests lo pisan por campo).
+	_mkWizardState(overrides) {
+		return Object.assign({
+			fleteModo: "peso", pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
+			fleteUsd: 0, pesoVolKg: 0, tipoCambio: 0,
+			transporte: "maritimo", regimen: "importador", proposito: "personal",
+			enacomTitular: null, itemEdits: {}, checks: {},
+			depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
+			recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
+			ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null,
+			origen: "China", margenObjetivo: 0.40
+		}, overrides || {});
+	},
 	testImportGuide() {
 		const pedidoMixto = [
 			{ sku: "K1", cat: "TECLADO", modelo: "Kumara", fob: 30, qty: 5 },
@@ -807,14 +820,7 @@ const Tests = {
 		const origLoad = AppStorage.loadImports;
 		const origSave = AppStorage.saveImports;
 		try {
-			IW.state = {
-				fleteModo: "peso", pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
-				transporte: "maritimo", regimen: "importador", proposito: "personal",
-				enacomTitular: null, itemEdits: {}, checks: {},
-				depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
-				recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
-				ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null, origen: "China"
-			};
+			IW.state = this._mkWizardState({ fleteModo: "peso", pesoKg: 0 });
 			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
 
 			// 1) Peso en 0 con flete por peso → NO blocking y NO default ciego: se usa
@@ -933,15 +939,7 @@ const Tests = {
 		const prevPedido = global.currentPedido;
 		const prevState = IW.state;
 		try {
-			IW.state = {
-				fleteModo: "pct", pesoKg: 0, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
-				transporte: "maritimo", regimen: "importador", proposito: "personal",
-				enacomTitular: null, itemEdits: {}, checks: {},
-				depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
-				recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
-				ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null,
-				origen: "China", margenObjetivo: 0.40
-			};
+			IW.state = this._mkWizardState({ fleteModo: "pct" });
 			global.currentPedido = { items: [
 				{ sku: "T1", cat: "TECLADO", modelo: "Kumara", fob: 30, qty: 2 },
 				{ sku: "H1", cat: "HEADSET", modelo: "Nari", fob: 80, qty: 1 },
@@ -1007,19 +1005,9 @@ const Tests = {
 		const prevPedido = global.currentPedido;
 		const prevState = IW.state;
 		const prevToast = global.toast;
-		const mkState = () => ({
-			fleteModo: "peso", pesoKg: 10, costoPorKg: 12, fletePct: 0.15, seguro: 0.015,
-			fleteUsd: 0, pesoVolKg: 0, tipoCambio: 0,
-			transporte: "maritimo", regimen: "importador", proposito: "personal",
-			enacomTitular: null, itemEdits: {}, checks: {},
-			depositoFiscalUsd: 150, despachanteUsd: 450, simDigitalizacionUsd: 40, fleteInternoUsd: 80,
-			recuperaCredito: true, iibbJurisdiccion: "santa_fe", iibbPctCustom: 0.03,
-			ncmOverrides: {}, ncmBySku: {}, precioLocalUsd: null, bpPct: 0, seguroUsdOverride: null,
-			origen: "China", margenObjetivo: 0.40
-		});
 		try {
 			// P1a: FOB en 0 → blocking y saveAsImport no guarda.
-			IW.state = mkState();
+			IW.state = this._mkWizardState({ pesoKg: 10 });
 			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 0, qty: 2 }] };
 			let v = IW.validate();
 			this.assert(
@@ -1050,7 +1038,7 @@ const Tests = {
 				"P2: flete USD explícito (500) gana sobre peso (120)",
 			);
 			// P2b: peso cobrable = máx(real, volumétrico).
-			IW.state = mkState();
+			IW.state = this._mkWizardState({ pesoKg: 10 });
 			global.currentPedido = { items: [{ sku: "T1", cat: "TECLADO", modelo: "K", fob: 30, qty: 2 }] };
 			IW.state.pesoKg = 10; IW.state.pesoVolKg = 25;
 			this.assert(IW._chargeableKg() === 25, "P2: volumétrico mayor → se cobra el volumétrico");

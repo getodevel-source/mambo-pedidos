@@ -111,12 +111,7 @@ const Reliability = {
         count: log.length,
         errors: log
       };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'mambo-error-log.json';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      FileImporter.download(JSON.stringify(payload, null, 2), 'mambo-error-log.json', 'application/json');
       if (typeof toast === 'function') toast(`📋 ${log.length} errores exportados`, 'info');
       return log;
     },

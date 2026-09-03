@@ -252,7 +252,7 @@ const AppStorage = {
    */
   _stripForQuota(value, deep = false) {
     if (!value || typeof value !== 'object') return value;
-    const clone = JSON.parse(JSON.stringify(value));
+    const clone = structuredClone(value);
     const items = clone.items || clone;
     if (Array.isArray(items)) {
       for (const item of items) {
