@@ -1151,8 +1151,9 @@ const CatalogValidator = {
     if (body) {
       body.innerHTML = report.brands.map(b => {
         const pct = b.total ? Math.round(((b.green + b.yellow) / b.total) * 100) : 0;
+        const brandSafe = String(b.marca).replace(/</g,'&lt;').replace(/'/g,'&#39;');
         return `<tr>
-          <td style="font-weight:600;">${String(b.marca).replace(/</g,'&lt;')}</td>
+          <td style="font-weight:600;">${brandSafe}</td>
           <td>${b.total}</td>
           <td style="color:#34d399;">${b.green}</td>
           <td style="color:#facc15;">${b.yellow}</td>
@@ -1163,16 +1164,19 @@ const CatalogValidator = {
           <td>${b.sinFoto}</td>
           <td>${b.duplicados}</td>
           <td>${b.unclassified}</td>
+          <td><button class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:11px;" onclick="runCatalogRemediation('${brandSafe}')" title="Remediar solo esta marca (con evidencia)">Remediar</button></td>
         </tr>`;
       }).join("");
     }
     modal.style.display = "flex";
   },
 
-  // Campaña de remediación guiada (I1): corre el pass con evidencia sobre el
-  // catálogo vivo y muestra el ledger para confirmación humana.
-  runCatalogRemediation() {
-    const items = typeof catalog !== "undefined" ? catalog : [];
+  // Campaña de remediación guiada (I1 + spec process-catalog-quality): corre
+  // el pass con evidencia sobre el catálogo vivo (o una marca) y muestra el
+  // ledger para confirmación humana.
+  runCatalogRemediation(brand) {
+    const all = typeof catalog !== "undefined" ? catalog : [];
+    const items = brand && brand !== "ALL" ? all.filter(i => String(i.marca || "").trim() === brand) : all;
     if (!items.length) { if (typeof toast === "function") toast("No hay catálogo", "warning"); return; }
     const REM = typeof Remediation !== "undefined" ? Remediation : null;
     if (!REM || typeof REM.runRemediationPass !== "function") {
@@ -1182,20 +1186,33 @@ const CatalogValidator = {
     const cfg = (typeof RemediationConfig !== "undefined" && RemediationConfig.DEFAULT_REMEDIATION_CONFIG)
       ? RemediationConfig.DEFAULT_REMEDIATION_CONFIG
       : { enabled: true, strategies: {} };
+    // Vista previa del diff antes de aplicar (spec process-catalog-quality):
+    // los campos cambiados por SKU se muestran para confirmación humana.
+    const antes = new Map((items || []).map(i => [i.sku, { modelo: i.modelo, variante: i.variante, fob: i.fob }]));
     const result = REM.runRemediationPass(items, {}, cfg);
     const promoted = (result.ledger || []).filter(e => e && e.promoted).length;
+    window._qcDiff = (result.ledger || []).map(e => {
+      const b = antes.get(e.sku) || {};
+      const it = (items || []).find(i => i.sku === e.sku) || {};
+      const d = {};
+      for (const k of ["modelo", "variante", "fob"]) if (String(b[k] ?? "") !== String(it[k] ?? "")) d[k] = { antes: b[k], ahora: it[k] };
+      return { sku: e.sku, reason: e.reason || e.originalReason || "", strategy: e.strategy || "", promoted: !!e.promoted, diff: d };
+    });
     const body = document.getElementById("yellowReviewBody");
     if (body) {
-      body.innerHTML = (result.ledger || []).map(e => `<tr>
-        <td>${String(e.sku || '').replace(/</g,'&lt;')}</td>
-        <td>${String(e.reason || e.originalReason || '').replace(/</g,'&lt;')}</td>
-        <td>${String(e.strategy || '').replace(/</g,'&lt;')}</td>
-        <td style="color:${e.promoted ? '#34d399' : '#94a3b8'};">${e.promoted ? '✅ corregido' : 'sin evidencia'}</td>
-        <td style="font-size:11px;color:var(--text-3);max-width:220px;">${String(e.evidence || '').replace(/</g,'&lt;').slice(0,120)}</td>
-      </tr>`).join("");
+      body.innerHTML = (window._qcDiff || []).map(d => {
+        const diffs = Object.entries(d.diff || {}).map(([k, v]) => `${k}: ${String(v.antes ?? '')} → <b>${String(v.ahora ?? '')}</b>`).join(' · ');
+        return `<tr>
+        <td>${String(d.sku || '').replace(/</g,'&lt;')}</td>
+        <td>${String(d.reason || '').replace(/</g,'&lt;')}</td>
+        <td>${String(d.strategy || '').replace(/</g,'&lt;')}</td>
+        <td style="color:${d.promoted ? '#34d399' : '#94a3b8'};">${d.promoted ? '✅ corregido' : 'sin evidencia'}</td>
+        <td style="font-size:11px;color:var(--text-3);max-width:260px;">${diffs || '<span style=color:#94a3b8>sin cambios visibles</span>'}</td>
+      </tr>`;
+      }).join("");
     }
     const cnt = document.getElementById("yellowReviewCount");
-    if (cnt) cnt.textContent = `${(result.ledger || []).length} evaluados · ${promoted} corregidos con evidencia`;
+    if (cnt) cnt.textContent = `${(result.ledger || []).length} evaluados (${brand === "ALL" ? "todo el catálogo" : brand}) · ${promoted} corregidos con evidencia`;
     // Aplicar: los items ya mutaron en el pass (in-place sobre catalog); persisti.
     const applyBtn = document.getElementById("yellowReviewApply");
     if (applyBtn) {
@@ -1313,7 +1330,7 @@ if (typeof window !== "undefined") {
   window.exportCatalogJSON = (opts) => CatalogValidator.exportCatalogJSON(opts);
   window.doExportCatalogJSON = () => CatalogValidator.doExportCatalogJSON();
   window.showCatalogQuality = () => CatalogValidator.showCatalogQuality();
-  window.runCatalogRemediation = () => CatalogValidator.runCatalogRemediation();
+  window.runCatalogRemediation = (brand) => CatalogValidator.runCatalogRemediation(brand);
 
   // Global console shortcut: auditCatalog() or auditCatalog(catalog)
   window.auditCatalog = function (products) {
