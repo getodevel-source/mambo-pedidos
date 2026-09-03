@@ -192,3 +192,25 @@ solo "axis"/"switch"). 3 tests (1 RED→GREEN + 2 anti-overfit).
 | recall_dirty | 68% (19/28) | **71% (20/28)** |
 | FP_rate_clean | 0% (0/37) | **0% (0/37)** |
 | extracción (measure-extraction) | 0 cambiaron | 0 cambiaron (gate puro) |
+
+## Iteración 5 — Gate colisiones de identidad PIL7 (2026-09-03)
+
+Patrón: filas de bloques fusionados que pierden su desambiguador (wired vs
+wireless, switch, colorway) colapsan en la misma identidad con distinto FOB.
+Medido en el export completo: 85 grupos (ej. 'Ultimate 2C'+'Purple' @ 19.40 y
+@ 15.45) — comprar por esa fila puede traer el producto equivocado. Evidencia:
+`--items` en 8BitDo p2 (el texto "Wired Controller" está a 72px de la fila de
+precio: el bbox no lo ve) + conteo de grupos en catalog-export.json.
+
+Cambio (`src/js/pdfParser.js` finalize): `flagIdentityCollisions(products)` —
+misma marca+cat+modelo+variante con >1 FOB distinto → YELLOW + razón a todos
+los miembros (solo degrada GREEN, nunca RED/borra). Agnóstico al layout:
+sirve para cualquier catálogo. 2 tests (grupo colisionado + 4 anti-overfit:
+única/mismo FOB/otra marca intactos).
+
+| Métrica | IT4 | IT5 |
+|---|---|---|
+| recall_dirty | 71% (20/28) | 71% (sin cambio: el gate es batch, no per-item) |
+| FP_rate_clean | 0% | 0% |
+| extracción (measure-extraction) | 0 cambiaron | 0 cambiaron (ningún caso del snapshot colisiona) |
+| cobertura real | — | **~90 grupos / 191 filas marcadas en el catálogo completo** |

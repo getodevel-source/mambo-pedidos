@@ -1975,6 +1975,27 @@ const Tests = {
 			k3 && /^data:image\//.test(k3.img || "") && k3._imageInherited,
 			"Herencia de imagen funciona dentro de la misma categoría",
 		);
+		// PIL7 (RED): colisión de identidad — misma marca+cat+modelo+variante
+		// con distinto FOB (caso #5: wired vs wireless colapsados). YELLOW a los
+		// miembros; filas únicas, mismo FOB o distinta marca/cat no se tocan.
+		const dupes = [
+			{ sku: "D1", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Purple", fob: 19.4, status: "GREEN", warnings: [] },
+			{ sku: "D2", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Purple", fob: 15.45, status: "GREEN", warnings: [] },
+			{ sku: "S1", marca: "8BitDo", cat: "CONTROLLER", modelo: "Ultimate 2C", variante: "Pink", fob: 19.4, status: "GREEN", warnings: [] },
+			{ sku: "S2", marca: "Logitech", cat: "MOUSE", modelo: "G502 X", variante: "Black", fob: 43.96, status: "GREEN", warnings: [] },
+			{ sku: "S3", marca: "Logitech", cat: "MOUSE", modelo: "G502 X", variante: "Black", fob: 43.96, status: "GREEN", warnings: [] },
+			{ sku: "S4", marca: "Razer", cat: "MOUSE", modelo: "G502 X", variante: "Black", fob: 50, status: "GREEN", warnings: [] },
+		];
+		this.assert(
+			PdfParser.flagIdentityCollisions(dupes) === 2,
+			"PIL7: colisión marca+cat+modelo+var con distinto FOB marca 2",
+		);
+		this.assert(
+			dupes[0].status === "YELLOW" && dupes[1].status === "YELLOW" &&
+				dupes[0].warnings.some((w) => w.includes("duplicada")) &&
+				dupes.slice(2).every((p) => p.status === "GREEN"),
+			"PIL7: solo el grupo colisionado pasa a YELLOW (únicos/mismo FOB/otra marca intactos)",
+		);
 	},
 
 	testHonestModelQualityGate() {

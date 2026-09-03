@@ -1610,7 +1610,51 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 			p.qualityReason = p.warnings[0] || "Sin observaciones";
 		}
 
+		// 4. PIL7: colisiones de identidad (misma marca+cat+modelo+variante con
+		// distinto FOB = dos productos distintos colapsados, o precio en conflicto).
+		this.flagIdentityCollisions(products);
+
 		return products;
+	},
+
+	/**
+	 * PIL7: marca grupos de identidad duplicada (misma marca+categoría+modelo+
+	 * variante con distinto FOB). Es la forma agnóstica al layout de cazar filas
+	 * que perdieron su desambiguador (wired vs wireless, switch, colorway) en
+	 * bloques fusionados: comprar por esa fila puede traer el producto equivocado.
+	 * Solo dispara con FOBs distintos (misma fila repetida no es ambigua) y solo
+	 * degrada GREEN→YELLOW (nunca RED, nunca borra). Devuelve cuántos marcó.
+	 */
+	flagIdentityCollisions(products) {
+		if (!Array.isArray(products)) return 0;
+		const groups = new Map();
+		for (const p of products) {
+			if (!p || typeof p !== "object") continue;
+			const key = [p.marca, p.cat, p.modelo, p.variante]
+				.map((v) => String(v || "").trim().toLowerCase())
+				.join("|");
+			if (!key.replace(/\|/g, "")) continue;
+			if (!groups.has(key)) groups.set(key, []);
+			groups.get(key).push(p);
+		}
+		let flagged = 0;
+		for (const g of groups.values()) {
+			if (g.length < 2) continue;
+			const fobs = [...new Set(g.map((p) => Number(p.fob)))];
+			if (fobs.length < 2) continue;
+			const reason =
+				`Identidad duplicada con distinto precio (${fobs
+					.sort((a, b) => a - b)
+					.map((f) => "$" + f)
+					.join(" vs ")}) — revisar bloque fusionado`;
+			for (const p of g) {
+				p.warnings = p.warnings || [];
+				if (!p.warnings.includes(reason)) p.warnings.push(reason);
+				if (p.status === "GREEN") p.status = "YELLOW";
+				flagged++;
+		}
+		}
+		return flagged;
 	},
 
 	/**
