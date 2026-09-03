@@ -247,27 +247,96 @@ const ImportFlow = {
       return;
     }
 
-    function renderChunk() {
-      const end = Math.min(rendered + CHUNK, filtered.length);
+    // Virtualización (spec process-preview-import): en vez de acumular TODAS
+    // las cards al scrollear (2080 items = 35 chunks en el DOM), se montan solo
+    // los chunks visibles ± WINDOW y se podan los lejanos. Soporta scroll en
+    // AMBAS direcciones (monta hacia atrás/adelante alrededor del ancla).
+    const WINDOW = 720; // ítems montados alrededor del ancla (~12 chunks)
+    let renderedStart = 0;
+    let renderedEnd = 0;
+
+    function mountRange(from, to) {
+      from = Math.max(0, from);
+      to = Math.min(filtered.length, to);
+      if (from >= to) return;
       let html = '';
-      for (let i = rendered; i < end; i++) {
-        html += buildCard(filtered[i]);
+      for (let i = from; i < to; i++) html += buildCard(filtered[i]);
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const frag = document.createDocumentFragment();
+      let idx = from;
+      for (const kid of Array.from(tmp.children)) {
+        kid.setAttribute('data-idx', String(idx));
+        frag.appendChild(kid);
+        idx++;
       }
-      body.insertAdjacentHTML('beforeend', html);
-      rendered = end;
+      const first = body.querySelector('article.pv-card');
+      if (from < renderedStart) {
+        body.insertBefore(frag, first);
+      } else {
+        body.appendChild(frag);
+      }
+      renderedStart = Math.min(renderedStart, from);
+      renderedEnd = Math.max(renderedEnd, to);
     }
 
-    renderChunk();
+    function anchorIdx() {
+      const rectTop = scrollContainer.getBoundingClientRect().top;
+      const cards = body.querySelectorAll('article.pv-card');
+      let last = renderedStart;
+      for (const c of cards) {
+        const i = Number(c.getAttribute('data-idx') || 0);
+        last = i;
+        if (c.getBoundingClientRect().bottom >= rectTop) return i;
+      }
+      // viewport debajo de todo lo montado (fondo): ancla en la ÚLTIMA card;
+      // si no, el frente de montaje se resetea hacia atrás y nunca llega al fin.
+      return last;
+    }
+
+    function ensureWindow() {
+      const a = anchorIdx();
+      const lo = a - WINDOW;
+      const hi = a + WINDOW;
+      // mountRange clampea desde=max(0,lo): cuando el ancla está arriba (lo<0)
+      // hay que montar desde 0 igual — la condición era lo>=0 y nunca corría.
+      if (lo < renderedStart) mountRange(Math.max(0, lo), renderedStart);
+      if (hi > renderedEnd) mountRange(renderedEnd, hi);
+      // podar los lejanos al ancla
+      for (const c of Array.from(body.querySelectorAll('article.pv-card'))) {
+        const i = Number(c.getAttribute('data-idx') || 0);
+        if (i < lo - CHUNK || i > hi + CHUNK) c.remove();
+      }
+      // recomputar el rango REAL montado (sin duplicados ni huecos)
+      const remaining = body.querySelectorAll('article.pv-card');
+      if (remaining.length) {
+        let mn = Infinity, mx = -1;
+        for (const c of remaining) {
+          const i = Number(c.getAttribute('data-idx') || 0);
+          if (i < mn) mn = i;
+          if (i > mx) mx = i;
+        }
+        renderedStart = mn;
+        renderedEnd = mx + 1;
+      } else {
+        renderedStart = renderedEnd = 0;
+      }
+    }
+
+    mountRange(0, Math.min(CHUNK, filtered.length));
 
     const scrollContainer = document.getElementById('pvGridWrap');
+    let rafPending = false;
     function onScroll() {
-      if (rendered >= filtered.length) {
-        scrollContainer.removeEventListener('scroll', onScroll);
+      if (filtered.length <= WINDOW * 2) {
+        if (renderedEnd < filtered.length && scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 300) {
+          mountRange(renderedEnd, renderedEnd + CHUNK);
+        }
         return;
       }
-      if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 300) {
-        renderChunk();
-      }
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => { rafPending = false; ensureWindow(); });
     }
     scrollContainer.removeEventListener('scroll', onScroll);
     scrollContainer.addEventListener('scroll', onScroll);
