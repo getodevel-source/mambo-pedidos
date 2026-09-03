@@ -148,6 +148,11 @@ const CatalogView = {
     if (catSelect && cat !== 'SELECTED_ONLY') {
       catSelect.value = cat;
     }
+    // UI: el combobox custom refleja valores seteados por código
+    if (typeof CustomSelects !== 'undefined') {
+      if (catSelect) CustomSelects.refresh('catFilterCat');
+      CustomSelects.refresh('catFilterMarca');
+    }
     CatalogView.renderCatalog();
   },
 
