@@ -13,17 +13,22 @@
 // compila aparte (format:'iife') a dist/vendor/tauri-bridge.js y lo expone
 // como window.MamboTauriBridge. Se carga ANTES de js/storage.js.
 //
-// NOTA SEGURIDAD (auditoría Hermes 01): dos flags de tauri.conf.json son
-// intencionales y acotados, no deuda:
-// - withGlobalTauri:true: el bundle usa <script> clásicos (no ESM), así que es
-//   la única forma de exponer el core; los plugins igual solo llegan por este
-//   puente (store/fs nunca cuelgan de window.__TAURI__).
+// NOTA SEGURIDAD (auditoría Hermes 01 + ítem 2 ronda 2): flags de
+// tauri.conf.json que quedan a propósito, con motivo verificable:
+// - withGlobalTauri:true — REQUERIDO, no se puede poner en false: updater.js
+//   invoca window.__TAURI__.core.invoke / __TAURI_INTERNALS__ (download_update,
+//   apply_appimage_update, plugin:updater|check) y este puente publica las APIs
+//   de plugin que el core no expone. Mitigación: los comandos Rust sensibles
+//   validan whitelist/firma por su cuenta; el flag solo expone el transporte.
 // - dangerousDisableAssetCspModification:true: el frontend se sirve como
-//   archivos locales y el CSP estático de arriba ya es la política efectiva;
-//   Tauri reescribiría el asset-CSP en cada ventana sin este flag.
-// - unsafe-inline en script/style: la UI usa onclick/atributos inline en todo
-//   el HTML generado; quitarlo exige reescribir el render. Mitigación aplicada:
-//   connect-src ya no acepta http: plano (solo https: para dolarapi/github).
+//   archivos locales y el CSP estático es la política efectiva; Tauri
+//   reescribiría el asset-CSP en cada ventana sin este flag.
+// - unsafe-inline en script-src: 175 handlers onclick en el HTML/JS generado
+//   por el render; quitarlo exige reescribir todo a addEventListener (deuda
+//   mayor, sin ganancia mientras el resto del CSP acota: sin object/base,
+//   https-only en connect).
+// Endurecido en ronda 2: +object-src 'none' (cero <object>/<embed> en la app,
+// verificado por grep) +base-uri 'self' (cero <base>).
 // Puerta que usa AppStorage para decidir si puede confiar en el puente.
 
 import {
