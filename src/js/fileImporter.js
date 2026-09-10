@@ -203,6 +203,7 @@ const FileImporter = {
     const headers = [
       'Item #',
       'SKU',
+      'NCM',
       'Posición / Categoría',
       'Marca / Proveedor',
       'Modelo / Descripción',
@@ -216,20 +217,36 @@ const FileImporter = {
       'IVA Subtotal (USD)'
     ];
 
+    // Peso y costo unitario son ESTIMADOS cuando el pedido no trae peso real
+    // (prorrateo del peso total) ni costo calculado (FOB×1.2): antes salían
+    // como valores exactos sin NCM. Ahora cada celda estimada lleva " EST".
     const totalWeight = pedido.costs ? (parseFloat(pedido.costs.pesoKg) || 0) : 0;
+    const hasRealWeight = totalWeight > 0;
     const totalQty = pedido.items.reduce((sum, i) => sum + (i.qty || 0), 0);
     const avgWeightPerUnit = totalQty > 0 ? (totalWeight / totalQty) : 0.25;
 
     const rows = pedido.items.map((r, idx) => {
       const itemQty = r.qty || 1;
       const subFob = (r.fob || 0) * itemQty;
-      const itemWeight = (avgWeightPerUnit * itemQty).toFixed(2);
+      const itemWeight = (avgWeightPerUnit * itemQty).toFixed(2) + (hasRealWeight ? '' : ' EST');
+      const hasRealCost = (r.costoU || r.costoUnit) ? true : (t.costo && t.fob ? true : false);
       const unitCost = r.costoU || r.costoUnit || (t.costo && t.fob ? (r.fob * (t.costo / t.fob)) : r.fob * 1.2);
       const subCost = unitCost * itemQty;
 
+      // NCM real por ítem (misma resolución que el motor puerta a puerta).
+      let ncmCode = '-';
+      try {
+        if (typeof Calculator !== 'undefined' && typeof Calculator.ncmKeyFor === 'function') {
+          const key = Calculator.ncmKeyFor(r);
+          const rule = Calculator.NCM_MATRIX && Calculator.NCM_MATRIX[key];
+          if (rule && rule.ncm) ncmCode = String(rule.ncm);
+        }
+      } catch {}
+      if (ncmCode === '-' && r.ncm) ncmCode = String(r.ncm);
       return [
         idx + 1,
         r.sku,
+        ncmCode,
         r.cat || 'PERIFERICOS_GAMER',
         r.marca,
         r.modelo,
@@ -238,15 +255,15 @@ const FileImporter = {
         itemWeight,
         r.fob.toFixed(2),
         subFob.toFixed(2),
-        unitCost.toFixed(2),
-        subCost.toFixed(2),
+        typeof unitCost === 'number' ? unitCost.toFixed(2) + (hasRealCost ? '' : ' EST') : unitCost,
+        subCost.toFixed(2) + (hasRealCost ? '' : ' EST'),
         (r.subIva || 0).toFixed(2)
       ];
     });
-
     rows.push([]);
     rows.push([
       'TOTALES',
+      '',
       '',
       '',
       '',
@@ -260,12 +277,19 @@ const FileImporter = {
       (t.costoNeto || t.costo || 0).toFixed(2),
       (t.ivaUsd || 0).toFixed(2)
     ]);
+    // Factura proforma: lo que el packing viejo no traía (ítem 15).
+    rows.push([]);
+    rows.push(['FACTURA PROFORMA', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    rows.push(['Facturación proyectada (USD)', '', '', '', '', '', '', '', '', '', '', '', (t.facturacion || 0).toFixed(2), '']);
+    rows.push(['Margen proyectado (USD)', '', '', '', '', '', '', '', '', '', '', '', (t.margen || 0).toFixed(2), '']);
+    rows.push(['Margen (%)', '', '', '', '', '', '', '', '', '', '', '', String(t.margenPct || 0), '']);
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
     ws['!cols'] = [
       { wch: 8 },  // #
       { wch: 16 }, // SKU
+      { wch: 14 }, // NCM
       { wch: 22 }, // Cat
       { wch: 15 }, // Marca
       { wch: 30 }, // Modelo

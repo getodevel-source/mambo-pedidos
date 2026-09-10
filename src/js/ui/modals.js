@@ -404,6 +404,17 @@ const UIModals = {
   handleProductImageFile(e) {
     const file = e.target.files && e.target.files[0];
     if (!file || !UIModals.activeZoomSku) return;
+    // Tope 8MB + MIME real: antes cualquier archivo gigante entraba a memoria
+    // y al store sin control.
+    if (typeof Reliability !== 'undefined') {
+      const sizeCheck = Reliability.validateFileSize(file, 'image');
+      if (!sizeCheck.valid) { toast(sizeCheck.reason, 'error'); e.target.value = ''; return; }
+    }
+    if (file.type && !/^image\//.test(file.type) && !/\.(png|jpe?g|webp|gif)$/i.test(file.name || '')) {
+      toast('El archivo no es una imagen válida.', 'error');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {

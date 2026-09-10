@@ -188,23 +188,62 @@ const Reliability = {
   // ── Layer 3: Storage Backup & Recovery ──
 
   BACKUP_KEY: 'mambo_catalog_backup',
+  BACKUP_FILE: 'mambo-backup/catalog-backup.json',
 
   /**
    * Create a backup of the current catalog state before saving.
    * @param {Object} payload - The catalog payload {items, sel}
    */
   createBackup(payload) {
+    if (!payload) return;
+    const envelope = { data: payload, timestamp: new Date().toISOString() };
     try {
-      if (typeof localStorage !== 'undefined' && payload) {
-        localStorage.setItem(this.BACKUP_KEY, JSON.stringify({
-          data: payload,
-          timestamp: new Date().toISOString()
-        }));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.BACKUP_KEY, JSON.stringify(envelope));
       }
     } catch {
       // Backup failure is non-fatal; log silently
     }
+    this._writeDiskBackup(envelope);
   },
+  // Respaldo en DISCO (Tauri) además del localStorage: el backup viejo vivía en
+  // el mismo localStorage que el primary (misma cuota, mismo borrado) y morían
+  // juntos. En desktop se escribe mambo-backup/catalog-backup.json bajo AppData
+  // vía el puente fs; fuera de Tauri degrada al backup local existente.
+  _writeDiskBackup(envelope) {
+    try {
+      const bridge = (typeof window !== 'undefined' && window.MamboTauriBridge) || null;
+      const fsApi = (bridge && bridge.inTauri && bridge.fs) || null;
+      if (!fsApi || typeof fsApi.writeBytes !== 'function') return;
+      const json = JSON.stringify(envelope);
+      const u8 = new Uint8Array(json.length);
+      for (let i = 0; i < json.length; i++) u8[i] = json.charCodeAt(i) & 0xFF;
+      Promise.resolve()
+        .then(() => fsApi.ensureDir('mambo-backup'))
+        .then(() => fsApi.writeBytes(this.BACKUP_FILE, u8))
+        .catch(() => {});
+    } catch {}
+  },
+
+  _readDiskBackup() {
+    try {
+      const bridge = (typeof window !== 'undefined' && window.MamboTauriBridge) || null;
+      const fsApi = (bridge && bridge.inTauri && bridge.fs) || null;
+      if (!fsApi || typeof fsApi.readBytes !== 'function') return Promise.resolve(null);
+      return Promise.resolve()
+        .then(() => fsApi.readBytes(this.BACKUP_FILE))
+        .then((bytes) => {
+          let json = '';
+          const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+          for (let i = 0; i < arr.length; i++) json += String.fromCharCode(arr[i]);
+          const envelope = JSON.parse(json);
+          if (envelope && envelope.data && Array.isArray(envelope.data.items) && envelope.data.items.length) return envelope;
+          return null;
+        })
+        .catch(() => null);
+    } catch { return Promise.resolve(null); }
+  },
+
 
   /**
    * Attempt to recover catalog from backup if primary is corrupt/empty.
@@ -230,6 +269,22 @@ const Reliability = {
     }
     return { data: null, recovered: false, backupAge: null };
   },
+  // Alias async que esperaba AppStorage.loadCatalog: el rescate automático lo
+  // llamaba y NO EXISTÍA (TypeError silencioso → con store corrupto la app
+  // mostraba catálogo vacío aunque hubiera copia). Orden: disco → localStorage.
+  async _readBackup() {
+    const disk = await this._readDiskBackup();
+    if (disk) return disk;
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(this.BACKUP_KEY);
+      if (!raw) return null;
+      const backup = JSON.parse(raw);
+      if (backup && backup.data && Array.isArray(backup.data.items) && backup.data.items.length) return backup;
+    } catch {}
+    return null;
+  },
+
 
   // ── Layer 4: Import Schema Validation ──
 
@@ -329,6 +384,54 @@ const Reliability = {
     const fob = Number(item.fob);
     if (!Number.isFinite(fob) || fob <= 0) missing.push('fob');
     return { viable: missing.length === 0, missing };
+  },
+
+  // Topes anti-DoS (ítem 4 devolución): PDF/import 100MB, fotos 10MB, PDF
+  // 1500 páginas. Se chequean ANTES de leer el contenido.
+  MAX_IMPORT_BYTES: 100 * 1024 * 1024,
+  MAX_PHOTO_BYTES: 10 * 1024 * 1024,
+  MAX_PDF_PAGES: 1500,
+
+  /**
+   * Validate file size before reading it into memory.
+   * @param {{name:string,size:number}} file - File-like object
+   * @param {string} expectedType - 'pdf', 'csv', 'xlsx', 'image' or 'any'
+   * @returns {{ valid: boolean, reason: string }}
+   */
+  validateFileSize(file, expectedType) {
+    const size = (file && typeof file.size === 'number') ? file.size : 0;
+    if (!(size > 0)) return { valid: true, reason: '' };
+    const cap = expectedType === 'image' ? this.MAX_PHOTO_BYTES : this.MAX_IMPORT_BYTES;
+    if (size > cap) {
+      const mb = Math.round(cap / 1024 / 1024);
+      return { valid: false, reason: `"${(file && file.name) || 'archivo'}" supera el tope de ${mb}MB (${Math.round(size / 1024 / 1024)}MB).` };
+    }
+    return { valid: true, reason: '' };
+  },
+
+  /**
+   * Validate file CONTENT by magic bytes, not just the extension: renombrar
+   * un .exe a .pdf pasaba el filtro viejo (solo miraba la extensión).
+   * @param {Uint8Array|Buffer|Array} bytes - First bytes of the file
+   * @param {string} detectedType - 'pdf', 'csv' or 'xlsx' (from validateFileType)
+   * @returns {{ valid: boolean, reason: string }}
+   */
+  validateFileContent(bytes, detectedType) {
+    if (!bytes || bytes.length < 4) return { valid: false, reason: 'Archivo vacío o ilegible.' };
+    const b = bytes;
+    if (detectedType === 'pdf') {
+      const head = String.fromCharCode(b[0], b[1], b[2], b[3], b[4] || 0);
+      if (head.substring(0, 4) !== '%PDF') return { valid: false, reason: 'No es un PDF real (firma %PDF ausente).' };
+      return { valid: true, reason: '' };
+    }
+    if (detectedType === 'xlsx') {
+      // XLSX = ZIP: PK\x03\x04
+      if (!(b[0] === 0x50 && b[1] === 0x4B && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07))) {
+        return { valid: false, reason: 'No es un Excel real (firma ZIP ausente).' };
+      }
+      return { valid: true, reason: '' };
+    }
+    return { valid: true, reason: '' };
   },
 
   /**

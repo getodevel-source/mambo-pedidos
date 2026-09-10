@@ -210,7 +210,7 @@ function armarPedido() {
     const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
     return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', imgSm: r ? r.imgSm : undefined, status: r.status, qty };
   });
-  currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), items, costs: getCostInputs(), date: new Date().toISOString() };
+  currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), estado: 'borrador', items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');
   renderPedido();
   toast('Pedido armado: ' + items.length + ' SKUs', 'success');
@@ -270,6 +270,14 @@ function renderPedido() {
     if (c.logisticaModo) setRadio('rLogisticaModo', c.logisticaModo);
     if (c.transporteModo) setRadio('rTransporteModo', c.transporteModo);
     if (c.fleteModo) setRadio('rFleteModo', c.fleteModo);
+  }
+  // Descuento negociado guardado: refleja el % en el slider (el rastro que
+  // faltaba según auditoría). No re-aplica el descuento: los FOB ya lo traen.
+  if (currentPedido.descuentoPct) {
+    const range = document.getElementById('cDescuentoNegociadoRange');
+    if (range) range.value = currentPedido.descuentoPct;
+    const label = document.getElementById('cDescuentoNegociadoVal');
+    if (label) label.textContent = currentPedido.descuentoPct + '%';
   }
 
   recalc();
@@ -539,6 +547,9 @@ function syncDescuentoNegociado(val) {
   if (label) label.textContent = `${pct}%`;
 
   if (currentPedido && currentPedido.items) {
+    // El % queda en el pedido: antes se reescribían los FOB sin rastro y al
+    // guardar/recargar nadie sabía qué descuento se había usado.
+    currentPedido.descuentoPct = pct;
     let origFobTotal = 0;
     let realFobTotal = 0;
     currentPedido.items.forEach(i => {
@@ -711,7 +722,7 @@ function renderPedidoTable() {
     html += '<td>' + esc(r.modelo) + '</td>';
     html += '<td><span class="muted">' + esc(r.color) + '</span></td>';
     html += '<td class="num">$' + r.fob.toFixed(2) + '</td>';
-    html += '<td class="center"><input class="inline num qty" type="number" value="' + r.qty + '" onchange="currentPedido.items[' + i + '].qty=parseInt(this.value)||0; recalc()"></td>';
+    html += '<td class="center"><input class="inline num qty" type="number" min="1" max="9999" step="1" value="' + r.qty + '" onchange="setPedidoQty(' + i + ', this.value, this)"></td>';
     html += '<td class="num">$' + r.subFob.toFixed(0) + '</td>';
     html += '<td class="num" style="color: var(--accent);">$' + r.pvp.toLocaleString() + '</td>';
     html += '<td class="num" style="color: var(--green);">' + r.margenPct + '%</td>';
@@ -721,17 +732,59 @@ function renderPedidoTable() {
   document.getElementById('pedidoBody').innerHTML = html;
 }
 
+/* exported setPedidoQty */
+function setPedidoQty(idx, rawVal, inputEl) {
+  if (!currentPedido || !currentPedido.items[idx]) return;
+  // Antes: parseInt(this.value)||0 aceptaba 0, negativos y truncaba 2.5→2 en
+  // silencio y los totales en pantalla quedaban falseados (el guardado recién
+  // lo frenaba en validations.js). Ahora se valida en el acto con aviso.
+  const num = Number(rawVal);
+  let qty = Math.round(num);
+  if (!Number.isFinite(num) || num <= 0) {
+    qty = currentPedido.items[idx].qty || 1;
+    if (inputEl) inputEl.value = qty;
+    toast('Cantidad inválida: debe ser un entero entre 1 y 9999', 'error');
+    return;
+  }
+  if (inputEl) inputEl.value = qty;
+  currentPedido.items[idx].qty = qty;
+  recalc();
+}
+
 /* exported removePedItem */
-function removePedItem(idx) {
+async function removePedItem(idx) {
+  if (!currentPedido || !currentPedido.items[idx]) return;
+  // Ítem 14 devolución: confirmación explícita ANTES de borrar (el Deshacer
+  // posterior se conserva como segunda red).
+  const target = currentPedido.items[idx];
+  const ok = await showConfirm({ title: 'Quitar ítem', message: '¿Quitar <strong>' + esc(target.modelo || target.sku) + '</strong> del pedido?', confirmText: 'Quitar', danger: true });
+  if (!ok || !currentPedido || !currentPedido.items[idx]) return;
+  const removed = currentPedido.items[idx];
+  const at = idx;
   currentPedido.items.splice(idx, 1);
   if (!currentPedido.items.length) {
+    // Pedido vaciado: se conserva el objeto para que Deshacer lo restaure
+    // (con null el undo quedaba muerto y se perdían nombre/costos).
+    const emptied = currentPedido;
     currentPedido = null;
     document.getElementById('pedidoEmpty').style.display = 'block';
     document.getElementById('pedidoContent').style.display = 'none';
     document.getElementById('pedidoSubtitle').textContent = 'No hay productos en el pedido';
+    toastUndo('Ítem "' + (removed.modelo || removed.sku) + '" borrado (pedido vacío)', () => {
+      emptied.items.splice(Math.min(at, emptied.items.length), 0, removed);
+      currentPedido = emptied;
+      document.getElementById('pedidoEmpty').style.display = 'none';
+      document.getElementById('pedidoContent').style.display = 'block';
+      recalc();
+    });
     return;
   }
   recalc();
+  toastUndo('Ítem "' + (removed.modelo || removed.sku) + '" borrado', () => {
+    if (!currentPedido) return;
+    currentPedido.items.splice(Math.min(at, currentPedido.items.length), 0, removed);
+    recalc();
+  });
 }
 
 // Historial UI → src/js/ui/historyView.js

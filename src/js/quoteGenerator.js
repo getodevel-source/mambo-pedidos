@@ -186,10 +186,12 @@ const QuoteGenerator = {
         </tr>`;
     });
 
-    // Moneda: si ARS, convertir con el TC; si USD, usar el valor directo.
+    // Moneda: UNA sola fuente de TC (el vigente `tc`). Antes el total USD usaba
+    // `tc` pero el equivalente ARS venía de t.facturacionArs (calculado con el
+    // TC de cuando se armó el pedido): el mismo documento mostraba dos dólares.
     const fx = currency === 'ARS' ? tc : 1;
     const totalFx = (t.facturacion || sumItems) * fx;
-    const totalArsFx = (t.facturacionArs || 0);
+    const totalArsFx = (t.facturacion || sumItems) * tc;
 
     const costHeader = showCosts ? '<th style="text-align: right;">Costo Unit</th>' : '';
     const logoHtml = cfg.logo ? `<img src="${this.esc(cfg.logo)}" style="max-height: 48px; max-width: 160px; object-fit: contain;">` : `<div class="logo">${this.esc(cfg.companyName)}</div>`;
@@ -289,17 +291,24 @@ const QuoteGenerator = {
     }
     const cfg = Object.assign(QuoteGenerator.getConfig(), config);
     const currency = cfg.currency || 'USD';
+    const t = pedido.totals || {};
+    // Misma fuente de TC que el documento: antes el CSV siempre salía en USD
+    // aunque la cotización fuera ARS. El nombre usa fecha (no consume número:
+    // cada CSV gastaba un NQ- y saltaba la numeración).
+    const tc = t.tipoCambio || 1400;
+    const fx = currency === 'ARS' ? tc : 1;
     const rows = [['#', 'SKU', 'Marca', 'Modelo', 'Variante', 'Cant', `P.Unit(${currency})`, `Subtotal(${currency})`]];
     pedido.items.forEach((it, i) => {
-      const pvpU = it.pvp || it.fob || 0;
+      const pvpU = (it.pvp || it.fob || 0) * fx;
       rows.push([i + 1, it.sku, it.marca, it.modelo, it.color || it.variante || '', it.qty, pvpU.toFixed(2), (pvpU * (it.qty || 1)).toFixed(2)]);
     });
-    const t = pedido.totals || {};
     rows.push([]);
-    rows.push(['TOTAL', '', '', '', '', t.qty || 0, '', (t.facturacion || 0).toFixed(2)]);
+    const totalQty = pedido.items.reduce((s, it) => s + (it.qty || 0), 0);
+    rows.push(['TOTAL', '', '', '', '', totalQty, '', (((t.facturacion || 0)) * fx).toFixed(2)]);
     const csv = rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    FileImporter.download('\uFEFF' + csv, `cotizacion-${QuoteGenerator.nextNumber()}.csv`, 'text/csv;charset=utf-8;');
-    QuoteGenerator.saveToHistory({ number: 'CSV', clientName: cfg.clientName || 'Cliente', date: new Date().toISOString(), currency, total: t.facturacion || 0, items: pedido.items.length, snapshot: QuoteGenerator.historySnapshot(pedido) });
+    const stamp = new Date().toISOString().slice(0, 10);
+    FileImporter.download('\uFEFF' + csv, `cotizacion-${stamp}.csv`, 'text/csv;charset=utf-8;');
+    QuoteGenerator.saveToHistory({ number: 'CSV-' + stamp, clientName: cfg.clientName || 'Cliente', date: new Date().toISOString(), currency, total: (t.facturacion || 0) * fx, items: pedido.items.length, snapshot: QuoteGenerator.historySnapshot(pedido) });
   },
 
   // ---- Modal de configuración ----

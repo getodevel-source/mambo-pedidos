@@ -7,10 +7,31 @@
 
 const PdfParserClassifier = {
   extractUsdPrice(line) {
-    const match = line.match(/(?<![¥￥\d])\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/);
-    if (!match) return null;
-    const price = parseFloat(match[1].replace(/,/g, ''));
-    if (isNaN(price) || price < 0.10 || price > 500) return null;
+    // Grupo entero: miles con coma ('1,234') O dígitos pelados ('1299'). El
+    // patrón viejo (\d{1,3}...) truncaba '$1299.00' a '$129' (tomaba '129' y
+    // el resto no era punto → match parcial válido dentro de rango).
+    // (?!\d) impide matches parciales sobre números más largos.
+    const match = line.match(/(?<![¥￥\d])\$\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?(?!\d)/);
+    if (match) return this._checkPriceRange(match[1], match[2]);
+    // Ítem 6 devolución: precio marcado USD sin signo '$' (misma moneda, cero
+    // riesgo cambiario): 'USD 45.99', 'USD PRICE: 45.99', '45.99 USD'.
+    // RMB/¥ se EXCLUYEN a propósito: sin tasa de cambio del día, sembrarlos
+    // como USD corrompería el FOB; esas páginas ya avisan vía
+    // pageHasNonDollarPrices para revisión manual.
+    const usd = line.match(/\bUSD(?:\s*PRICE)?\s*[:$]?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?(?!\d)/i)
+      || line.match(/(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?\s*USD\b/i);
+    if (usd) return this._checkPriceRange(usd[1], usd[2]);
+    return null;
+  },
+
+  _checkPriceRange(intPart, decPart) {
+    const clean = String(intPart).replace(/,/g, '');
+    const price = parseFloat(decPart !== undefined ? clean + '.' + decPart : clean);
+    // Rango = el de Validations.rules.fob (0.01–5000): antes 0.10–500 y todo
+    // lo demás desaparecía (monitores/sillas de +$500 sin fila). La
+    // "confirmación" que pide el ítem 6 la da el semáforo: outliers van a
+    // YELLOW y fuera-de-banda a RED, nunca entran en silencio.
+    if (isNaN(price) || price < 0.01 || price > 5000) return null;
     return price;
   },
 

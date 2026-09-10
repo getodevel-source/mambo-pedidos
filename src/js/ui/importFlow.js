@@ -22,10 +22,28 @@ const ImportFlow = {
       const basePct = (i / totalFiles) * 100;
       const stepPct = (1 / totalFiles) * 100;
 
-      showProgress(basePct, `Cargando ${f.name}...`, `Archivo ${i + 1} de ${totalFiles}`);
+      // Gate de tamaño ANTES de leer: un PDF de GB colgaba el WebView.
+      if (typeof Reliability !== 'undefined') {
+        const sizeCheck = Reliability.validateFileSize(f, 'any');
+        if (!sizeCheck.valid) { toast(sizeCheck.reason, 'error'); continue; }
+      }
 
       try {
         const ext = f.name.split('.').pop().trim().toLowerCase();
+        // Gate de contenido (magic bytes): la extensión sola dejaba pasar un
+        // .exe renombrado a .pdf hasta el parser.
+        if (typeof Reliability !== 'undefined' && (ext === 'pdf' || ext === 'xlsx' || ext === 'xls')) {
+          try {
+            const head = new Uint8Array(await f.slice(0, 8).arrayBuffer());
+            const detected = ext === 'pdf' ? 'pdf' : 'xlsx';
+            const contentCheck = Reliability.validateFileContent(head, detected);
+            if (!contentCheck.valid) { toast(f.name + ': ' + contentCheck.reason, 'error'); continue; }
+          } catch { toast(f.name + ': no se pudo leer el archivo.', 'error'); continue; }
+        }
+        if (ext === 'pdf' && typeof Reliability !== 'undefined' && typeof f.size === 'number' && f.size === 0) {
+          toast(f.name + ': archivo vacío.', 'error');
+          continue;
+        }
         const progressCb = (current, total) => {
           const filePct = (current / total) * stepPct;
           const currentPct = Math.round(basePct + filePct);

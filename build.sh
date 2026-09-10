@@ -7,8 +7,10 @@ set -e
 echo "🏗️  Mambo Pedidos - Local Build"
 echo "================================"
 
-# Verificar Tauri CLI
-if ! cargo tauri --version &> /dev/null; then
+  # Verificar Tauri CLI (ambas formas: `cargo tauri` y binario `cargo-tauri`.
+  # setup.sh instala con cargo y el binario en $PATH se llama cargo-tauri;
+  # exigir solo una forma rompía el build en PC nueva aunque estuviera.
+if ! cargo tauri --version &> /dev/null && ! cargo-tauri --version &> /dev/null; then
     echo "❌ Tauri CLI no instalado. Ejecutá setup.sh primero."
     exit 1
 fi

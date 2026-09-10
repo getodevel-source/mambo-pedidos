@@ -24,9 +24,8 @@ const Tests = {
 		this.testDualCurrency();
 		this.testZeroCosts();
 		this.testLatamDecimalFormat();
+		await this.testHermesAuditFixes();
 		this.test8BitDoBrand();
-		this.testParserGeneralizationFixes();
-		this.testInfallibilityGate();
 		this.testWeightBasedFreight();
 		this.testCourierWarnings();
 		this.testCourierReventaFullMatrix();
@@ -285,6 +284,97 @@ const Tests = {
 			valResult.valid && valResult.value === 45.5,
 			'Validación acepta y convierte FOB con coma ("45,50")',
 		);
+	},
+	async testHermesAuditFixes() {
+		// Auditoría Hermes (2026-09-09): regresiones de los fixes aplicados.
+		// 1. parseNum con miles de coma: '1,234,567' valía ~$1,23.
+		this.assert(Calculator.parseNum("1,234,567", 0) === 1234567, 'parseNum miles con coma ("1,234,567" -> 1234567)');
+		this.assert(Calculator.parseNum("1,234", 0) === 1234, 'parseNum miles simple ("1,234" -> 1234)');
+		this.assert(Calculator.parseNum("12,5", 0) === 12.5, 'parseNum decimal con coma ("12,5" -> 12.5)');
+		// 2. extractUsdPrice: '$1299.00' se truncaba a $129; rango 0.10-500
+		// perdía monitores/sillas reales.
+		this.assert(PdfParser.extractUsdPrice("$1299.00") === 1299, "extractUsdPrice no trunca '$1299.00'");
+		this.assert(PdfParser.extractUsdPrice("$500.01") === 500.01, "extractUsdPrice acepta +$500");
+		this.assert(PdfParser.extractUsdPrice("$0.05") === 0.05, "extractUsdPrice acepta centavos");
+		this.assert(PdfParser.extractUsdPrice("$5000.01") === null, "extractUsdPrice rechaza +$5000");
+		this.assert(PdfParser.extractUsdPrice("QTY 200") === null, "números pelados sin marca no siembran");
+		// 3. Flete modo peso con peso 0: caía a %FOB en silencio.
+		const pesoRes = Calculator.calculateOrder(
+			[{ sku: "P-01", fob: 100, qty: 1 }],
+			{ fleteModo: "peso", pesoKg: 0, costoPorKg: 12, seguro: 0, derechos: 0, tasa: 0, perc: 0, desp: 0, courier: 0, markup: 1, tipoCambio: 1000 },
+		);
+		this.assert(
+			(pesoRes.cautions || []).some((c) => String(c).includes("%FOB")),
+			"flete peso-sin-peso avisa el fallback a %FOB",
+		);
+		// 4. Categoría nueva: se auto-aceptaba sin rastro. Sigue aceptada
+		// pero con warning visible.
+		const catRes = Validations.validateProduct({ sku: "HERM-01", marca: "M", modelo: "Mod", cat: "HERMESREGTEST", fob: 10 });
+		this.assert(catRes.valid, "categoría dinámica nueva sigue aceptada");
+		this.assert(catRes.warnings.some((w) => w.field === "cat"), "categoría nueva deja warning visible");
+		// 5. Gates de archivo: tamaño + magic bytes (antes solo extensión).
+		this.assert(!Reliability.validateFileSize({ name: "x.pdf", size: 400 * 1024 * 1024 }, "any").valid, "PDF de 400MB rechazado por tamaño");
+		this.assert(Reliability.validateFileSize({ name: "x.pdf", size: 1024 }, "any").valid, "PDF chico pasa el gate de tamaño");
+		this.assert(Reliability.validateFileContent([0x25, 0x50, 0x44, 0x46, 0x2D], "pdf").valid, "PDF real pasa magic bytes");
+		this.assert(!Reliability.validateFileContent([0x4D, 0x5A, 0x90, 0x00, 0x00], "pdf").valid, ".exe renombrado a .pdf rechazado");
+		this.assert(Reliability.validateFileContent([0x50, 0x4B, 0x03, 0x04], "xlsx").valid, "XLSX real pasa magic bytes");
+		this.assert(!Reliability.validateFileSize({ name: "f.png", size: 20 * 1024 * 1024 }, "image").valid, "foto de 20MB rechazada (tope 8MB)");
+		// 6. _readBackup existe (el rescate lo llamaba y no existía).
+		this.assert(typeof Reliability._readBackup === "function", "Reliability._readBackup existe");
+		// 7. Refs de imagen: solo images/img_<hex>.<ext> toca el fs.
+		this.assert(AppStorage._isSafeImageRel("images/img_ab12cd34.png") === true, "ref propio válido");
+		this.assert(AppStorage._isSafeImageRel("images/../../token") === false, "path traversal rechazado");
+		this.assert(AppStorage._isSafeImageRel("/etc/passwd") === false, "ruta absoluta rechazada");
+		// 8. Clonado: '(Copia)(Copia)' no se encadena más.
+		const HV = require("./ui/historyView.js");
+		this.assert(HV.nextCloneName("Pedido") === "Pedido (Copia)", "primer clon suma (Copia)");
+		this.assert(HV.nextCloneName("Pedido (Copia)") === "Pedido (Copia 2)", "segundo clon numera");
+		this.assert(HV.nextCloneName("Pedido (Copia 2)") === "Pedido (Copia 3)", "tercer clon incrementa");
+		// 9. Pedido guardado sin fotos (ítem 15): se re-adjuntan al abrir.
+		const bare = HV._reattachPhotos({ items: [{ sku: "NO-EXISTE", qty: 1 }] });
+		this.assert(bare.items[0].img === "-", "sin catálogo la foto queda '-' (no rompe)");
+		// 10. Topes ítem 4: import 100MB, fotos 10MB.
+		this.assert(Reliability.validateFileSize({ name: "x.pdf", size: 100 * 1024 * 1024 }, "any").valid, "PDF de 100MB pasa (tope)");
+		this.assert(!Reliability.validateFileSize({ name: "x.pdf", size: 101 * 1024 * 1024 }, "any").valid, "PDF de 101MB rechazado");
+		this.assert(Reliability.validateFileSize({ name: "f.png", size: 10 * 1024 * 1024 }, "image").valid, "foto de 10MB pasa (tope)");
+		this.assert(!Reliability.validateFileSize({ name: "f.png", size: 11 * 1024 * 1024 }, "image").valid, "foto de 11MB rechazada");
+		// 11. Anclas USD sin '$' (ítem 6); RMB/¥ no siembran (sin tasa).
+		this.assert(PdfParser.extractUsdPrice("USD 45.99") === 45.99, "extractUsdPrice acepta 'USD 45.99'");
+		this.assert(PdfParser.extractUsdPrice("USD PRICE: 1,234.56") === 1234.56, "extractUsdPrice acepta 'USD PRICE'");
+		this.assert(PdfParser.extractUsdPrice("RMB 299") === null, "RMB no siembra fila sin tasa de cambio");
+		// 12. Tolerancia Y configurable (ítem 7), default idéntico al auditado.
+		this.assert(PdfParser.rowToleranceY === 30, "tolerancia Y default 30");
+		this.assert(PdfParser._resolveRowTol(null) === 30, "sin override → 30");
+		this.assert(PdfParser._resolveRowTol({ rowToleranceY: 18 }) === 18, "override 18 válido");
+		this.assert(PdfParser._resolveRowTol({ rowToleranceY: 500 }) === 30, "override fuera de rango → 30");
+		// 13. Flete por peso en el motor exacto (ítem 11).
+		const doorW = Calculator.calculateDoorToDoorExactCost(
+			[{ sku: "A", fob: 100, qty: 2, cat: "TECLADO", pesoKg: 8 }, { sku: "B", fob: 50, qty: 2, cat: "MOUSE", pesoKg: 2 }],
+			{ regimen: "importador", pesoKg: 10, costoPorKg: 10, tipoCambio: 1000 },
+		);
+		this.assert(doorW.summary.prorrateoFlete === "peso", "con pesos por ítem el prorrateo es por peso");
+		const fA = doorW.items[0].itemCif - 200;
+		const fB = doorW.items[1].itemCif - 100;
+		this.assert(Math.abs(fA - 83) < 0.01 && Math.abs(fB - 21.5) < 0.01, `flete 80/20 por peso (got ${fA}/${fB})`);
+		const doorF = Calculator.calculateDoorToDoorExactCost(
+			[{ sku: "A", fob: 100, qty: 2, cat: "TECLADO" }],
+			{ regimen: "importador", pesoKg: 10, costoPorKg: 10, tipoCambio: 1000 },
+		);
+		this.assert(doorF.summary.prorrateoFlete === "fob" && doorF.summary.avisos.length === 1, "sin pesos por ítem: FOB + aviso");
+		// 14. Packing con NCM y factura proforma (ítem 15).
+		const prevSheet = XLSX.utils.aoa_to_sheet;
+		let captured = null;
+		XLSX.utils.aoa_to_sheet = (d) => { captured = d; return prevSheet(d); };
+		try {
+			await FileImporter.exportCustomsPackingList({
+				name: "P-TEST", costs: { pesoKg: 5 },
+				items: [{ sku: "T-1", cat: "TECLADO", marca: "M", modelo: "K68 Black", qty: 2, fob: 40, costoU: 60, subIva: 5 }],
+				totals: { fob: 80, costo: 120, ivaUsd: 10, facturacion: 200, margen: 80, margenPct: 40, qty: 2 },
+			});
+		} finally { XLSX.utils.aoa_to_sheet = prevSheet; }
+		this.assert(!!captured && captured[0].includes("NCM"), "packing trae columna NCM");
+		this.assert(!!captured && captured.some((r) => r[0] === "FACTURA PROFORMA"), "packing trae factura proforma");
+		this.assert(!!captured && /^\d{4}\./.test(String(captured[1][2] || "")), `packing trae NCM real (got ${captured && captured[1][2]})`);
 	},
 
 	test8BitDoBrand() {
@@ -8825,11 +8915,14 @@ const Tests = {
 				}
 				return prevSet.call(this, k, v);
 			};
+			let err1 = null;
 			try {
 				await AppStorage.setItem(key, value);
-			} finally {
+			} catch (e) { err1 = e; } finally {
 				localStorage.setItem = prevSet;
 			}
+			// Ítem 17: el recorte por cuota se persiste pero LANZA (no es éxito).
+			this.assert(!!err1 && /Cuota localStorage/.test(err1.message || ''), `localStorage nivel 1 LANZA error accionable (got ${err1 && err1.message})`);
 			const rec = AppStorage.lastPersistence;
 			this.assert(
 				!!rec && rec.degraded === true && rec.stripLevel === 1,
@@ -8853,11 +8946,13 @@ const Tests = {
 				}
 				return prevSet.call(this, k, v);
 			};
+			let err2 = null;
 			try {
 				await AppStorage.setItem(key, value);
-			} finally {
+			} catch (e) { err2 = e; } finally {
 				localStorage.setItem = prevSet;
 			}
+			this.assert(!!err2 && /Cuota localStorage/.test(err2.message || ''), `localStorage nivel 2 LANZA error accionable (got ${err2 && err2.message})`);
 			const rec2 = AppStorage.lastPersistence;
 			this.assert(
 				!!rec2 && rec2.degraded === true && rec2.stripLevel === 2,

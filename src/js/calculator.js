@@ -7,7 +7,7 @@
 const Calculator = {
   parseNum(val, defaultVal) {
     if (val === null || val === undefined || val === '') return defaultVal;
-    let str = String(val).trim();
+    let str = String(val).trim().replace(/\s/g, '');
     const hasComma = str.includes(',');
     const hasDot = str.includes('.');
     if (hasComma && hasDot) {
@@ -19,7 +19,16 @@ const Calculator = {
         str = str.replace(/,/g, '');
       }
     } else if (hasComma) {
-      str = str.replace(',', '.');
+      // Solo comas: una coma puede ser decimal ('12,5') o miles ('1,234').
+      // Heurística: '1,234,567' (varias) o ',ddd' final → miles, se quitan;
+      // si no, la única coma es decimal. Antes: replace de la PRIMERA coma
+      // ('1,234,567' → '1.234,567' → parseFloat → 1.234, ~$1,23).
+      const parts = str.split(',');
+      if (parts.length > 2 || /,\d{3}$/.test(str)) {
+        str = parts.join('');
+      } else {
+        str = str.replace(',', '.');
+      }
     }
     const parsed = parseFloat(str);
     return !isNaN(parsed) ? parsed : defaultVal;
@@ -183,12 +192,15 @@ const Calculator = {
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
 
     let flete;
+    let fleteFallbackPct = false;
     if (config.fleteModo === 'peso' && config.pesoKg > 0 && config.costoPorKg > 0) {
       flete = config.pesoKg * config.costoPorKg;
     } else {
+      // Antes: con modo peso pero peso 0 se calculaba %FOB EN SILENCIO.
+      // El fallback se mantiene (no frena el cálculo) pero queda registrado.
+      if (config.fleteModo === 'peso') fleteFallbackPct = true;
       flete = totalFob * config.fletePct;
     }
-
     const seguro = totalFob * config.seguro;
     const cif = totalFob + flete + seguro;
     const derechos = cif * config.derechos;
@@ -287,6 +299,7 @@ const Calculator = {
       cautions.push('⚓ Régimen de Importación General (Despachante de Aduana / Despacho oficial)');
     }
     cautions.push(`ℹ️ Transporte ${config.transporteModo}: informativo; el flete se calcula por ${config.fleteModo === 'peso' ? 'peso' : 'porcentaje FOB'}.`);
+    if (fleteFallbackPct) cautions.push('⚠️ Flete en modo peso pero sin peso válido: se calculó por %FOB. Cargá peso y costo por kg para el valor real.');
 
     return {
       config,
@@ -352,6 +365,32 @@ const Calculator = {
 
     const totalFob = items.reduce((s, r) => s + (r.fob || 0) * (r.qty || 0), 0);
     const totalQty = items.reduce((s, r) => s + (r.qty || 0), 0);
+    // Ítem 11 devolución: el flete se prorratea POR PESO cuando cada ítem trae
+    // peso (pesoKg total del ítem o pesoUnitKg × qty). El seguro y los tributos
+    // ad-valorem siguen por valor FOB (así los liquida la Aduana). Sin pesos
+    // por ítem se mantiene el prorrateo por FOB de siempre (byte-identical) y,
+    // si el usuario declaró peso total, se avisa que el reparto es por valor.
+    const itemWeights = items.map((r) => {
+      const q = Math.max(0, Number(r.qty) || 0);
+      const w = Number(r.pesoKg != null ? r.pesoKg : (r.pesoUnitKg != null ? r.pesoUnitKg * q : NaN));
+      return (Number.isFinite(w) && w > 0) ? w : 0;
+    });
+    const totalItemWeight = itemWeights.reduce((s, w) => s + w, 0);
+    const weightCovered = totalQty > 0 && totalItemWeight > 0 &&
+      items.every((r, i) => (Math.max(0, Number(r.qty) || 0) === 0) || itemWeights[i] > 0);
+    // Fracción de flete del ítem i: por peso si hay cobertura total, si no FOB.
+    const freightFrac = (i) => {
+      const r = items[i];
+      const q = Math.max(0, Number(r.qty) || 0);
+      if (weightCovered) return itemWeights[i] / totalItemWeight;
+      return totalFob > 0 ? (((r.fob || 0) * q) / totalFob) : (totalQty > 0 ? q / totalQty : 0);
+    };
+    const prorrateoFlete = weightCovered ? 'peso' : 'fob';
+    const avisos = [];
+    if (!weightCovered && pesoTotal > 0) {
+      avisos.push('Flete total por peso pero ítems sin peso cargado: el reparto es por valor FOB. Cargá peso por ítem para prorrateo por peso.');
+    }
+
     const fletePct = doorConfig.fletePct != null ? doorConfig.fletePct : 0.15;
     // Precisión (guía exhaustiva): el forwarder cotiza un monto total en USD (LCL
     // por CBM, aéreo, courier). Si viene fleteUsd explícito (>0) gana sobre peso
@@ -385,9 +424,8 @@ const Calculator = {
       const totalGastos = depositoFiscalUsd + despachanteUsd + simDigitalizacionUsd + fleteInternoUsd;
       const tributos = arancelSimplificado + ivaCourier;
       const caja = cifTotal + tributos + totalGastos;
-      const itemsOut = items.map(it => {
-        const q = Math.max(0, Number(it.qty) || 0);
-        const frac = totalFob > 0 ? ((it.fob || 0) * q) / totalFob : (totalQty > 0 ? q / totalQty : 0);
+      const itemsOut = items.map((it, idx) => {
+        const frac = freightFrac(idx);
         const itCif = cifTotal * frac;
         const itEx = Math.max(0, itCif - 400 * frac);
         return Object.assign({}, it, {
@@ -408,17 +446,19 @@ const Calculator = {
           totalPuertaUsd: caja - ivaCourier, totalPuertaConIvaUsd: caja, totalPuertaConIvaArs: caja * tc,
           totalPuertaArs: (caja - ivaCourier) * tc, totalRecuperableUsd: ivaCourier,
           totalAnticiposRecuperablesUsd: 0, costoNetoRealUsd: caja - ivaCourier,
-          costoNetoRealArs: (caja - ivaCourier) * tc, creditoFiscalArs: ivaCourier * tc, tipoCambio: tc
+          costoNetoRealArs: (caja - ivaCourier) * tc, creditoFiscalArs: ivaCourier * tc, tipoCambio: tc,
+          prorrateoFlete, avisos
         }
       };
     }
     const certsSet = new Set();
-    const itemCalculations = items.map(item => {
+    const itemCalculations = items.map((item, idx) => {
       const q = Math.max(0, Number(item.qty) || 0);
       const subFob = (item.fob || 0) * q;
-      const weightFrac = totalFob > 0 ? (subFob / totalFob) : (totalQty > 0 ? q / totalQty : 0);
-      const itemFlete = fleteTotal * weightFrac;
-      const itemSeguro = seguroTotal * weightFrac;
+      // Flete por peso (ítem 11); seguro por valor (ad-valorem, como la Aduana).
+      const fobFrac = totalFob > 0 ? (subFob / totalFob) : (totalQty > 0 ? q / totalQty : 0);
+      const itemFlete = fleteTotal * freightFrac(idx);
+      const itemSeguro = seguroTotal * fobFrac;
       const itemCif = subFob + itemFlete + itemSeguro;
 
       // Determinar NCM y Aranceles exactos por categoría/variant
@@ -552,7 +592,8 @@ const Calculator = {
         costoNetoRealUsd,
         costoNetoRealArs: costoNetoRealUsd * tc,
         creditoFiscalArs: totalRecuperableUsd * tc,
-        tipoCambio: tc
+        tipoCambio: tc,
+        prorrateoFlete, avisos
       }
     };
   },

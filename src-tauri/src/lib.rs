@@ -81,13 +81,94 @@ fn get_install_kind() -> String {
 /// devuelve la ruta para apply_appimage_update. Los 82MB NUNCA cruzan el IPC
 /// (un Uint8Array gigante por invoke revienta la serialización del webview:
 /// ese fue el error real "te manda a GitHub" del auto-install AppDir).
+/// Descarga el AppImage EN EL BACKEND (reqwest) directo al TEMP y devuelve la
+/// ruta para apply_appimage_update. Los 82MB NUNCA cruzan el IPC (un Uint8Array
+/// gigante por invoke revienta la serialización del webview: ese fue el error
+/// real "te manda a GitHub" del auto-install AppDir).
+///
+/// Seguridad (ítems 1-3 devolución Hermes):
+/// - Lista blanca EXACTA: github.com solo bajo
+///   /getodevel-source/mambo-pedidos/releases/ (+ el CDN de release assets y
+///   la API del mismo repo). Cualquier otra URL se rechaza.
+/// - Firma minisign: si el frontend trae el .sig del manifest firmado
+///   (latest.json, verificado por el plugin-updater oficial), se verifica
+///   contra la pubkey del release y un mismatch ABORTA (fail closed). Sin
+///   .sig solo pasa el artefacto determinístico con nombre pineado
+///   Mambo.Pedidos_<semver>_amd64.AppImage desde la ruta exacta del repo.
+/// - Tope 100MB + permiso 0o750 (owner-ejecuta; el 755 viejo era world-exec y
+///   fs::write deja 644 = "Permission denied" silencioso en apply).
+const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
+/// Pubkey minisign del release (misma que plugins.updater.pubkey de
+/// tauri.conf.json, decodificada: RWQ7...). Fija en binario para que el camino
+/// AppDir verifique igual que el updater oficial.
+const UPDATE_PUBKEY_B64: &str =
+    "RWQ76Z7Am2JoKU/pjXcTy//ZMa/1oGnFCX7yJDv+Zq5/8im6/h5l0z98";
+fn is_allowed_update_url(parsed: &reqwest::Url) -> bool {
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    let host = parsed.host_str().unwrap_or_default();
+    let path = parsed.path();
+    match host {
+        "github.com" | "www.github.com" => {
+            path.starts_with("/getodevel-source/mambo-pedidos/releases/")
+        }
+        "objects.githubusercontent.com" | "release-assets.githubusercontent.com" => true,
+        "api.github.com" => path.starts_with("/repos/getodevel-source/mambo-pedidos/"),
+        _ => false,
+    }
+}
+/// Nombre pineado del artefacto determinístico (único que pasa sin .sig).
+fn is_pinned_artifact_name(url_path: &str) -> bool {
+    let name = url_path.rsplit('/').next().unwrap_or_default();
+    if !name.starts_with("Mambo.Pedidos_") || !name.ends_with("_amd64.AppImage") {
+        return false;
+    }
+    let mid = &name["Mambo.Pedidos_".len()..name.len() - "_amd64.AppImage".len()];
+    let v = mid.strip_prefix('v').unwrap_or(mid);
+    let parts: Vec<&str> = v.split('.').collect();
+    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+fn verify_update_signature(bytes: &[u8], sig_file_text: &str) -> Result<(), String> {
+    let pubkey = minisign_verify::PublicKey::from_base64(UPDATE_PUBKEY_B64)
+        .map_err(|e| format!("pubkey del release inválida: {}", e))?;
+    let sig = minisign_verify::Signature::decode(sig_file_text)
+        .map_err(|e| format!("firma .sig inválida: {}", e))?;
+    pubkey
+        .verify(bytes, &sig, false)
+        .map_err(|_| "la firma del update NO coincide: descarga abortada".to_string())
+}
 #[tauri::command]
-async fn download_update(url: String) -> Result<String, String> {
-    let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+async fn download_update(url: String, signature_file: Option<String>) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "URL de update inválida".to_string())?;
+    if !is_allowed_update_url(&parsed) {
+        return Err("URL de update no permitida (solo releases oficiales vía HTTPS)".into());
+    }
+    let pinned_only = match &signature_file {
+        Some(s) if !s.trim().is_empty() => false,
+        _ => true,
+    };
+    if pinned_only && !is_pinned_artifact_name(parsed.path()) {
+        return Err("sin firma .sig solo se acepta el artefacto determinístico del release".into());
+    }
+    let resp = reqwest::get(parsed).await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("la descarga falló: HTTP {}", resp.status()));
     }
+    if let Some(len) = resp.content_length() {
+        if len > UPDATE_MAX_BYTES {
+            return Err(format!("el update supera el tope de {}MB", UPDATE_MAX_BYTES / 1024 / 1024));
+        }
+    }
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    if (bytes.len() as u64) > UPDATE_MAX_BYTES {
+        return Err("el update descargado supera el tope de tamaño".into());
+    }
+    if let Some(sig_text) = signature_file {
+        if !sig_text.trim().is_empty() {
+            verify_update_signature(&bytes, &sig_text)?;
+        }
+    }
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -95,13 +176,13 @@ async fn download_update(url: String) -> Result<String, String> {
         .as_millis();
     let path = std::env::temp_dir().join(format!("mambo-update-{}.AppImage", ts));
     std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
-    // El runtime debe EJECUTAR el AppImage para extraerlo: fs::write lo deja
-    // 644 -> "Permission denied" silencioso en apply (el bug real que devolvia
-    // al usuario a GitHub).
+    // El runtime debe EJECUTAR el AppImage para extraerlo (fs::write lo deja
+    // 644 -> "Permission denied" silencioso en apply). 0o750: ejecuta el dueño,
+    // no todo el sistema (el 755 anterior era world-executable).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o750))
             .map_err(|e| e.to_string())?;
     }
     Ok(path.display().to_string())
@@ -117,12 +198,38 @@ fn apply_appimage_update(appimage_path: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_str = exe.display().to_string();
     let exe_new = format!("{}.new", exe_str);
+    // Solo el artefacto que dejó download_update: nombre fijo dentro del TEMP.
+    // Sin esto el comando aceptaba CUALQUIER ruta del disco (incluso con shell
+    // metacaracteres filtrados a medias) y la ejecutaba con permisos del usuario.
+    let tmp = std::env::temp_dir();
+    let canon_tmp = tmp.canonicalize().unwrap_or(tmp.clone());
+    let canon_app = std::path::Path::new(&appimage_path)
+        .canonicalize()
+        .map_err(|_| "ruta de update inválida".to_string())?;
+    if !canon_app.starts_with(&canon_tmp) {
+        return Err("ruta de update fuera del directorio temporal".into());
+    }
+    let fname = canon_app
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_string();
+    if !fname.starts_with("mambo-update-") || !fname.ends_with(".AppImage") {
+        return Err("el update no proviene de la descarga oficial".into());
+    }
     if appimage_path.contains('"') || appimage_path.contains('$') || appimage_path.contains('`') {
         return Err("ruta de update inválida".into());
     }
-    // Validar que el archivo sea un AppImage type-2 (magic 0x41 0x49 0x02)
+    // Validar que el archivo sea un AppImage type-2 (magic 0x41 0x49 0x02).
+    // Nota: la FIRMA minisign la verifica el updater oficial (plugin-updater)
+    // en el flujo normal; este camino AppDir extrae el AppImage ya descargado
+    // de la URL en lista blanca y valida magic + tamaño antes de ejecutar.
     {
         use std::io::Read;
+        let meta = std::fs::metadata(&appimage_path).map_err(|e| e.to_string())?;
+        if meta.len() == 0 || meta.len() > UPDATE_MAX_BYTES {
+            return Err("tamaño de update inválido".into());
+        }
         let mut f = std::fs::File::open(&appimage_path).map_err(|e| e.to_string())?;
         let mut buf = [0u8; 12];
         f.read_exact(&mut buf).map_err(|e| e.to_string())?;

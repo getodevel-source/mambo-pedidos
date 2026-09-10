@@ -9,9 +9,6 @@
     "fs:default",
     "fs:allow-app-read-recursive",
     "fs:allow-app-write-recursive",
-    "dialog:default",
-    "dialog:allow-open",
-    "dialog:allow-save",
     "store:default"
   ]
 }

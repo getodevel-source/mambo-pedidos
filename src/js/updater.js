@@ -27,6 +27,7 @@ const AppUpdater = {
     // El objeto del plugin NO siempre trae rawJson con la URL: la URL del
     // AppImage es determinística para nuestros releases — armarla directo.
     let url = null;
+    let sigB64 = null;
     try {
       // 1) el propio plugin expone downloadUrl (la URL que usaria la instalacion
       //    nativa); 2) rawJson.platforms como alternativa; 3) URL deterministica.
@@ -34,6 +35,11 @@ const AppUpdater = {
       const raw = (handle && handle.rawJson) || {};
       const plat = raw.platforms && (raw.platforms['linux-x86_64'] || raw.platforms['linux-x86_64-appimage']);
       url = url || (plat && plat.url) || null;
+      // Firma minisign del manifest (latest.json, canal firmado): el backend la
+      // verifica contra la pubkey del release y aborta si no coincide. Viene
+      // como base64 del archivo .sig → se decodifica acá (el backend no trae
+      // dependencia base64 a propósito).
+      sigB64 = (plat && plat.signature) || null;
     } catch { }
     if (!url && v && this.isValidVersion(v)) {
       url = `${this.REPO_URL}/releases/download/v${v}/Mambo.Pedidos_${v}_amd64.AppImage`;
@@ -43,11 +49,15 @@ const AppUpdater = {
       this.openInBrowser();
       return false;
     }
+    let signature_file = null;
+    if (sigB64) {
+      try { signature_file = atob(String(sigB64)); } catch { signature_file = null; }
+    }
     toast('⬇️ Descargando actualización automática...', 'info');
     try {
       // La descarga ocurre EN EL BACKEND (reqwest): los 82MB no cruzan el IPC
       // (mandar el Uint8Array por invoke revienta la serialización → error).
-      const tmpPath = await window.__TAURI__.core.invoke('download_update', { url });
+      const tmpPath = await window.__TAURI__.core.invoke('download_update', { url, signature_file });
       toast('⚙️ Instalando actualización — la app se reinicia sola...', 'info');
       await window.__TAURI__.core.invoke('apply_appimage_update', { appimagePath: tmpPath });
       return true;

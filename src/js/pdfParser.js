@@ -12,6 +12,19 @@
 const envFlag = (name) => { try { return typeof process !== "undefined" && process.env ? process.env[name] : undefined; } catch { return undefined; } };
 
 const PdfParser = {
+	// Ítem 7 devolución: tolerancia Y de "misma fila" configurable por
+	// catálogo (antes ±30px fijos mezclaban modelo con precio vecino en
+	// catálogos apretados). Default 30 = comportamiento auditado idéntico;
+	// processPdfFile(file, len, brands, progress, { rowToleranceY: 18 })
+	// la ajusta solo durante ese parse (se restaura en finally).
+	rowToleranceY: 30,
+	_resolveRowTol(overrides) {
+		if (overrides && Number.isFinite(Number(overrides.rowToleranceY))) {
+			const v = Number(overrides.rowToleranceY);
+			if (v >= 4 && v <= 120) return v;
+		}
+		return this.rowToleranceY || 30;
+	},
 	// Rend (spawning): cede el hilo principal entre pasos pesados del parse.
 	// SOLO timing (setTimeout): la lógica de extracción no cambia → el golden
 	// (hash de productos) queda idéntico. Permite que la UI pinte y que la
@@ -26,11 +39,16 @@ const PdfParser = {
 		catalogLength = 0,
 		customBrands = [],
 		onProgress = null,
+		tolerances = null,
 	) {
+		const prevRowTol = this.rowToleranceY;
+		this.rowToleranceY = this._resolveRowTol(tolerances);
 		let pdf = null;
 		try {
+			this.assertPdfBounds(file);
 			const arrayBuffer = await file.arrayBuffer();
 			pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+			this.assertPdfPageCount(pdf);
 
 			const allProducts = [];
 			const allImages = [];
@@ -41,6 +59,7 @@ const PdfParser = {
 				this.detectBrandFromFilename(file.name, customBrands) || "";
 			const failedPages = [];
 			let imageOnlyPages = 0;
+			const nonDollarPricePages = [];
 
 			for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
 				if (typeof onProgress === "function") {
@@ -103,7 +122,10 @@ const content = await page.getTextContent();
 					// #9: Flag pages with almost no text and no products as likely scanned
 					if (pageTextLen < 10 && pageProducts.length === 0) {
 						imageOnlyPages++;
-if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
+					}
+					// Filas solo nacen de anclas '$' (ver pageHasNonDollarPrices).
+					if (pageProducts.length === 0 && this.pageHasNonDollarPrices(content, pageTextLen)) {
+						nonDollarPricePages.push(pageNum);
 					}
 				} catch (pageErr) {
 					failedPages.push({
@@ -120,6 +142,17 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 				console.warn(
 					`PDF: ${failedPages.length} de ${pdf.numPages} páginas fallaron: ${failedPages.map((p) => p.page).join(", ")}. ${allProducts.length} productos extraídos de las páginas OK.`,
 				);
+			}
+			if (nonDollarPricePages.length > 0) {
+				console.warn(
+					`PDF: páginas ${nonDollarPricePages.join(", ")} traen precios no-'$' (USD PRICE/RMB/¥) sin filas generadas: el motor solo siembra filas desde anclas '$'.`,
+				);
+				if (typeof toast === "function") {
+					toast(
+						`⚠️ Páginas ${nonDollarPricePages.join(", ")} con precios no-'$' (USD/RMB/¥): no se generaron filas. Revisalas a mano.`,
+						"warning",
+					);
+				}
 			}
 			// #9: Warn if many pages appear to be scanned images
 			if (
@@ -166,12 +199,42 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 			);
 			return { brand, products: finalProducts };
 		} finally {
+			this.rowToleranceY = prevRowTol;
 			if (pdf && typeof pdf.destroy === "function") {
 				try {
 					await pdf.destroy();
 				} catch {}
 			}
 		}
+	},
+	assertPdfBounds(file) {
+		const fileSize = (file && typeof file.size === "number") ? file.size : 0;
+		const maxBytes =
+			(typeof Reliability !== "undefined" && Reliability.MAX_IMPORT_BYTES) ||
+			100 * 1024 * 1024;
+		if (fileSize > maxBytes)
+			throw new Error(
+				`El PDF supera el tope de ${Math.round(maxBytes / 1024 / 1024)}MB.`,
+			);
+	},
+
+	assertPdfPageCount(pdf) {
+		const maxPages =
+			(typeof Reliability !== "undefined" && Reliability.MAX_PDF_PAGES) ||
+			1500;
+		if (pdf.numPages > maxPages)
+			throw new Error(
+				`El PDF tiene ${pdf.numPages} páginas (tope ${maxPages}). Dividilo e importalo por partes.`,
+			);
+	},
+
+	// Filas solo nacen de anclas '$': si la página trae precios en otro formato
+	// (USD PRICE / RMB / ¥) y no salió ni un producto, se avisa en vez de
+	// perderlos en silencio (auditoría Hermes 02).
+	pageHasNonDollarPrices(content, pageTextLen) {
+		if (pageTextLen < 10) return false;
+		const pageText = content.items.map((item) => item.str).join(" ");
+		return /(USD\s*PRICE|RMB\s*[\d.]|¥\s*[\d.]|￥\s*[\d.])/i.test(pageText);
 	},
 
 	async extractImagesFromPage(page, viewport, pageNum) {
@@ -1038,9 +1101,9 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 		const hasSameRowColumns = priceAnchors.some((left, index) =>
 			priceAnchors.some(
 				(right, rightIndex) =>
-					rightIndex > index &&
-					Math.abs(left.y - right.y) <= 30 &&
-					Math.abs(left.x - right.x) >= 40,
+				rightIndex > index &&
+				Math.abs(left.y - right.y) <= this.rowToleranceY &&
+				Math.abs(left.x - right.x) >= 40,
 			),
 		);
 		if (uniqueXs.length === 1 || (uniqueXs.length <= 2 && !hasSameRowColumns)) {
@@ -1074,7 +1137,7 @@ if (PROFILE) console.timeEnd('p' + pageNum + '.grid');
 
 			// Determinar límites horizontales X de la celda (entre anclas vecinas)
 			const sameRowAnchors = priceAnchors.filter(
-				(a) => Math.abs(a.y - anchor.y) <= 30,
+				(a) => Math.abs(a.y - anchor.y) <= this.rowToleranceY,
 			);
 			sameRowAnchors.sort((a, b) => a.x - b.x);
 			const anchorIdxInRow = sameRowAnchors.indexOf(anchor);

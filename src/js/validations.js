@@ -129,7 +129,11 @@ const Validations = {
     } else {
       const upperCat = (product.cat || '').toString().trim().toUpperCase();
       if (!this.validCategories.includes(upperCat)) {
+        // Antes: la categoría nueva se auto-aceptaba en silencio (un typo
+        // tributaba como OTRO para siempre). Se sigue aceptando (categorías
+        // dinámicas) pero queda como warning visible en el panel.
         this.addCategory(upperCat);
+        warnings.push({ field: 'cat', message: 'Categoría nueva "' + upperCat + '" agregada al catálogo' });
       }
     }
 

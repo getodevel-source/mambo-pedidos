@@ -8,11 +8,7 @@ const HistoryView = {
     if (!currentPedido || !currentPedido.items.length) { toast('No hay pedido', 'error'); return; }
 
     const validation = Validations.validateOrder({ items: currentPedido.items });
-    if (!validation.valid) {
-      showValidationPanel(validation.errors, validation.warnings);
-      toast('Hay errores que corregir antes de guardar', 'error');
-      return;
-    }
+    if (!validation.valid) { showValidationPanel(validation.errors, validation.warnings); switchView('pedido'); toast('El pedido tiene errores', 'error'); return; }
 
     currentPedido.name = document.getElementById('pedidoName').value || 'Pedido sin nombre';
     currentPedido.costs = getCostInputs();
@@ -21,8 +17,18 @@ const HistoryView = {
     const res = Calculator.calculateOrder(currentPedido.items, currentPedido.costs);
     currentPedido.totals = res.totals;
 
+    // Ítem 15 devolución: el pedido guardado NO lleva fotos (cada pedido
+    // duplicaba los blobs y engordaba el store). Al abrir/clonar se
+    // re-adjuntan desde el catálogo por SKU (con '-' si ya no existe).
+    const snapshot = structuredClone(currentPedido);
+    snapshot.estado = 'guardado';
+    for (const it of snapshot.items) {
+      delete it.img;
+      delete it.imgSm;
+      delete it._imageRef;
+    }
     const list = await AppStorage.loadHistorial();
-    list.unshift({ ...currentPedido });
+    list.unshift(snapshot);
     await AppStorage.saveHistorial(list);
     if (typeof invalidateHistorialBadge === 'function') invalidateHistorialBadge();
     toast(currentPedido.name + ' guardado', 'success');
@@ -30,6 +36,26 @@ const HistoryView = {
     hideValidationPanel();
     switchView('historial');
   },
+
+  _reattachPhotos(pedido) {
+    if (!pedido || !Array.isArray(pedido.items)) return pedido;
+    let bySku = null;
+    try { bySku = (typeof catalog !== 'undefined' && Array.isArray(catalog)) ? new Map(catalog.map(c => [c.sku, c])) : null; } catch { /* sin catálogo: bySku queda null */ }
+    for (const it of pedido.items) {
+      if (it && (typeof it.img !== 'string' || it.img.length === 0)) {
+        const src = bySku ? bySku.get(it.sku) : null;
+        if (src && typeof src.img === 'string' && src.img) {
+          it.img = src.img;
+          if (src.imgSm) it.imgSm = src.imgSm;
+          if (src._imageRef) it._imageRef = structuredClone(src._imageRef);
+        } else {
+          it.img = '-';
+        }
+      }
+    }
+    return pedido;
+  },
+
 
   async render() {
     // Primero el bloque de cotizaciones: es aditivo y se maneja solo, asi
@@ -46,8 +72,8 @@ const HistoryView = {
     list.forEach((p, i) => {
       const t = p.totals || {};
       const date = new Date(p.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-      html += '<div class="card" style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">';
-      html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + '</div></div>';
+      const descBadge = (p.descuentoPct > 0) ? ' · <span style="color: var(--green); font-weight: 700;">−' + p.descuentoPct + '% neg.</span>' : '';
+      html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + descBadge + '</div></div>';
       html += '<div class="row" style="gap: 24px;">';
       html += '<div><div class="stat-label">FOB</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px;">$' + (t.fob || 0).toFixed(0) + '</div></div>';
       html += '<div><div class="stat-label">Costo</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--blue);">$' + (t.costo || 0).toFixed(0) + '</div></div>';
@@ -112,10 +138,23 @@ const HistoryView = {
 
   async load(idx) {
     const list = await AppStorage.loadHistorial();
-    currentPedido = list[idx];
+    if (!list[idx]) return;
+    // Clon: currentPedido era ALIAS del objeto del historial (editar cantidades
+    // tras Abrir mutaba la copia en memoria; ante un Guardar de otro pedido la
+    // edición colaba al historial sin red explícita).
+    currentPedido = HistoryView._reattachPhotos(structuredClone(list[idx]));
     switchView('pedido');
     renderPedido();
     toast('Pedido cargado', 'info');
+  },
+
+  // Nombra la copia sin encadenar "(Copia)(Copia)": "(Copia)" → "(Copia 2)" → …
+  nextCloneName(name) {
+    const base = String(name || 'Pedido');
+    const m = base.match(/^(.*) \(Copia(?: (\d+))?\)$/);
+    if (!m) return base + ' (Copia)';
+    const n = m[2] ? parseInt(m[2], 10) + 1 : 2;
+    return m[1] + ' (Copia ' + n + ')';
   },
 
   async clone(index) {
@@ -127,8 +166,8 @@ const HistoryView = {
       selection[it.sku] = it.qty;
     });
 
-    currentPedido = structuredClone(p);
-    currentPedido.name = p.name + ' (Copia)';
+    currentPedido = HistoryView._reattachPhotos(structuredClone(p));
+    currentPedido.name = HistoryView.nextCloneName(p.name);
     currentPedido.date = new Date().toISOString();
 
     switchView('pedido');

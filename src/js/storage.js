@@ -178,7 +178,17 @@ const AppStorage = {
     }
     try {
       const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : defaultValue;
+      if (!raw) return defaultValue;
+      try {
+        return JSON.parse(raw);
+      } catch (parseErr) {
+        // Antes: JSON corrupto → vacío silencioso (el usuario perdía el
+        // historial/marcas sin red). Ahora se avisa y el rescate (backup)
+        // lo intenta el caller (loadCatalog).
+        console.error('Dato local corrupto en "' + key + '":', parseErr);
+        if (typeof toast === 'function') toast('⚠️ Dato local "' + key + '" corrupto; se intenta el respaldo.', 'warning');
+        return defaultValue;
+      }
     } catch {
       return defaultValue;
     }
@@ -217,16 +227,18 @@ const AppStorage = {
       if (this.mode === 'tauri') throw await this._storageError(key, e);
     }
 
-    // Progressive strip: remove heavy data to fit localStorage
+    // Progressive strip: remove heavy data to fit localStorage.
+    // Ítem 17 devolución: un guardado recortado NO es un guardado exitoso.
+    // Se persiste lo que entra (para no perder TODO) pero se LANZA un error
+    // accionable en vez de retornar como si nada: el caller (scheduleCatalogSave
+    // y cía.) lo convierte en toast de error, no en silencio.
     const stripped = this._stripForQuota(value);
     try {
       localStorage.setItem(key, JSON.stringify(stripped));
       this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 1 });
-      if (typeof toast === 'function') {
-        toast('⚠️ Imágenes removidas del almacenamiento local para caber en la cuota. Las imágenes siguen visibles en esta sesión.', 'warning');
-      }
-      return;
+      throw new Error('Cuota localStorage: "' + key + '" guardado SIN imágenes (quedaron solo en esta sesión). Liberá espacio y guardá de nuevo.');
     } catch (e2) {
+      if (e2 && /Cuota localStorage/.test(e2.message || '')) throw e2;
       console.warn('Still over quota after image strip, removing evaluations...', e2);
     }
 
@@ -235,11 +247,9 @@ const AppStorage = {
     try {
       localStorage.setItem(key, JSON.stringify(strippedDeep));
       this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 2 });
-      if (typeof toast === 'function') {
-        toast('⚠️ Catálogo guardado sin imágenes ni metadatos de validación (cuota localStorage).', 'warning');
-      }
-      return;
+      throw new Error('Cuota localStorage: "' + key + '" guardado SIN imágenes ni metadatos (degradado). Liberá espacio y guardá de nuevo.');
     } catch (e3) {
+      if (e3 && /Cuota localStorage/.test(e3.message || '')) throw e3;
       console.error('No se pudo guardar el catálogo ni siquiera sin imágenes:', e3);
       throw new Error('Cuota de almacenamiento insuficiente incluso sin imágenes. Considere usar menos catálogos o limpiar el almacenamiento.');
     }
@@ -280,11 +290,11 @@ const AppStorage = {
       try {
         await this.storeInstance.delete(key);
         await this.storeInstance.save();
-      } catch {}
+      } catch (e) { console.warn('AppStorage.removeItem (store):', e); }
     }
     try {
       localStorage.removeItem(key);
-    } catch {}
+    } catch (e) { console.warn('AppStorage.removeItem (localStorage):', e); }
   },
 
   // Helpers específicos
@@ -441,6 +451,7 @@ const AppStorage = {
     // engines, de ahi el tamano del bloque.
     const CHUNK = 8192;
     const parts = [];
+
     for (let i = 0; i < arr.length; i += CHUNK) {
       parts.push(String.fromCharCode.apply(null, arr.subarray(i, i + CHUNK)));
     }
@@ -451,6 +462,14 @@ const AppStorage = {
     const ref = this.buildImageRef(dataUrl, '');
     return ref ? ref.relativePath : null;
   },
+  // Valida un relativePath ANTES de tocar el fs: el ref se persiste en el store
+  // y un valor manipulado ("../../token", "/etc/x") convertiría cada lectura
+  // de imagen en acceso fuera de images/. Solo acepta lo que genera
+  // buildImageRef: images/img_<hex>.<ext>.
+  _isSafeImageRel(rel) {
+    return typeof rel === 'string' && /^images\/img_[0-9a-f]{1,64}\.(png|jpg|jpeg|webp|gif)$/i.test(rel);
+  },
+
 
   // Devuelve un payload persistible: escribe cada dataURL a archivo y deja
   // _imageRef en el item. Sin puente fs (tests / no-Tauri) → dataURL inline.
@@ -471,8 +490,16 @@ const AppStorage = {
         const chunk = clone.slice(i, i + BATCH);
         await Promise.all(chunk.map(async (item) => {
           if (item && item._imageRef && item._imageRef.relativePath) {
-            refs.push(item._imageRef.relativePath);
-          } else if (item && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
+            // Ref heredado: solo vale si apunta dentro de images/ con el
+            // formato propio; si no, se descarta y se re-deriva del img.
+            if (this._isSafeImageRel(item._imageRef.relativePath)) {
+              refs.push(item._imageRef.relativePath);
+            } else {
+              delete item._imageRef;
+              failedRefs.push(String((item && item.sku) || '?') + ':ref-inseguro');
+            }
+          }
+          if (item && !item._imageRef && typeof item.img === 'string' && /^data:image\//i.test(item.img)) {
             const rel = this._fileNameFromDataUrl(item.img);
             if (rel) {
               try {
@@ -605,30 +632,44 @@ const AppStorage = {
   async _embedImagesFromFiles(items) {
     const fsApi = this._fsApi();
     if (!fsApi || !Array.isArray(items)) return;
+    const missing = [];
     const BATCH = 32;
     for (let i = 0; i < items.length; i += BATCH) {
       const chunk = items.slice(i, i + BATCH);
       await Promise.all(chunk.map(async (item) => {
         if (item && item._imageRef && item._imageRef.relativePath &&
             !(typeof item.img === 'string' && /^data:image\//i.test(item.img))) {
+          const rel = item._imageRef.relativePath;
+          // Ref fuera de formato → no se toca el fs (ver _isSafeImageRel).
+          if (!this._isSafeImageRel(rel)) { delete item._imageRef; item.img = '-'; return; }
           try {
-            const bytes = await fsApi.readBytes(item._imageRef.relativePath);
+            const bytes = await fsApi.readBytes(rel);
             const dataUrl = this._bytesToDataUrl(bytes, item._imageRef.mime);
             const t = await this._makeThumb(dataUrl);
             item.img = (t && t.thumb) || dataUrl;
             if (t && t.sm) item.imgSm = t.sm;
-          } catch (e) { item.img = '-'; delete item._imageRef; }
+          } catch (e) {
+            // Antes: foto faltante → img='-' + ref borrado EN SILENCIO (dato
+            // perdido sin red). Ahora: se CONSERVA el ref para reintentar en el
+            // próximo load y se informa una sola vez.
+            item.img = '-';
+            missing.push(rel);
+          }
         }
       }));
     }
+    if (missing.length) {
+      this._recordPersistence({ imagesFailed: missing.length, failedRefs: missing.slice(0, 20) });
+      console.warn('photo-quality: ' + missing.length + ' imágenes no se pudieron leer del disco (se conserva la referencia):', missing.slice(0, 10));
+      if (typeof toast === 'function') toast('⚠️ ' + missing.length + ' fotos no están en disco; se muestran como "-".', 'warning');
+    }
   },
-
   // Imagen COMPLETA de un item para zoom/edición: archivo si hay _imageRef
   // (async), si no el dataURL actual. null si no hay imagen.
   async loadFullImage(item) {
     if (!item) return null;
     const fsApi = this._fsApi();
-    if (item._imageRef && item._imageRef.relativePath && fsApi) {
+    if (item._imageRef && item._imageRef.relativePath && fsApi && this._isSafeImageRel(item._imageRef.relativePath)) {
       try {
         const bytes = await fsApi.readBytes(item._imageRef.relativePath);
         return this._bytesToDataUrl(bytes, item._imageRef.mime || 'png');
@@ -637,17 +678,23 @@ const AppStorage = {
     return (typeof item.img === 'string' && /^data:image\//i.test(item.img)) ? item.img : null;
   },
 
-  // Elimina archivos de images/ no referenciados por el catálogo actual.
+  // Huérfanos a PAPELERA (images/.trash/), no rm directo: la limpieza vieja
+  // borraba archivos sin red y un ref válido con typo perdía la foto.
   async _gcOrphanImages(refs, fsApi) {
     try {
       const refSet = new Set(Array.isArray(refs) ? refs : []);
       const entries = await fsApi.list('images');
       for (const e of entries) {
         if (!e || !e.name) continue;
+        if (e.name === '.trash') continue;
         const rel = 'images/' + e.name;
-        if (/\.(png|jpe?g|webp|gif)$/i.test(rel) && !refSet.has(rel)) {
-          try { await fsApi.remove(rel); } catch {}
-        }
+        if (!this._isSafeImageRel(rel) || refSet.has(rel)) continue;
+        try {
+          await fsApi.ensureDir('images/.trash');
+          const bytes = await fsApi.readBytes(rel);
+          await fsApi.writeBytes('images/.trash/' + e.name, bytes);
+          await fsApi.remove(rel);
+        } catch { try { await fsApi.remove(rel); } catch {} }
       }
     } catch {}
   },
