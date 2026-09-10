@@ -25,6 +25,7 @@ const Tests = {
 		this.testZeroCosts();
 		this.testLatamDecimalFormat();
 		await this.testHermesAuditFixes();
+		await this.testStoreEncryption();
 		this.test8BitDoBrand();
 		this.testWeightBasedFreight();
 		this.testCourierWarnings();
@@ -8966,6 +8967,61 @@ const Tests = {
 			localStorage.removeItem(key);
 		});
 	},
+	async testStoreEncryption() {
+		// Ítem 1 ronda 2: DEK en keychain del SO + AES-GCM en reposo.
+		const prevDek = AppStorage._dek;
+		const prevWarned = AppStorage._cryptoWarned;
+		const prevBridge = global.window.MamboTauriBridge;
+		try {
+			// 1. Sin puente (navegador/tests): sin DEK, texto plano, sin throw.
+			AppStorage._dek = null;
+			global.window.MamboTauriBridge = undefined;
+			this.assert((await AppStorage._getDek()) === null, "sin keychain no hay DEK (degrada, no brickea)");
+			// 2. Keychain con slot vacío: genera DEK de 32B y la guarda.
+			let saved = null;
+			global.window.MamboTauriBridge = {
+				inTauri: true,
+				keychain: {
+					get: async () => { throw new Error("NO_ENTRY"); },
+					set: async (s, a, pw) => { saved = { s, a, pw }; },
+				},
+			};
+			AppStorage._dek = null;
+			const dek = await AppStorage._getDek();
+			this.assert(!!dek && dek.length === 32, "slot vacío genera DEK de 256 bits");
+			this.assert(!!saved && saved.s === AppStorage.DEK_SERVICE, "la DEK se guarda en el keychain");
+			// 3. Segunda vez: lee la guardada, no genera otra.
+			AppStorage._dek = null;
+			global.window.MamboTauriBridge.keychain.get = async () => saved.pw;
+			const dek2 = await AppStorage._getDek();
+			this.assert(AppStorage._b64enc(dek2) === saved.pw, "la DEK persiste entre sesiones (vía keychain)");
+			// 4. Roundtrip cifrado vía localStorage: sobre ilegible a ojo.
+			AppStorage._dek = dek2;
+			AppStorage.mode = "localstorage";
+			AppStorage.storeInstance = null;
+			await AppStorage.setItem("_test_enc", { items: [{ sku: "SECRETO-1", fob: 5 }] });
+			const raw = localStorage.getItem("_test_enc");
+			this.assert(raw.includes("__enc__") && !raw.includes("SECRETO-1"), "store ilegible a ojo (sin texto plano)");
+			const back = await AppStorage.getItem("_test_enc", null);
+			this.assert(!!back && back.items[0].sku === "SECRETO-1", "roundtrip cifrado OK");
+			// 5. Manipulación: falla cerrado con default.
+			const obj = JSON.parse(raw);
+			obj.ct = obj.ct.slice(0, -6) + "AAAAAA";
+			localStorage.setItem("_test_enc", JSON.stringify(obj));
+			this.assert((await AppStorage.getItem("_test_enc", "CAIDO")) === "CAIDO", "ciphertext manipulado → default");
+			// 6. Legado en texto plano: se sigue leyendo (migración).
+			AppStorage._dek = null;
+			localStorage.setItem("_test_legacy", JSON.stringify({ a: 1 }));
+			this.assert((await AppStorage.getItem("_test_legacy", null)).a === 1, "texto plano heredado migra solo");
+			localStorage.removeItem("_test_enc");
+			localStorage.removeItem("_test_legacy");
+		} finally {
+			AppStorage._dek = prevDek;
+			AppStorage._cryptoWarned = prevWarned;
+			global.window.MamboTauriBridge = prevBridge;
+		}
+	},
+
 
 	testBytesToDataUrlChunked() {
 		// 7) El chunking no cambia NI UN BYTE del dataURL (regresion de perf).

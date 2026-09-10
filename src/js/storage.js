@@ -114,6 +114,127 @@ const AppStorage = {
     this._storeWarned = true;
     if (typeof toast === 'function') toast(this.persistenceError, 'warning');
   },
+  // ── Cifrado en reposo (ítem 1 ronda 2) ──
+  // DEK de 256 bits en el KEYCHAIN del SO (nunca en disco ni en el store);
+  // valores AES-GCM con iv aleatorio por escritura: {__enc__:1, iv, ct}.
+  // Migración transparente: lo que ya está en texto plano se sigue leyendo y
+  // se cifra al próximo guardado. Sin keychain (navegador, keychain roto) se
+  // degrada a texto plano CON aviso, nunca se brickea la app.
+  DEK_SERVICE: 'com.mambo.pedidos',
+  DEK_ACCOUNT: 'store-dek-v1',
+  _dek: null,
+  _cryptoWarned: false,
+
+  _warnCrypto(msg) {
+    if (this._cryptoWarned) return;
+    this._cryptoWarned = true;
+    console.warn(msg);
+    if (typeof toast === 'function') toast(msg, 'warning');
+  },
+
+  _b64enc(bytes) {
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (typeof Buffer !== 'undefined') return Buffer.from(arr).toString('base64');
+    let bin = '';
+    for (let i = 0; i < arr.length; i += 8192) bin += String.fromCharCode.apply(null, arr.subarray(i, i + 8192));
+    return btoa(bin);
+  },
+
+  _b64dec(str) {
+    if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(String(str), 'base64'));
+    const bin = atob(String(str));
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  },
+
+  _subtle() {
+    try {
+      const c = (typeof crypto !== 'undefined' && crypto.subtle) ? crypto
+        : (typeof require === 'function' ? require('crypto').webcrypto : null);
+      return (c && c.subtle) || null;
+    } catch { return null; }
+  },
+
+  // DEK en memoria (solo proceso vivo). null = sin cifrado disponible.
+  async _getDek() {
+    if (this._dek) return this._dek;
+    const subtle = this._subtle();
+    if (!subtle) return null;
+    let bridge = null;
+    try { bridge = this._bridge(); } catch { bridge = null; }
+    const kc = bridge && bridge.inTauri && bridge.keychain;
+    if (!kc) return null;
+    try {
+      const stored = await kc.get(this.DEK_SERVICE, this.DEK_ACCOUNT);
+      if (stored) {
+        this._dek = this._b64dec(stored);
+        if (this._dek.length === 32) return this._dek;
+        this._dek = null;
+      }
+    } catch (e) {
+      const msg = String((e && e.message) || e || '');
+      if (!/NO_ENTRY/.test(msg)) {
+        this._warnCrypto('⚠️ Keychain no disponible: el store queda en texto plano en este equipo.');
+        return null;
+      }
+      // NO_ENTRY: primera vez → generar y guardar la DEK.
+    }
+    try {
+      const raw = new Uint8Array(32);
+      const g = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto
+        : (typeof require === 'function' ? require('crypto').webcrypto : null);
+      (g || crypto).getRandomValues(raw);
+      await kc.set(this.DEK_SERVICE, this.DEK_ACCOUNT, this._b64enc(raw));
+      this._dek = raw;
+      return this._dek;
+    } catch (e) {
+      this._warnCrypto('⚠️ No se pudo guardar la clave en el keychain: el store queda en texto plano.');
+      return null;
+    }
+  },
+
+  async _importDek(raw) {
+    const subtle = this._subtle();
+    if (!subtle) throw new Error('WebCrypto no disponible');
+    return subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  },
+
+  // Cifra un valor a sobre sellado {__enc__, iv, ct}. Sin DEK → tal cual.
+  async _encryptValue(value) {
+    const dek = await this._getDek();
+    if (!dek) return value;
+    const subtle = this._subtle();
+    const iv = new Uint8Array(12);
+    ((typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto : require('crypto').webcrypto).getRandomValues(iv);
+    const key = await this._importDek(dek);
+    const data = new TextEncoder().encode(JSON.stringify(value));
+    const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+    return { __enc__: 1, iv: this._b64enc(iv), ct: this._b64enc(new Uint8Array(ct)) };
+  },
+
+  // Inversa: sobre → valor; texto plano heredado → tal cual (migración).
+  async _decryptValue(stored, defaultValue = null) {
+    if (!stored || typeof stored !== 'object' || stored.__enc__ !== 1) return stored !== undefined ? stored : defaultValue;
+    const dek = await this._getDek();
+    if (!dek) {
+      this._warnCrypto('⚠️ Dato cifrado ilegible sin acceso al keychain.');
+      return defaultValue;
+    }
+    try {
+      const subtle = this._subtle();
+      const key = await this._importDek(dek);
+      const pt = await subtle.decrypt(
+        { name: 'AES-GCM', iv: this._b64dec(stored.iv) },
+        key, this._b64dec(stored.ct));
+      return JSON.parse(new TextDecoder().decode(pt));
+    } catch (e) {
+      console.error('Dato del store ilegible (¿manipulado?):', e);
+      if (typeof toast === 'function') toast('⚠️ Un dato guardado está corrupto o fue manipulado; se ignora.', 'error');
+      return defaultValue;
+    }
+  },
+
 
   // Arranca el registro de un intento de persistencia (lo llama saveCatalog).
   _beginPersistence() {
@@ -171,7 +292,8 @@ const AppStorage = {
     if (this.storeInstance) {
       try {
         const val = await this.storeInstance.get(key);
-        return val !== undefined && val !== null ? val : defaultValue;
+        if (val === undefined || val === null) return defaultValue;
+        return await this._decryptValue(val, defaultValue);
       } catch (e) {
         console.error('Error leyendo Tauri Store:', e);
       }
@@ -179,8 +301,9 @@ const AppStorage = {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return defaultValue;
+      let parsed;
       try {
-        return JSON.parse(raw);
+        parsed = JSON.parse(raw);
       } catch (parseErr) {
         // Antes: JSON corrupto → vacío silencioso (el usuario perdía el
         // historial/marcas sin red). Ahora se avisa y el rescate (backup)
@@ -189,6 +312,7 @@ const AppStorage = {
         if (typeof toast === 'function') toast('⚠️ Dato local "' + key + '" corrupto; se intenta el respaldo.', 'warning');
         return defaultValue;
       }
+      return await this._decryptValue(parsed, defaultValue);
     } catch {
       return defaultValue;
     }
@@ -197,14 +321,15 @@ const AppStorage = {
   async setItem(key, value) {
     if (this.storeInstance) {
       try {
-        await this.storeInstance.set(key, value);
+        await this.storeInstance.set(key, await this._encryptValue(value));
         await this.storeInstance.save();
         // backend='store' solo aparece por el probe legacy (store sin puente);
         // en la app real el camino bueno es 'tauri'.
         this._recordPersistence({
           backend: this.mode === 'tauri' ? 'tauri' : 'store',
           degraded: false,
-          stripLevel: 0
+          stripLevel: 0,
+          encrypted: !!this._dek
         });
         return;
       } catch (e) {
@@ -215,7 +340,7 @@ const AppStorage = {
         if (this.mode === 'tauri') throw await this._storageError(key, e);
       }
     }
-    const serialized = JSON.stringify(value);
+    const serialized = JSON.stringify(await this._encryptValue(value));
     try {
       localStorage.setItem(key, serialized);
       this._recordPersistence({ backend: 'localstorage', degraded: false, stripLevel: 0 });
@@ -234,8 +359,8 @@ const AppStorage = {
     // y cía.) lo convierte en toast de error, no en silencio.
     const stripped = this._stripForQuota(value);
     try {
-      localStorage.setItem(key, JSON.stringify(stripped));
-      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 1 });
+      localStorage.setItem(key, JSON.stringify(await this._encryptValue(stripped)));
+      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 1, encrypted: !!this._dek });
       throw new Error('Cuota localStorage: "' + key + '" guardado SIN imágenes (quedaron solo en esta sesión). Liberá espacio y guardá de nuevo.');
     } catch (e2) {
       if (e2 && /Cuota localStorage/.test(e2.message || '')) throw e2;
@@ -245,8 +370,8 @@ const AppStorage = {
     // Level 2: also remove _evaluations, warnings, rawText, cellRawText
     const strippedDeep = this._stripForQuota(stripped, true);
     try {
-      localStorage.setItem(key, JSON.stringify(strippedDeep));
-      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 2 });
+      localStorage.setItem(key, JSON.stringify(await this._encryptValue(strippedDeep)));
+      this._recordPersistence({ backend: 'localstorage', degraded: true, stripLevel: 2, encrypted: !!this._dek });
       throw new Error('Cuota localStorage: "' + key + '" guardado SIN imágenes ni metadatos (degradado). Liberá espacio y guardá de nuevo.');
     } catch (e3) {
       if (e3 && /Cuota localStorage/.test(e3.message || '')) throw e3;
@@ -818,9 +943,10 @@ const AppStorage = {
 
     if (this.storeInstance) {
       try {
-        await this.storeInstance.set(this.KEYS.CATALOG, payload);
+        await this.storeInstance.set(this.KEYS.CATALOG, await this._encryptValue(payload));
         await this.storeInstance.save();
         evidence.backend = 'tauri';
+        evidence.encrypted = !!this._dek;
         return { backend: 'tauri', evidence };
       } catch (e) {
         evidence.backend = 'localstorage';
@@ -831,13 +957,13 @@ const AppStorage = {
     }
 
     try {
-      localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(payload));
+      localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(await this._encryptValue(payload)));
     } catch (e) {
       evidence.localstorageError = e.message;
       // Retry with stripped images
       try {
         const stripped = this._stripForQuota(payload);
-        localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(stripped));
+        localStorage.setItem(this.KEYS.CATALOG, JSON.stringify(await this._encryptValue(stripped)));
         evidence.imagesStripped = true;
       } catch (e2) {
         evidence.localstorageError = e2.message;
@@ -856,7 +982,7 @@ const AppStorage = {
 
     if (this.storeInstance) {
       try {
-        data = await this.storeInstance.get(this.KEYS.CATALOG);
+        data = await this._decryptValue(await this.storeInstance.get(this.KEYS.CATALOG), null);
         if (data) evidence.backend = 'tauri';
       } catch (e) {
         evidence.tauriError = e.message;
@@ -867,7 +993,7 @@ const AppStorage = {
       try {
         const raw = localStorage.getItem(this.KEYS.CATALOG);
         if (raw) {
-          data = JSON.parse(raw);
+          data = await this._decryptValue(JSON.parse(raw), null);
           evidence.backend = evidence.backend || 'localstorage';
         }
       } catch (e) {

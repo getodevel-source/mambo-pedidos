@@ -37,7 +37,7 @@ import {
 } from '@tauri-apps/plugin-fs';
 import { load as loadStore } from '@tauri-apps/plugin-store';
 import { appDataDir } from '@tauri-apps/api/path';
-
+import { invoke } from '@tauri-apps/api/core';
 const global = typeof window !== 'undefined' ? window : globalThis;
 
 // En Tauri v2 toda ruta relativa necesita baseDir explícito o la niega el
@@ -66,5 +66,14 @@ global.MamboTauriBridge = {
   // Store.load() persiste el archivo JSON dentro de app_data_dir.
   store: {
     load: (fileName) => loadStore(fileName),
+  },
+
+  // Keychain del SO (ítem 1 ronda 2): guarda la DEK del store cifrado. Los
+  // comandos Rust devuelven "NO_ENTRY" si el slot está vacío y
+  // "KEYCHAIN_UNAVAILABLE: ..." si el backend no anda (sin demonio de
+  // secretos, etc.): el storage distingue ambos, nunca brickea la app.
+  keychain: {
+    get: (service, account) => invoke('keychain_get', { service, account }),
+    set: (service, account, password) => invoke('keychain_set', { service, account, password }),
   },
 };

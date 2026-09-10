@@ -251,6 +251,30 @@ fn apply_appimage_update(appimage_path: String) -> Result<(), String> {
         .map_err(|e| format!("no se pudo lanzar el instalador: {}", e))?;
     Ok(())
 }
+/// Keychain del SO para la DEK del store (ítem 1 ronda 2): el secret NUNCA
+/// toca el JS salvo en memoria. Errores con prefijo estable para que el
+/// frontend distinga "slot vacío" (generar+guardar DEK) de "keychain roto"
+/// (degradar a texto plano con aviso, nunca brickear la app).
+#[tauri::command]
+fn keychain_get(service: String, account: String) -> Result<String, String> {
+    let entry =
+        keyring::Entry::new(&service, &account).map_err(|e| format!("KEYCHAIN_UNAVAILABLE: {}", e))?;
+    match entry.get_password() {
+        Ok(pw) => Ok(pw),
+        Err(keyring::Error::NoEntry) => Err("NO_ENTRY".into()),
+        Err(e) => Err(format!("KEYCHAIN_UNAVAILABLE: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn keychain_set(service: String, account: String, password: String) -> Result<(), String> {
+    let entry =
+        keyring::Entry::new(&service, &account).map_err(|e| format!("KEYCHAIN_UNAVAILABLE: {}", e))?;
+    entry
+        .set_password(&password)
+        .map_err(|e| format!("KEYCHAIN_UNAVAILABLE: {}", e))
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -281,13 +305,9 @@ pub fn run() {
                 std::env::set_var("GDK_BACKEND", "wayland");
                 // Buffer 2x (GDK_SCALE=2): WebKit dibuja nitido y el
                 // compositor lo downsamplinga al 1.3333x nativo del monitor.
-                // Con scale 1 (launcher viejo) el compositor ESTIRA el buffer
-                // 1:1 -> pixelado cronico; sin scale, Hyprland negocia 1 y
-                // pasa lo mismo. Forzar 2 = nitido con tamano logico correcto.
                 std::env::set_var("GDK_SCALE", "2");
             }
     }
-
     tauri::Builder::default()
         .setup(|app| {
             // Controles de ventana estilo macOS (cruz / minimizar / pantalla
@@ -310,7 +330,9 @@ pub fn run() {
             get_app_version,
             get_install_kind,
             download_update,
-            apply_appimage_update
+            apply_appimage_update,
+            keychain_get,
+            keychain_set
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
