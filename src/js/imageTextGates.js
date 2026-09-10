@@ -150,6 +150,42 @@ const ImageTextGates = {
   COMPACT_CATS,
   WIDE_CATS,
 
+  // Ítem 3 ronda 2: umbrales configurables con los defaults auditados.
+  // COLOR_THRESHOLDS gobierna classifyColorName (límites gris/plata/blanco);
+  // ASPECT_LIMITS gobierna categoryAspectViolation por familia.
+  COLOR_THRESHOLDS: {
+    blackBrightness: 0.22,
+    whiteSaturation: 0.12,
+    whiteBrightness: 0.85,
+    silverBrightness: 0.55,
+    silverSaturation: 0.12,
+  },
+  ASPECT_LIMITS: {
+    COMPACT: { max: 1.9 },
+    WIDE: { min: 0.65 },
+  },
+  configureThresholds(patch = {}) {
+    if (patch.color && typeof patch.color === 'object') {
+      for (const [k, v] of Object.entries(patch.color)) {
+        if (k in this.COLOR_THRESHOLDS && Number.isFinite(Number(v))) this.COLOR_THRESHOLDS[k] = Number(v);
+      }
+    }
+    if (patch.aspect && typeof patch.aspect === 'object') {
+      for (const [fam, lim] of Object.entries(patch.aspect)) {
+        const F = String(fam).toUpperCase();
+        if (this.ASPECT_LIMITS[F] && lim && typeof lim === 'object') {
+          for (const [k, v] of Object.entries(lim)) {
+            if ((k === 'min' || k === 'max') && Number.isFinite(Number(v)) && Number(v) > 0) this.ASPECT_LIMITS[F][k] = Number(v);
+          }
+        }
+      }
+    }
+  },
+  resetThresholds() {
+    this.COLOR_THRESHOLDS = { blackBrightness: 0.22, whiteSaturation: 0.12, whiteBrightness: 0.85, silverBrightness: 0.55, silverSaturation: 0.12 };
+    this.ASPECT_LIMITS = { COMPACT: { max: 1.9 }, WIDE: { min: 0.65 } };
+  },
+
   /**
    * Classifies an RGB pixel into a broad color name (mirrors
    * PdfParser.classifyColorName semantics so both layers agree).
@@ -159,10 +195,11 @@ const ImageTextGates = {
     const min = Math.min(r, g, b);
     const saturation = max > 0 ? (max - min) / max : 0;
     const brightness = max / 255;
+    const T = this.COLOR_THRESHOLDS;
 
-    if (brightness < 0.22) return "BLACK";
-    if (saturation < 0.12 && brightness > 0.85) return "WHITE";
-    if (saturation < 0.12) return brightness > 0.55 ? "SILVER" : "GRAY";
+    if (brightness < T.blackBrightness) return "BLACK";
+    if (saturation < T.whiteSaturation && brightness > T.whiteBrightness) return "WHITE";
+    if (saturation < T.silverSaturation) return brightness > T.silverBrightness ? "SILVER" : "GRAY";
 
     if (r > g + 40 && r > b + 40) {
       if (g > 100 && b < 80) return "GOLD";
@@ -376,9 +413,9 @@ const ImageTextGates = {
     const c = String(cat || "").toUpperCase();
     const a = Number(aspect);
     if (!Number.isFinite(a)) return { violation: false, expectedFamily: null };
-    if (COMPACT_CATS.includes(c) && a > 1.9)
+    if (COMPACT_CATS.includes(c) && a > this.ASPECT_LIMITS.COMPACT.max)
       return { violation: true, expectedFamily: "COMPACT" };
-    if (WIDE_CATS.includes(c) && a < 0.65)
+    if (WIDE_CATS.includes(c) && a < (this.ASPECT_LIMITS.WIDE.min ?? 0.65))
       return { violation: true, expectedFamily: "WIDE" };
     return { violation: false, expectedFamily: null };
   },

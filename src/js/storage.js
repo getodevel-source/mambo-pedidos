@@ -161,7 +161,7 @@ const AppStorage = {
     if (this._dek) return this._dek;
     const subtle = this._subtle();
     if (!subtle) return null;
-    let bridge = null;
+    let bridge;
     try { bridge = this._bridge(); } catch { bridge = null; }
     const kc = bridge && bridge.inTauri && bridge.keychain;
     if (!kc) return null;
@@ -188,7 +188,7 @@ const AppStorage = {
       await kc.set(this.DEK_SERVICE, this.DEK_ACCOUNT, this._b64enc(raw));
       this._dek = raw;
       return this._dek;
-    } catch (e) {
+    } catch {
       this._warnCrypto('⚠️ No se pudo guardar la clave en el keychain: el store queda en texto plano.');
       return null;
     }

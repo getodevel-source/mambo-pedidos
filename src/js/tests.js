@@ -131,6 +131,7 @@ const Tests = {
 		await this.testPhotoQualityStorageRoundTrip();
 		this.testStoreInitStoreLoadFallback();
 		this.testMarginalCropDetector();
+		this.testImageThresholdCalibration();
 		this.testSkuAuditThreeDomains();
 		this.testSkuDeterministicMapping();
 		this.testSkuAmbiguityGate();
@@ -5646,6 +5647,52 @@ const Tests = {
 			"isMarginalCrop({}) es marginal",
 		);
 	},
+	testImageThresholdCalibration() {
+		// Ítem 3 ronda 2: configurables con defaults + fotos oscuras buenas.
+		const mk = (w, h, fn) => {
+			const d = new Uint8ClampedArray(w * h * 4);
+			for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+				const c = fn(x, y); const o = (y * w + x) * 4;
+				d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+			}
+			return { width: w, height: h, data: d };
+		};
+		// Banda negra uniforme (borde de página) sigue marginal.
+		this.assert(ImageQuality.isMarginalCrop(mk(60, 40, () => [4, 4, 6])) === true, "banda negra uniforme sigue marginal");
+		// Foto oscura con textura (producto + ruido) ya NO se descarta.
+		let s = 42;
+		const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+		const dark = mk(60, 40, (x, y) => {
+			const n = rnd() * 46;
+			return (x > 15 && x < 45 && y > 8 && y < 32) ? [60 + n, 55 + n, 70 + n] : [12 + n * 0.4, 12 + n * 0.4, 16 + n * 0.4];
+		});
+		this.assert(ImageQuality.isMarginalCrop(dark) === false, "foto oscura con textura NO es marginal");
+		// Config por categoría con fail-safe.
+		ImageQuality.configureThresholds("TECLADO", { contentThreshold: 0.5 });
+		this.assert(ImageQuality.thresholdsFor("TECLADO").contentThreshold === 0.5, "override por categoría aplica");
+		this.assert(ImageQuality.thresholdsFor("OTRO").contentThreshold === 0.12, "resto mantiene default");
+		ImageQuality.configureThresholds("TECLADO", { contentThreshold: 99 });
+		this.assert(ImageQuality.thresholdsFor("TECLADO").contentThreshold === 0.5, "valor fuera de rango se ignora");
+		ImageQuality.resetThresholds();
+		this.assert(ImageQuality.thresholdsFor("TECLADO").contentThreshold === 0.12, "reset restaura default");
+		// Log de decisiones para calibrar.
+		ImageQuality.clearDecisionLog();
+		ImageQuality.isMarginalCrop(mk(10, 10, () => [250, 250, 250]), { log: true });
+		const log = ImageQuality.getDecisionLog();
+		this.assert(log.length === 1 && log[0].marginal === true && typeof log[0].contentRatio === "number", "descarte queda en el log de calibración");
+		ImageQuality.clearDecisionLog();
+		// Gates con defaults intactos + configurables.
+		this.assert(ImageTextGates.classifyColorName(200, 200, 205) === "SILVER", "gris claro sigue SILVER por default");
+		this.assert(ImageTextGates.categoryAspectViolation("MOUSE", 2.5).violation === true, "aspect compact default");
+		ImageTextGates.configureThresholds({ color: { silverBrightness: 0.99 } });
+		this.assert(ImageTextGates.classifyColorName(200, 200, 205) === "GRAY", "override de color aplica");
+		ImageTextGates.configureThresholds({ aspect: { COMPACT: { max: 5 } } });
+		this.assert(ImageTextGates.categoryAspectViolation("MOUSE", 2.5).violation === false, "override de aspect aplica");
+		ImageTextGates.configureThresholds({ color: { noExiste: 1 }, aspect: { COMPACT: { min: -5 } } });
+		ImageTextGates.resetThresholds();
+		this.assert(ImageTextGates.classifyColorName(200, 200, 205) === "SILVER", "reset de gates restaura");
+	},
+
 
 	testImageIdempotenceAndOrphans() {
 		const catalog = [
