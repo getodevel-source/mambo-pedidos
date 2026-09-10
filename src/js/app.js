@@ -813,6 +813,7 @@ function showValidationPanel(errors, warnings) {
       html += '<li><strong style="color: var(--yellow);">' + esc(w.field) + ':</strong> ' + esc(w.message) + '</li>';
     });
     html += '</ul>';
+    html += '<div style="font-size: 11px; opacity: 0.75; margin-top: 8px;">Nota: las categorías nuevas se agregan al catálogo (revisá typos en el aviso de arriba).</div>';
   }
   panel.innerHTML = html;
   panel.style.display = 'block';
