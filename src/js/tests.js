@@ -31,6 +31,7 @@ const Tests = {
 		this.testCourierWarnings();
 		this.testCourierReventaFullMatrix();
 		this.testProfitabilityAndCompare();
+		this.testRoundingReconciliation();
 		this.testPrecisionNoErrors();
 		this.testImportGuide();
 		await this.testImportGuideWizard();
@@ -273,6 +274,17 @@ const Tests = {
 		);
 		this.assert(res.items[0].costoU === 100, "Costo unitario respeta Flete 0%");
 	},
+	testRoundingReconciliation() {
+		// Ítem 4 ronda 2: la última línea absorbe el residuo en centavos.
+		const items = [];
+		for (let i = 0; i < 11; i++) items.push({ sku: "R-" + i, fob: 19.99 + ((i * 37) % 50) / 100, qty: 3 + (i % 5), cat: "TECLADO" });
+		const res = Calculator.calculateOrder(items, { flete: 15, seguro: 2, derechos: 16, tasa: 3, perc: 6, ivaPct: 21, desp: 500, courier: 8, markup: 2.5, tipoCambio: 1400, logisticaModo: "importador" });
+		const cents = (arr) => Math.round(arr.reduce((s, v) => s + v, 0) * 100);
+		this.assert(cents(res.items.map((r) => r.subCosto)) === Math.round(res.totals.costo * 100), "suma subCosto == costo total al centavo");
+		this.assert(cents(res.items.map((r) => r.subIva)) === Math.round(res.totals.ivaUsd * 100), "suma subIva == IVA total al centavo");
+		this.assert(cents(res.items.map((r) => r.subFob)) === Math.round(res.totals.fob * 100), "suma subFob == FOB total al centavo");
+	},
+
 
 	testLatamDecimalFormat() {
 		const parsed = Calculator.parseNum("31,75", 0);

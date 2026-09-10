@@ -258,6 +258,24 @@ const Calculator = {
         subFobArs
       };
     });
+    // Ítem 4 ronda 2 (reconciliación): costoU/pvp se redondean por unidad y la
+    // suma de líneas podía descuadrar centavos contra los totales exactos en
+    // pedidos grandes. La ÚLTIMA línea absorbe el residuo en centavos enteros
+    // (subCosto contra totalCostoNeto, subIva contra ivaUsd) para que
+    // suma(lineas) == total exacto; subFob/subPvp ya son exactos por
+    // construcción. Los ARS siguen redondeados a $1 (sin residuo posible).
+    if (calculatedItems.length > 0) {
+      const toCents = (v) => Math.round((Number(v) || 0) * 100);
+      const sumCents = (arr, k) => arr.reduce((s, r) => s + toCents(r[k]), 0);
+      const last = calculatedItems[calculatedItems.length - 1];
+      const restoCosto = toCents(totalCostoNeto) - sumCents(calculatedItems.slice(0, -1), 'subCosto');
+      last.subCosto = restoCosto / 100;
+      if (last.qty > 0) last.costoU = Math.round((last.subCosto / last.qty) * 100) / 100;
+      const restoIva = toCents(ivaUsd) - sumCents(calculatedItems.slice(0, -1), 'subIva');
+      last.subIva = restoIva / 100;
+      if (last.qty > 0) last.ivaU = last.subIva / last.qty;
+      last.subMargen = last.subPvp - last.subCosto;
+    }
 
     const totalFacturacion = calculatedItems.reduce((s, r) => s + r.subPvp, 0);
     const totalMargen = totalFacturacion - totalCostoNeto;
