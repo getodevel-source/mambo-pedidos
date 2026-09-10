@@ -13,7 +13,9 @@ const HistoryView = {
     currentPedido.name = document.getElementById('pedidoName').value || 'Pedido sin nombre';
     currentPedido.costs = getCostInputs();
     currentPedido.date = new Date().toISOString();
-
+    // IDs estables para el vínculo pedido↔importación (ítem 6): pedidos
+    // viejos no tienen; se backfillea al guardar.
+    if (!currentPedido.id) currentPedido.id = 'PED-' + Date.now().toString(36).toUpperCase();
     const res = Calculator.calculateOrder(currentPedido.items, currentPedido.costs);
     currentPedido.totals = res.totals;
 
@@ -68,12 +70,21 @@ const HistoryView = {
       cont.innerHTML = '<div class="card"><div class="empty"><div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></div><div class="empty-title">Sin pedidos guardados</div><div class="empty-sub">Armá un pedido desde el catálogo y hacé click en "Guardar en historial".</div></div></div>';
       return;
     }
+    // Ítem 6 ronda 2: vínculo inverso importación→pedido (lookup por pedidoId;
+    // si el tracker no carga, la fila sale igual: el vínculo es aditivo).
+    let impByPedido = {};
+    try {
+      const impPayload = (typeof AppStorage !== 'undefined' && AppStorage.loadImports) ? await AppStorage.loadImports() : null;
+      const recs = (impPayload && Array.isArray(impPayload.records)) ? impPayload.records : [];
+      for (const r of recs) { if (r && r.pedidoId) impByPedido[r.pedidoId] = r.number || ''; }
+    } catch { impByPedido = {}; }
     let html = '';
     list.forEach((p, i) => {
       const t = p.totals || {};
       const date = new Date(p.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
       const descBadge = (p.descuentoPct > 0) ? ' · <span style="color: var(--green); font-weight: 700;">−' + p.descuentoPct + '% neg.</span>' : '';
-      html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + descBadge + '</div></div>';
+      const impBadge = (p.id && impByPedido[p.id]) ? ' · <span style="color: var(--blue); font-weight: 700;">→ ' + esc(impByPedido[p.id]) + '</span>' : '';
+      html += '<div><div class="card-title">' + esc(p.name) + '</div><div class="card-sub">' + (p.items ? p.items.length : 0) + ' SKUs · ' + (t.qty || 0) + ' unidades · ' + date + descBadge + impBadge + '</div></div>';
       html += '<div class="row" style="gap: 24px;">';
       html += '<div><div class="stat-label">FOB</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px;">$' + (t.fob || 0).toFixed(0) + '</div></div>';
       html += '<div><div class="stat-label">Costo</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--blue);">$' + (t.costo || 0).toFixed(0) + '</div></div>';
@@ -169,7 +180,8 @@ const HistoryView = {
     currentPedido = HistoryView._reattachPhotos(structuredClone(p));
     currentPedido.name = HistoryView.nextCloneName(p.name);
     currentPedido.date = new Date().toISOString();
-
+    // El clon es un pedido NUEVO: id propio (no hereda el vínculo).
+    currentPedido.id = 'PED-' + Date.now().toString(36).toUpperCase();
     switchView('pedido');
     renderPedido();
     toast('Pedido clonado exitosamente', 'success');

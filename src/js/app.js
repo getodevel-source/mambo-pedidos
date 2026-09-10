@@ -210,7 +210,7 @@ function armarPedido() {
     const r = bySku.get(sku) || catalog.find(c => c.sku === sku);
     return { sku: r.sku, cat: r.cat, marca: r.marca, modelo: r.modelo, variante: r.variante || '', color: r.variante || '', fob: r.fob, img: r ? r.img || '-' : '-', imgSm: r ? r.imgSm : undefined, status: r.status, qty };
   });
-  currentPedido = { name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), estado: 'borrador', items, costs: getCostInputs(), date: new Date().toISOString() };
+  currentPedido = { id: 'PED-' + Date.now().toString(36).toUpperCase(), name: 'Pedido ' + new Date().toLocaleDateString('es-AR'), estado: 'borrador', items, costs: getCostInputs(), date: new Date().toISOString() };
   switchView('pedido');
   renderPedido();
   toast('Pedido armado: ' + items.length + ' SKUs', 'success');

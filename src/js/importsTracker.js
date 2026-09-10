@@ -36,6 +36,11 @@ const ImportsTracker = {
       supplier: fields.supplier || '',
       description: fields.description || '',
       fobTotalUsd: typeof fields.fobTotalUsd === 'number' ? fields.fobTotalUsd : 0,
+      // Ítem 6 ronda 2: vínculo pedido↔importación. pedidoId estable del
+      // pedido origen (null si nació del asistente sin pedido exacto) +
+      // pedidoName desnormalizado para mostrar sin join.
+      pedidoId: typeof fields.pedidoId === 'string' && fields.pedidoId ? fields.pedidoId : null,
+      pedidoName: typeof fields.pedidoName === 'string' ? fields.pedidoName : '',
       freightUsd: 0,
       insuranceUsd: 0,
       courier: '',
@@ -59,6 +64,23 @@ const ImportsTracker = {
       record,
       payload: { records, counter }
     };
+  },
+
+  /**
+   * Vínculo con el pedido origen (ítem 6): devuelve {pedidoId, pedidoName}
+   * SOLO si el set de SKUs coincide exacto con el pedido en curso.
+   * Sin heurísticas parciales: un match difuso mentiría el origen.
+   */
+  extractPedidoLink(wizardItems, currentPedido) {
+    try {
+      const cp = currentPedido || null;
+      const wSkus = (wizardItems || []).map((i) => String((i && i.sku) || '')).filter(Boolean).sort();
+      const pSkus = cp && Array.isArray(cp.items) ? cp.items.map((i) => String((i && i.sku) || '')).filter(Boolean).sort() : [];
+      if (cp && cp.id && wSkus.length && wSkus.length === pSkus.length && wSkus.every((s, i) => s === pSkus[i])) {
+        return { pedidoId: cp.id, pedidoName: cp.name || '' };
+      }
+    } catch {}
+    return { pedidoId: null, pedidoName: '' };
   },
 
   /**

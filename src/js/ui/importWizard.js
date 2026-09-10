@@ -1333,10 +1333,15 @@ const ImportWizard = {
       ? await AppStorage.loadImports()
       : { records: [], counter: 0 };
     const desc = items.map(i => i.modelo || i.sku).filter(Boolean).slice(0, 4).join(', ');
+    // Ítem 6 ronda 2: vínculo con el pedido origen, SOLO si el set de SKUs
+    // coincide exacto con el pedido en curso (ver extractPedidoLink).
+    const link = ImportsTracker.extractPedidoLink(items, (typeof currentPedido !== 'undefined') ? currentPedido : null);
     const result = ImportsTracker.createRecord(payload, {
       supplier,
       description: desc,
-      fobTotalUsd: sum.fobTotalUsd
+      fobTotalUsd: sum.fobTotalUsd,
+      pedidoId: link.pedidoId,
+      pedidoName: link.pedidoName
     });
     // Snapshot de costo + inputs del asistente: createRecord deja los defaults en
     // estos campos; el bridge los completa con la salida del motor (no toca Slice A).

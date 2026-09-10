@@ -133,6 +133,8 @@ const Tests = {
 		this.testStoreInitStoreLoadFallback();
 		this.testMarginalCropDetector();
 		this.testImageThresholdCalibration();
+		this.testPedidoImportLink();
+		this.testDuplicateWarnOnAdd();
 		this.testSkuAuditThreeDomains();
 		this.testSkuDeterministicMapping();
 		this.testSkuAmbiguityGate();
@@ -5704,6 +5706,58 @@ const Tests = {
 		ImageTextGates.resetThresholds();
 		this.assert(ImageTextGates.classifyColorName(200, 200, 205) === "SILVER", "reset de gates restaura");
 	},
+	testPedidoImportLink() {
+		// Ítem 6 ronda 2: pedidoId/pedidoName viajan en el record.
+		const r1 = ImportsTracker.createRecord({ records: [], counter: 0 }, { supplier: "S", description: "D", fobTotalUsd: 10, pedidoId: "PED-X", pedidoName: "Pedido X" });
+		this.assert(r1.record.number === "IMP-0001", "numeración intacta con link");
+		this.assert(r1.record.pedidoId === "PED-X" && r1.record.pedidoName === "Pedido X", "record guarda pedidoId/pedidoName");
+		const r2 = ImportsTracker.createRecord({ records: [], counter: 0 }, { supplier: "S" });
+		this.assert(r2.record.pedidoId === null && r2.record.pedidoName === "", "sin pedido → null (sin heurística)");
+		// Match estricto por set de SKUs (orden irrelevante).
+		const ped = { id: "PED-1", name: "P", items: [{ sku: "A" }, { sku: "B" }] };
+		const ok = ImportsTracker.extractPedidoLink([{ sku: "B" }, { sku: "A" }], ped);
+		this.assert(ok.pedidoId === "PED-1" && ok.pedidoName === "P", "set exacto (otro orden) vincula");
+		this.assert(ImportsTracker.extractPedidoLink([{ sku: "A" }], ped).pedidoId === null, "set parcial NO vincula");
+		this.assert(ImportsTracker.extractPedidoLink([{ sku: "A" }, { sku: "B" }], null).pedidoId === null, "sin pedido NO vincula");
+		this.assert(ImportsTracker.extractPedidoLink([{ sku: "A" }, { sku: "B" }], { items: [{ sku: "A" }, { sku: "B" }] }).pedidoId === null, "pedido sin id NO vincula");
+	},
+
+	testDuplicateWarnOnAdd() {
+		// Ítem 5 ronda 2: el duplicado se avisa al agregar, no al guardar.
+		const CV = require("./ui/catalogView.js");
+		const prev = {
+			selection: global.selection, catalog: global.catalog, AppStore: global.AppStore,
+			schedule: global.scheduleCatalogSave, toast: global.toast, render: CV.renderCatalog,
+		};
+		const toasts = [];
+		try {
+			global.selection = {};
+			global.catalog = [{ sku: "A", marca: "M", modelo: "X", fob: 10 }, { sku: "B", marca: "M", modelo: "Y", fob: 20 }];
+			global.AppStore = { commit(fn) { fn(); } };
+			global.scheduleCatalogSave = () => {};
+			global.toast = (msg, type) => { toasts.push({ msg, type }); };
+			CV.renderCatalog = () => {};
+			CV.toggleItem("A", true);
+			this.assert(global.selection.A === 1, "primer agregado entra sin aviso");
+			this.assert(toasts.length === 0, "sin toast en el primer agregado");
+			CV.toggleItem("A", true);
+			this.assert(global.selection.A === 1, "re-agregado no duplica");
+			this.assert(toasts.length === 1 && toasts[0].type === "info" && toasts[0].msg.includes("A"), "re-agregado avisa con toast");
+			global.selection = { A: 5, B: 1 };
+			toasts.length = 0;
+			CV.toggleSelectAll(true);
+			this.assert(global.selection.A === 5, "selección masiva conserva cantidad cargada");
+			this.assert(toasts.length === 1 && toasts[0].msg.includes("conservan"), "conservación se informa");
+		} finally {
+			global.selection = prev.selection;
+			global.catalog = prev.catalog;
+			global.AppStore = prev.AppStore;
+			global.scheduleCatalogSave = prev.schedule;
+			global.toast = prev.toast;
+			CV.renderCatalog = prev.render;
+		}
+	},
+
 
 
 	testImageIdempotenceAndOrphans() {

@@ -50,11 +50,15 @@ const ImportsView = {
       planBtn = '<button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="ImportWizard.openPlanFromRecord(\'' + esc(record.number || '') + '\')">📋 Plan · ' + pends + ' pendientes</button>';
     }
 
+    // Ítem 6 ronda 2: origen pedido (denormalizado al crear; sin join).
+    const pedidoLine = (record.pedidoId || record.pedidoName)
+      ? '<div class="card-sub">📦 Pedido: ' + esc(record.pedidoName || record.pedidoId || '') + '</div>'
+      : '';
     return '<div class="card">' +
       '<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">' +
         '<div>' +
           '<div class="card-title"><span class="badge">' + esc(record.number || '') + '</span> ' + esc(record.description || '') + '</div>' +
-          '<div class="card-sub">' + esc(record.supplier || '') + ' · ' + esc(courier) + ' · ' + date + '</div>' +
+          '<div class="card-sub">' + esc(record.supplier || '') + ' · ' + esc(courier) + ' · ' + date + '</div>' + pedidoLine +
         '</div>' +
         '<div class="row" style="gap: 24px;">' +
           '<div><div class="stat-label">Costo final</div><div style="font-family: var(--font-mono); font-weight: 700; font-size: 14px;">' + this._fmtUsd(record.finalLandedCostUsd) + '</div></div>' +

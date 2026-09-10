@@ -311,6 +311,12 @@ const CatalogView = {
   },
 
   toggleItem(sku, on) {
+    // Ítem 5 ronda 2: el duplicado se avisa AL AGREGAR (antes solo al guardar,
+    // donde ya era tarde). La selección es por SKU: re-agregar suma aviso.
+    if (on && selection[sku] > 0) {
+      toast('"' + sku + '" ya está en el pedido (cant. ' + selection[sku] + ')', 'info');
+      return;
+    }
     AppStore.commit(() => {
       if (on) { if (!selection[sku]) selection[sku] = 1; }
       else { delete selection[sku]; }
@@ -333,7 +339,13 @@ const CatalogView = {
     AppStore.commit(() => {
       if (on) {
         // Respeta los filtros activos: selecciona solo lo visible (igual que el preview de importación)
-        CatalogView.getFilteredCatalog().forEach(r => { selection[r.sku] = 1; });
+        // y NO pisa cantidades ya cargadas (antes las reseteaba a 1 en silencio).
+        let kept = 0;
+        CatalogView.getFilteredCatalog().forEach(r => {
+          if (selection[r.sku] > 0 && selection[r.sku] !== 1) kept++;
+          else if (!selection[r.sku]) selection[r.sku] = 1;
+        });
+        if (kept > 0 && typeof toast === 'function') toast(kept + ' productos conservan su cantidad (' + 'selección masiva no la resetea)', 'info');
       } else {
         selection = {};
       }
