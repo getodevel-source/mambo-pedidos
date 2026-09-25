@@ -183,11 +183,15 @@ const content = await page.getTextContent();
 				this.detectBrandFromFilename(file.name, customBrands);
 
 			// Sanitización determinística (sin LLM local — limpieza 05/08)
-			const enrichedProducts = allProducts.map((item) =>
-				typeof TextSanitizer !== "undefined"
-					? TextSanitizer.sanitizeItem(item, customBrands)
-					: item,
-			);
+			const pdfIdentity = `${file.name || "unknown"}#${Number(file.size) || 0}`;
+			const enrichedProducts = allProducts.map((item) => {
+				const sanitized =
+					typeof TextSanitizer !== "undefined"
+						? TextSanitizer.sanitizeItem(item, customBrands)
+						: item;
+				sanitized._pdfIdentity = pdfIdentity;
+				return sanitized;
+			});
 
 			// Asignar SKU y formatear catálogo final
 			const finalProducts = this.finalizeCatalogProducts(
@@ -498,7 +502,7 @@ const content = await page.getTextContent();
 							height: outH,
 							pdfWidth: drawW,
 							pdfHeight: drawH,
-							centerY: y + outH / 2,
+							centerY: y + drawH / 2,
 							dataUrl: finalDataUrl,
 							dominantColor,
 							interiorColor,
@@ -655,7 +659,7 @@ const content = await page.getTextContent();
 							height: outH,
 							pdfWidth: imgW,
 							pdfHeight: imgH,
-							centerY: y + outH / 2,
+							centerY: y + imgH / 2,
 							dataUrl: finalDataUrl,
 							dominantColor,
 							interiorColor,
@@ -780,7 +784,7 @@ const content = await page.getTextContent();
 						height: outH,
 						pdfWidth: imgW,
 						pdfHeight: imgH,
-						centerY: y + outH / 2,
+						centerY: y + imgH / 2,
 						dataUrl: finalDataUrl,
 						dominantColor,
 						interiorColor,
@@ -1876,6 +1880,22 @@ const content = await page.getTextContent();
 			);
 		} else if (grounded !== true) {
 			critical.push("Evidencia de grounding insuficiente");
+		}
+
+		// Asociación NO literal: los flags _modelRecovered / _imageInherited
+		// marcan que el modelo o la foto FUERON adoptados de otra fila (herencia
+		// de familia / identidad), no leídos literalmente de esta. El producto
+		// queda buying-plausible pero la asociación no está probada, así que
+		// degrada a YELLOW con una advertencia explícita (nunca RED).
+		if (item._modelRecovered === true) {
+			confidence -= 15;
+			warnings.push(
+				"Modelo recuperado por herencia de familia; requiere revisión",
+			);
+		}
+		if (item._imageInherited === true) {
+			confidence -= 10;
+			warnings.push("Imagen heredada por identidad; requiere revisión");
 		}
 
 		let status = "GREEN";

@@ -39,6 +39,15 @@ extractPageProductsByTableRows(
 	) {
 		priceAnchors.sort((a, b) => a.y - b.y || a.x - b.x);
 		const pageProducts = [];
+		// Fotos ya tomadas por filas anteriores de ESTA página (dataUrls). Sin este
+		// tracking dos filas elegían la misma foto: la ventana de la celda (+25px) y
+		// el fallback de página (hasta 460px) se solapan cuando las fotos están
+		// desplazadas respecto de la fila, y la fila siguiente heredaba la foto de la
+		// anterior en vez de buscar la suya. Se excluye por dataUrl (idéntica en
+		// `candidateImgs` y en el fallback) para que la fila busque la siguiente libre.
+		// NOTA: la compartición legítima de una MISMA foto (mismo switch/cable en dos
+		// colores) la resuelve el matcher global por dataUrl, no este set.
+		const usedImageUrls = new Set();
 
 		// Model inheritance: track last valid model name for color-only rows
 		let lastInheritedModel = "";
@@ -445,6 +454,7 @@ extractPageProductsByTableRows(
 				const imgBottomBound = bottomBound + 25;
 				const candidateImgs = pageImages.filter((img) => {
 					if (img.pageNum !== pageNum) return false;
+					if (usedImageUrls.has(img.dataUrl)) return false;
 					const imgCenterY = img.centerY || img.y;
 					if (imgCenterY < imgTopBound || imgCenterY > imgBottomBound)
 						return false;
@@ -456,6 +466,7 @@ extractPageProductsByTableRows(
 				if (!candidateImgs.length) {
 					const pageImgsForRow = pageImages.filter((img) => {
 						if (img.pageNum !== pageNum) return false;
+						if (usedImageUrls.has(img.dataUrl)) return false;
 						const imgCenterY = img.centerY || img.y;
 						const distY = anchor.y - imgCenterY;
 						if (distY > 460 || distY < -160) return false;
@@ -529,6 +540,14 @@ extractPageProductsByTableRows(
 								: null;
 					}
 				}
+			}
+
+			// La fila se queda con esta foto: marcarla como tomada para que las filas
+			// siguientes no la vuelvan a elegir (ni por la ventana de celda ni por el
+			// fallback de página). Sólo las dataUrls reales entran al set — un "-" no
+			// es una foto y no debe bloquear a nadie.
+			if (this.isValidImageDataUrl(matchedImg)) {
+				usedImageUrls.add(matchedImg);
 			}
 
 			const grounding = this.verifyGrounding({
@@ -1336,9 +1355,12 @@ matchImagesToProductsGlobal(products, allImages) {
 				)
 					stillEmptyIdx.push(i);
 			}
-			// Productos con foto COMPARTIDA dentro de la página (el row engine no
-			// trackea imágenes usadas: dos filas pueden elegir la misma foto). El
-			// secundario buscará su propia imagen libre en el backfill de huérfanas;
+			// Productos con foto COMPARTIDA dentro de la página. El row engine ahora
+			// trackea las fotos que ya tomó (`usedImageUrls` por página), pero la
+			// compartición sigue siendo posible: la misma foto puede ser la correcta
+			// para dos filas (mismo switch/cable en dos colores) y la herencia por
+			// marca+modelo+cat de `finalizeCatalogProducts` también duplica dataUrls.
+			// El secundario buscará su propia imagen libre en el backfill de huérfanas;
 			// si no hay, conserva la compartida (los gates la auditan luego).
 			const sharedIdx = [];
 			const pageUrlCount = {};
@@ -1384,7 +1406,33 @@ matchImagesToProductsGlobal(products, allImages) {
 					const mid = dists[Math.floor(dists.length / 2)];
 					const dev = Math.max(...dists.map((d) => Math.abs(d - mid)));
 					if (dev > Math.max(60, Math.abs(mid) * 0.2)) continue;
-					if (!best || dev < best.dev) best = { shift, dev };
+					// La alineación por índice es el match de MAYOR riesgo de foto
+					// incorrecta: empareja fila-k ↔ foto-shift+k sólo por orden de Y,
+					// sin mirar el contenido. La regularidad del offset (dev) prueba que
+					// las dos listas caminan en paralelo, NO que la fila-k sea la foto-k —
+					// un shift corrido en un punto produce el mismo dev y reparte las
+					// fotos al producto equivocado. Por eso el shift sólo es candidato
+					// si TODAS las parejas pasan la validación visual (relaxed, como el
+					// backfill de huérfanas de abajo): si una sola falla, se descarta el
+					// shift entero en vez de asignar un bloque parcialmente corrido.
+					// Fail-closed: sin shift validado no se asigna por índice — el
+					// producto queda para el backfill/revisión de más abajo.
+					const validations = [];
+					let allValid = true;
+					for (let k = 0; k < np; k++) {
+						const validation = this.validateImageForProduct(
+							imgsAsc[shift + k],
+							pageProds[prodsAsc[k]],
+							true,
+						);
+						if (!validation.valid) {
+							allValid = false;
+							break;
+						}
+						validations.push(validation);
+					}
+					if (!allValid) continue;
+					if (!best || dev < best.dev) best = { shift, dev, validations };
 				}
 				if (best) {
 					for (let k = 0; k < np; k++) {
@@ -1394,6 +1442,17 @@ matchImagesToProductsGlobal(products, allImages) {
 							? img.dataUrl
 							: "-";
 						assignedProds.add(prodsAsc[k]);
+						// Conserva los warnings de VALIDACIÓN VISUAL de cada pareja
+						// (color no coincide, casi monocromática, shape aceptada) — el
+						// gate weak-image los lee. El shift en sí NO degrada: es un
+						// mecanismo verificado (galerías AJAZZ/ATK/AULA alinean bien).
+						const v = best.validations[k];
+						if (v && v.warnings && v.warnings.length) {
+							if (!Array.isArray(prod.imgWarnings)) prod.imgWarnings = [];
+							for (const w of v.warnings) {
+								if (!prod.imgWarnings.includes(w)) prod.imgWarnings.push(w);
+							}
+						}
 					}
 				}
 			} else if (

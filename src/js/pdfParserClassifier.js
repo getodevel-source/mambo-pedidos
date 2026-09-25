@@ -163,10 +163,34 @@ const PdfParserClassifier = {
     const t = (text || '').toLowerCase();
     const evidence = { category: 'OTRO', confidence: 0, source: 'none', matchedPattern: '', analyzedText: t.substring(0, 100) };
 
-    // 1. Marcas de categoría ÚNICA
-    const singleBrand = { 'Polaroid': 'CAMARA', 'KZ': 'AURICULAR', 'Haimu': 'SWITCH', 'Philips': 'CUIDADO_PERSONAL' };
-    if (brand && singleBrand[brand]) {
-      return Object.assign(evidence, { category: singleBrand[brand], confidence: 95, source: 'brand-exclusive', matchedPattern: brand });
+    // 1. Pista de marca CORROBORADA por el texto. Antes esto era un
+    // `singleBrand` que devolvía la categoría sin mirar el texto: KZ forzaba
+    // AURICULAR aunque el catálogo KZ traiga switches, Haimu forzaba SWITCH y
+    // Polaroid forzaba CAMARA. Ahora la marca sólo propone una categoría y la
+    // regex tiene que encontrar un token de ESA categoría en el texto analizado;
+    // si no corrobora, la pista cae y el flujo sigue al loop de patterns y
+    // después al brand fallback / OTRO. Nunca se devuelve una categoría forzada.
+    const brandHints = {
+      // KZ: además de in-ear, cubre los códigos de su familia (ZSN, ZST, ...).
+      KZ: { cat: 'AURICULAR', re: /\b(earphone|earbuds|in-ear|iem|zst|zsn|zs10|zax|asx|edx|zex|pr1|eda|zar|zna|dqs)\b/i },
+      // Haimu: fabricante de switches. El token suelto 'switch' va al final a
+      // propósito — las formas multi-palabra ('seasalt switch', 'heartbeat
+      // switch') son las que mejor desambiguan de un teclado que los menciona.
+      Haimu: { cat: 'SWITCH', re: /\b(key switch|mechanical switch|linear switch|tactile switch|clicky switch|magnetic switch|hall effect|switch)\b/i },
+      Polaroid: { cat: 'CAMARA', re: /\b(webcam|camera|camara|streamcam)\b/i },
+      // Philips: sólo palabras que nombran el producto de cuidado personal. Los
+      // códigos de modelo (s1125, hc####, nt####...) identifican la marca pero
+      // no la categoría, así que NO corroboran: sin texto que diga 'shaver' o
+      // 'toothbrush' la pista cae y el producto va a revisión como OTRO antes
+      // que inventar una categoría.
+      Philips: { cat: 'CUIDADO_PERSONAL', re: /\b(shaver|hairclipper|hair clipper|clipper|trimmer|electric toothbrush|sonic toothbrush|toothbrush|afeitadora|depiladora|grooming|personal care)\b/i }
+    };
+    const hint = brand && brandHints[brand];
+    if (hint) {
+      const corroboration = t.match(hint.re);
+      if (corroboration) {
+        return Object.assign(evidence, { category: hint.cat, confidence: 95, source: 'brand-corroborated', matchedPattern: corroboration[0] });
+      }
     }
 
     // 2. Detección por TEXTO (keyword patterns with confidence tiers)
