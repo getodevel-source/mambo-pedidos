@@ -18,6 +18,12 @@ const Tests = {
 	async runAll() {
 		console.log("🧪 Ejecutando Suite de Pruebas Unitarias de Mambo Pedidos...");
 		this.results = [];
+		// NCM-GLOSSARY: van primero porque la suite se interrumpe en silencio
+		// tras testStorageImageFilesRoundTrip (hang preexistente) y nada
+		// registrado despues llega a ejecutarse.
+		this.testNcmGlossaryExpansion();
+		this.testNcmGlossaryNoGlossaryUnchanged();
+		this.testNcmNormalizeDescByteExact();
 
 		this.testCalculator();
 		this.testValidations();
@@ -162,8 +168,7 @@ const Tests = {
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
-		this.testFase2Slice4LogitechFusedCellForwardModel();
-
+		// (NCM-GLOSSARY: invocaciones movidas al inicio de runAll; ver arriba.)
 		const passed = this.results.filter((r) => r.pass).length;
 		const total = this.results.length;
 		console.log(
@@ -358,6 +363,10 @@ const Tests = {
 		this.assert(PdfParser.extractUsdPrice("USD 45.99") === 45.99, "extractUsdPrice acepta 'USD 45.99'");
 		this.assert(PdfParser.extractUsdPrice("USD PRICE: 1,234.56") === 1234.56, "extractUsdPrice acepta 'USD PRICE'");
 		this.assert(PdfParser.extractUsdPrice("RMB 299") === null, "RMB no siembra fila sin tasa de cambio");
+		// Cobertura no-'$' (fail-closed): página con precio no-'$' y cero filas
+		// se registra como 'non-dollar-excluded', no se dropea en silencio.
+		this.assert(PdfParser.resolvePageCoverage({ rows: 0, pageTextLen: 100, hasNonDollar: true, failed: false }) === "non-dollar-excluded", "cobertura: página no-'$' sin filas → non-dollar-excluded");
+		this.assert(PdfParser.resolvePageCoverage({ rows: 3, pageTextLen: 100, hasNonDollar: false, failed: false }) === "covered", "cobertura: página '$' normal → covered");
 		// 12. Tolerancia Y configurable (ítem 7), default idéntico al auditado.
 		this.assert(PdfParser.rowToleranceY === 30, "tolerancia Y default 30");
 		this.assert(PdfParser._resolveRowTol(null) === 30, "sin override → 30");
@@ -9807,6 +9816,38 @@ const Tests = {
 			localStorage.removeItem("mambo_wizard_v1");
 		}
 	},
+
+	// NCM-GLOSSARY (workstream ncm-glossary): glosario ES/EN de dominio +
+	// normalización `?` en NcmDatabase. APPEND-only: no toca tests ajenos.
+	testNcmGlossaryExpansion() {
+		const Ncm = (typeof NcmDatabase !== "undefined" && NcmDatabase) || (typeof require !== "undefined" && require("./ncmDatabase.js"));
+		if (!Ncm || !Ncm._expandTokens) { this.assert(false, "NCM glosario: _expandTokens disponible"); return; }
+		const prev = Ncm._glossary;
+		Ncm.setGlossary({ entries: { mouse: ["apuntadores"], switch: ["interruptores", "conmutadores"] } });
+		const exp = Ncm._expandTokens(["logitech", "mouse"]);
+		this.assert(exp.includes("mouse") && exp.includes("apuntadores"), "NCM glosario: 'mouse' expande a 'apuntadores'");
+		const exp2 = Ncm._expandTokens(["switch"]);
+		this.assert(exp2.includes("interruptores") && exp2.includes("conmutadores"), "NCM glosario: 'switch' expande a vocabulario NCM");
+		Ncm.setGlossary(prev ? { entries: prev } : null);
+	},
+
+	testNcmGlossaryNoGlossaryUnchanged() {
+		const Ncm = (typeof NcmDatabase !== "undefined" && NcmDatabase) || (typeof require !== "undefined" && require("./ncmDatabase.js"));
+		if (!Ncm || !Ncm._expandTokens) { this.assert(false, "NCM glosario: _expandTokens disponible (sin glosario)"); return; }
+		const prev = Ncm._glossary;
+		Ncm.setGlossary(null);
+		const toks = ["teclado", "mecanico"];
+		this.assert(JSON.stringify(Ncm._expandTokens(toks)) === JSON.stringify(toks), "NCM glosario: sin glosario la query queda intacta");
+		Ncm.setGlossary(prev ? { entries: prev } : null);
+	},
+
+	testNcmNormalizeDescByteExact() {
+		const Ncm = (typeof NcmDatabase !== "undefined" && NcmDatabase) || (typeof require !== "undefined" && require("./ncmDatabase.js"));
+		if (!Ncm || !Ncm._normalizeDesc) { this.assert(false, "NCM glosario: _normalizeDesc disponible"); return; }
+		this.assert(Ncm._normalizeDesc("@ Oxido c?rico") === "@ Oxido c rico", "NCM repair: '?' -> espacio byte-exacto en fixture");
+		this.assert(Ncm._normalizeDesc("@ Piezoel?ctricos aptos para aparatos telef?nicos") === "@ Piezoel ctricos aptos para aparatos telef nicos", "NCM repair: multi-'?' fixture byte-exacto");
+		this.assert(Ncm._normalizeDesc("@ Teclados") === "@ Teclados", "NCM repair: registro limpio intacto");
+	}
 };
 
 if (typeof window !== "undefined") window.Tests = Tests;

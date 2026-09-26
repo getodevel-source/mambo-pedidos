@@ -65,12 +65,32 @@ async function main() {
     const pool = (byPdf[m.pdf] || []).filter(p => p.pageNum === m.pageNum);
     if (!pool.length) { result.push({ id: m.id, missing: true }); continue; }
     const best = pool.reduce((a, b) => (DIST(a, m) < DIST(b, m) ? a : b));
+    const bestImg = best.img && best.img !== '-' ? best.img : null;
+    const imgEv = best.imageEvidence || null;
+    // FOB dimension: tolerance 1 cent; null==null counts as match.
+    const oldFob = (m.fob === undefined ? null : m.fob);
+    const neuFob = (best.fob === undefined ? null : best.fob);
+    const fobMatch = (oldFob === null && neuFob === null) ||
+      (typeof oldFob === 'number' && typeof neuFob === 'number' && Math.abs(oldFob - neuFob) <= 0.01);
+    // Image dimension (informational: manifest pins no image baseline).
+    // identityMatch = evidence pdfIdentity names the same PDF file.
+    const identityMatch = imgEv && typeof imgEv.pdfIdentity === 'string'
+      ? imgEv.pdfIdentity.split('#')[0] === m.pdf.split('#')[0]
+      : false;
     result.push({
       id: m.id,
       dist: Math.round(DIST(best, m)),
       veredicto: verBy[m.id] ? verBy[m.id].veredicto : '?',
-      old: { modelo: m.modelo, variante: m.variante, status: m.status },
-      neu: { modelo: best.modelo, variante: best.variante || '', status: best.status || '' }
+      old: { modelo: m.modelo, variante: m.variante, status: m.status, fob: oldFob },
+      neu: { modelo: best.modelo, variante: best.variante || '', status: best.status || '', fob: neuFob },
+      fobMatch,
+      fobChanged: !fobMatch,
+      hasImage: !!bestImg || !!imgEv,
+      hasImageEvidence: !!imgEv,
+      imageIdentity: imgEv ? (imgEv.pdfIdentity || null) : null,
+      imageIdentityMatch: identityMatch,
+      imageDecode: imgEv ? (imgEv.canvasDecode || null) : null,
+      imageAssociation: imgEv ? (imgEv.association || null) : null
     });
   }
 
@@ -84,7 +104,25 @@ async function main() {
     console.log(`   NEW: modelo=${JSON.stringify(r.neu.modelo)} variante=${JSON.stringify(r.neu.variante)} (${r.neu.status})`);
   }
   const unchanged = result.filter(r => !r.missing && r.old.modelo === r.neu.modelo && r.old.variante === r.neu.variante);
-  console.log(`\nSin cambios: ${unchanged.length} casos (incluye los NO-regresión sentinel)`);
+  const present = result.filter(r => !r.missing);
+  const missing = result.filter(r => r.missing);
+  if (missing.length) console.log(`⚠️  ausentes (PDF no extraído en este corpus): ${missing.length} casos [${missing.map(r => r.id).join(',')}]`);
+  // ── Dimensión FOB (precio) ──
+  const fobOk = present.filter(r => r.fobMatch);
+  const fobChanged = present.filter(r => !r.fobMatch);
+  console.log(`\n── fob: ${fobOk.length}/${present.length} coinciden (±$0.01), ${fobChanged.length} cambiaron ──`);
+  for (const r of fobChanged) {
+    console.log(`#${r.id} OLD fob=${JSON.stringify(r.old.fob)} NEW fob=${JSON.stringify(r.neu.fob)}`);
+  }
+  // ── Dimensión imagen (identidad/hash evidencia) ──
+  const withEv = present.filter(r => r.hasImageEvidence);
+  const idOk = present.filter(r => r.imageIdentityMatch);
+  const decoded = present.filter(r => r.imageDecode === 'success');
+  console.log(`\n── imagen: ${withEv.length}/${present.length} con imageEvidence, ${idOk.length}/${present.length} identidad coincide (pdfIdentity=pdf#size), ${decoded.length}/${present.length} decode=success ──`);
+  const idBad = present.filter(r => r.hasImageEvidence && !r.imageIdentityMatch);
+  for (const r of idBad) {
+    console.log(`#${r.id} identity=${JSON.stringify(r.imageIdentity)} assoc=${JSON.stringify(r.imageAssociation)} decode=${JSON.stringify(r.imageDecode)}`);
+  }
   if (process.argv.includes('--json')) {
     fs.writeFileSync(path.join(ROOT, 'ground-truth', 'extraction-diff.json'), JSON.stringify(result, null, 1));
     console.log('diff JSON → ground-truth/extraction-diff.json');

@@ -332,13 +332,18 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
 				),
 		};
 		try {
-			const { brand, products } = await PdfParser.processPdfFile(
+			const { brand, products, pageCoverage } = await PdfParser.processPdfFile(
 				file,
 				0,
 				[],
 				() => {},
 			);
-			// Page-level stats: images available vs products left without one
+			// Page-level stats: images available vs products left without one.
+			// Coverage aditivo del parser (covered / non-dollar-excluded /
+			// no-text / empty / failed): cada página del PDF aparece aunque
+			// no haya aportado filas, para que los gates vean la exclusión.
+			const coverageByPage = new Map((pageCoverage || []).map((c) => [Number(c.page), c.coverage]));
+			const covRowsByPage = new Map((pageCoverage || []).map((c) => [Number(c.page), c.rows]));
 			const byPage = new Map();
 			for (const p of products) {
 				const key = String(p.pageNum || 0);
@@ -347,8 +352,14 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
 				byPage.get(key).prods += 1;
 				if (!p.img || p.img === "-") byPage.get(key).noImg += 1;
 			}
+			for (const c of pageCoverage || []) {
+				const key = String(c.page);
+				if (!byPage.has(key))
+					byPage.set(key, { page: Number(c.page), prods: 0, noImg: 0 });
+			}
 			for (const [page, stats] of byPage) {
-				pageStats.push({ file: fileName, page: Number(page), ...stats });
+				const n = Number(page);
+				pageStats.push({ file: fileName, page: n, ...stats, coverage: coverageByPage.get(n) || "covered", parserRows: covRowsByPage.get(n) ?? stats.prods });
 			}
 			const exported = products.map((p) => ({
 				sku: p.sku,

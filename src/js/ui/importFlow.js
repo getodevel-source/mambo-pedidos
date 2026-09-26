@@ -58,6 +58,11 @@ const ImportFlow = {
           if (typeof ensurePdfLib === 'function') await ensurePdfLib();
           const parsed = await PdfParser.processPdfFile(f, 0, customBrandsList, progressCb);
           res = { products: parsed.products || [] };
+          // Cobertura no-'$' (fail-closed, sin filas inventadas): se avisa con
+          // el mismo toast/warning que ya emite el parser vía console.warn.
+          const nonDollar = (parsed.pageCoverage || []).filter((c) => c.coverage === 'non-dollar-excluded').map((c) => c.page);
+          if (nonDollar.length) toast(`⚠️ ${f.name}: páginas ${nonDollar.join(', ')} con precios no-'$' (USD/RMB/¥): no se generaron filas. Revisalas a mano.`, 'warning');
+          ImportFlow.lastPageCoverage = (ImportFlow.lastPageCoverage || []).concat(nonDollar.map((p) => ({ file: f.name, page: p, coverage: 'non-dollar-excluded' })));
         } else {
           if (typeof ensureXlsxLib === 'function') await ensureXlsxLib();
           const items = (ext === 'csv')
@@ -188,7 +193,8 @@ const ImportFlow = {
 
     document.getElementById('importPreviewSummary').textContent =
       `${ImportFlow.pendingPreviewItems.length} productos detectados · ${greenCount} verificados · ` +
-      `${photoOnlyCount} sin foto (datos OK) · ${dataReviewCount} en revisión · ${redCount} no importables`;
+      `${photoOnlyCount} sin foto (datos OK) · ${dataReviewCount} en revisión · ${redCount} no importables` +
+      ((ImportFlow.lastPageCoverage || []).length ? ` · ⚠️ ${(ImportFlow.lastPageCoverage || []).length} pág. con precios no-'$' sin filas (revisar manual)` : '');
 
     // Filtrar por tab + búsqueda
     const filtered = ImportFlow.pendingPreviewItems

@@ -50,7 +50,7 @@ const SAMPLE_PER_PDF = flagValue("per-pdf") ?? Number(process.env.GT_PER_PDF ?? 
 // crops antes de promoverlo.
 const PROMOTE = argv.includes('--write');
 const MANIFEST_NAME = PROMOTE ? 'manifest.json' : 'manifest.candidate.json';
-const KEEP_FIRST = 5;
+const KEEP_FIRST = flagValue("keep-first") ?? Number(process.env.GT_KEEP_FIRST ?? 5);
 const SCALE = 1.7;
 const SEED = 42;
 

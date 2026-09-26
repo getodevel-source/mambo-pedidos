@@ -60,6 +60,7 @@ const PdfParser = {
 			const failedPages = [];
 			let imageOnlyPages = 0;
 			const nonDollarPricePages = [];
+			const pageCoverage = [];
 
 			for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
 				if (typeof onProgress === "function") {
@@ -124,14 +125,17 @@ const content = await page.getTextContent();
 						imageOnlyPages++;
 					}
 					// Filas solo nacen de anclas '$' (ver pageHasNonDollarPrices).
-					if (pageProducts.length === 0 && this.pageHasNonDollarPrices(content, pageTextLen)) {
+					const hasNonDollar = pageProducts.length === 0 && this.pageHasNonDollarPrices(content, pageTextLen);
+					if (hasNonDollar) {
 						nonDollarPricePages.push(pageNum);
 					}
+					pageCoverage.push({ page: pageNum, rows: pageProducts.length, coverage: this.resolvePageCoverage({ rows: pageProducts.length, pageTextLen, hasNonDollar, failed: false }) });
 				} catch (pageErr) {
 					failedPages.push({
 						page: pageNum,
 						error: (pageErr.message || String(pageErr)).substring(0, 100),
 					});
+					pageCoverage.push({ page: pageNum, rows: 0, coverage: "failed" });
 					console.warn(
 						`PDF página ${pageNum} falló: ${pageErr.message || pageErr}. Continuando con las demás.`,
 					);
@@ -201,7 +205,7 @@ const content = await page.getTextContent();
 				customBrands,
 				allImages,
 			);
-			return { brand, products: finalProducts };
+			return { brand, products: finalProducts, pageCoverage, nonDollarPricePages };
 		} finally {
 			this.rowToleranceY = prevRowTol;
 			if (pdf && typeof pdf.destroy === "function") {
@@ -232,14 +236,23 @@ const content = await page.getTextContent();
 			);
 	},
 
-	// Filas solo nacen de anclas '$': si la página trae precios en otro formato
-	// (USD PRICE / RMB / ¥) y no salió ni un producto, se avisa en vez de
-	// perderlos en silencio (auditoría Hermes 02).
-	pageHasNonDollarPrices(content, pageTextLen) {
-		if (pageTextLen < 10) return false;
-		const pageText = content.items.map((item) => item.str).join(" ");
-		return /(USD\s*PRICE|RMB\s*[\d.]|¥\s*[\d.]|￥\s*[\d.])/i.test(pageText);
+	// Cobertura por página (fail-closed): nunca convierte moneda ni fabrica filas.
+	// 'covered' = la página aportó filas; 'non-dollar-excluded' = hay evidencia
+	// de precio (USD PRICE/RMB/¥) pero cero filas '$'; 'no-text' = página casi
+	// sin texto; 'empty' = con texto pero sin filas ni precios; 'failed' = error.
+	resolvePageCoverage({ rows, pageTextLen, hasNonDollar, failed }) {
+		if (failed) return "failed";
+		if (rows > 0) return "covered";
+		if (hasNonDollar) return "non-dollar-excluded";
+		if (pageTextLen < 10) return "no-text";
+		return "empty";
 	},
+
+ 	pageHasNonDollarPrices(content, pageTextLen) {
+ 		if (pageTextLen < 10) return false;
+ 		const pageText = content.items.map((item) => item.str).join(" ");
+ 		return /(USD\s*PRICE|RMB\s*[\d.]|¥\s*[\d.]|￥\s*[\d.])/i.test(pageText);
+ 	},
 
 	async extractImagesFromPage(page, viewport, pageNum) {
 		const pageImages = [];

@@ -220,3 +220,77 @@ In priority order.
 | `docs/PARSER-ITERATION-LOOP.md` | Parser iteration loop |
 | `docs/VISUAL-REVIEW-WORKFLOW.md` | Visual review of sampled crops |
 | `AGENTS.md` | Repo conventions; note the corpus-path discrepancy flagged above |
+
+---
+
+## 2026-09-26 — Export F: 10-PDF baseline, coverage states, gate dims, NCM glossary
+
+Four workstreams landed uncommitted on top of the A–E tree and were verified
+together. Export F ran on **10 of 13 PDFs** (corpus
+`/home/geto/Projects/Mambo-app/Catalogos`; **missing: Irok Mars, Keyboard
+Switch, KZ**), so F counts are **not comparable** to A–E (13 PDFs, 2319
+products). Export numbers below are as reported by the workstream; the cheap
+gates (tests/lint/version/build) were re-verified at commit time.
+
+### F results (10 PDFs)
+
+| Metric | Value |
+|---|---|
+| Products | 2089 |
+| Parser confidence | 1766 GREEN / 323 YELLOW / 0 RED |
+| Post-gates | 1489 / 561 / 39 |
+| Cross-category reuse | 0 |
+| Cross-brand reuse | 0 |
+| Placeholders | 58 (2.78%) |
+| Idempotent re-run | yes |
+| Photo short side < 150 px | 38.2% (proxy, not correctness) |
+| Photo payload | 88.4 MB |
+
+### Coverage states (new)
+
+`resolvePageCoverage` (`src/js/pdfParser.js`) returns per-page coverage, and
+the export `-diag.json` `pageStats` plus the import UI toast (`importFlow.js`,
+`lastPageCoverage`) now carry five states: `covered`,
+`non-dollar-excluded`, `no-text`, `empty`, `failed`. **Caveat:** the current
+10-PDF corpus files have no non-dollar-only pages (the Attack Shark file here
+has 14 pages, all covered) — the state is proven synthetically and its shape
+verified in real output, not exercised on a real non-dollar page.
+
+### pdfIdentity fix
+
+The export script was passing size `0` (identity was `name#0`); it now passes
+the real file size, so identities read e.g. `8BitDo-2026 .pdf#2860101`, with
+**0 `unknown`**. `name#size` is still not a checksum (see §Diagnosis.5).
+
+### Gate: fob + image-identity dimensions
+
+`measure-extraction.js` against `ground-truth/verdicts.json`: **65 cases, 0
+changed, 15 absent** (the 3 missing PDFs, handled gracefully — absent, not
+failed). `fob`: **50/50 ±$0.01**. Image: **23/50 with evidence, identity
+matches** on all 23. `ground-truth.js` `KEEP_FIRST` is now configurable via
+`--keep-first` / `GT_KEEP_FIRST` (default 5); `manifest.json` and
+`verdicts.json` untouched.
+
+### NCM glossary + eval
+
+`ncmDatabase.js` (+35/−5: `ncmGlossary.json` load, `_expandTokens`,
+`_normalizeDesc`): **10504 records, 4015 with `?`** — the `?` corruption is
+lossy and unrepairable byte-exact, so descriptions are normalized at load
+time and the source is untouched. New `src/data/ncmGlossary.json` (30
+entries); new `scripts/measure-ncm-glossary.js` eval on 30 products: **BEFORE
+top-1 4/30, top-8 6/30 → AFTER top-1 6/30, top-8 22/30**. Reading: **ranking,
+not vocabulary, is now the bottleneck**.
+
+### Verification at commit time
+
+| Gate | Result |
+|---|---|
+| `npm test` | **1009 PASS, 0 FAIL**, exit 0 |
+| `npm run lint` | **0 errors, 75 warnings** |
+| `npm run check:version` | 2.2.31, synchronized |
+| `npm run build:frontend` | pass |
+
+Note: test count moved 1001 → **1009** (new coverage + NCM asserts in
+`src/js/tests.js`); lint warnings moved 74 → **75** (new code, 0 errors).
+Unmeasured and unchanged: photo correctness still has no ground truth
+(see Remaining work §2).

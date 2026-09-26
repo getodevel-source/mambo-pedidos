@@ -72,7 +72,7 @@ bloqueada por entorno. Dos cosas para no perder tiempo:
   ids coinciden; hace falta re-etiquetar 65 casos con
   `node scripts/ground-truth-diff.js --packet`).
 
-## Verificación estándar- `npm run test` (1.504 aserciones en 4 suites: 1.028 unitarias + 101 de UI
+- `npm run test` (1.009 aserciones en 4 suites: 1.028 unitarias + 101 de UI
   smoke + 239 de lógica + 129 de `app.js` en jsdom) · `npm run lint`
   (0 errores) · `npm run check:version` · `npm run build:frontend`
 - `npm run e2e` es lo único que verifica el runtime real (Tauri + WebView2).
