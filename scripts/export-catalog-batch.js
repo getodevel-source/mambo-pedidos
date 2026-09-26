@@ -321,8 +321,10 @@ PdfParser.extractImagesFromPage = async function (page, viewport, pageNum) {
 		currentFile = fileName;
 		const filePath = path.join(CATALOG_DIR, fileName);
 		const buffer = fs.readFileSync(filePath);
+		const stat = fs.statSync(filePath);
 		const file = {
 			name: fileName,
+			size: stat.size,
 			arrayBuffer: async () =>
 				buffer.buffer.slice(
 					buffer.byteOffset,
