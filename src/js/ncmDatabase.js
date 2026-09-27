@@ -40,13 +40,26 @@ const NcmDatabase = {
 
   _buildIndex() {
     NcmDatabase._index = new Map();
-    (NcmDatabase._db.registros || []).forEach((r, i) => {
+    const recs = (NcmDatabase._db.registros || []);
+    recs.forEach((r, i) => {
       const tokens = NcmDatabase._tokenize(NcmDatabase._normalizeDesc(r.desc || '') + ' ' + r.ncm);
       tokens.forEach(t => {
         if (!NcmDatabase._index.has(t)) NcmDatabase._index.set(t, new Set());
         NcmDatabase._index.get(t).add(i);
       });
     });
+    // IDF: rare tokens weigh more. log(N/df), N = record count, df = records with token.
+    NcmDatabase._idf = new Map();
+    const n = Math.max(recs.length, 1);
+    NcmDatabase._index.forEach((hits, t) => {
+      NcmDatabase._idf.set(t, Math.log(n / hits.size));
+    });
+  },
+
+  // Peso IDF de un token (0 si ausente del índice).
+  _idfOf(t) {
+    if (!NcmDatabase._idf) return 1;
+    return NcmDatabase._idf.get(t) || 0;
   },
 
   _tokenize(s) {
@@ -90,7 +103,9 @@ const NcmDatabase = {
     return (NcmDatabase._db.registros || []).find(r => r.ncm.replace(/[.\s]/g, '') === norm);
   },
 
-  // Búsqueda por texto sobre las descripciones (top-K).
+  // Búsqueda por texto sobre las descripciones (top-K). Scoring IDF:
+  // cada token aporta log(N/df) en vez de +1 plano — tokens raros
+  // ('teclados', 'auriculares') pesan más que genéricos ('white', 'black').
   search(query, k = 8) {
     if (!NcmDatabase._db) NcmDatabase.load();
     if (!NcmDatabase._index) NcmDatabase._buildIndex();
@@ -99,7 +114,7 @@ const NcmDatabase = {
     const scores = new Map();
     tokens.forEach(t => {
       const hits = NcmDatabase._index.get(t);
-      if (hits) hits.forEach(i => scores.set(i, (scores.get(i) || 0) + 1));
+      if (hits) hits.forEach(i => scores.set(i, (scores.get(i) || 0) + NcmDatabase._idfOf(t)));
     });
     return Array.from(scores.entries())
       .sort((a, b) => b[1] - a[1])

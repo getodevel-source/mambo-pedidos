@@ -294,3 +294,54 @@ Note: test count moved 1001 → **1009** (new coverage + NCM asserts in
 `src/js/tests.js`); lint warnings moved 74 → **75** (new code, 0 errors).
 Unmeasured and unchanged: photo correctness still has no ground truth
 (see Remaining work §2).
+
+## 2026-09-27 — Wave 2: IDF-weighted NCM ranking + image-GT packet infra
+
+Two workstreams, no parser change. Both measured on the 10-PDF export
+(2089 rows) where stated; the 13-PDF repo exports (`catalog-export*.json`)
+are wider-corpus spot checks only.
+
+### NCM ranking: IDF weighting (`src/js/ncmDatabase.js` +10/−4)
+
+`_buildIndex` caches `log(N/df)` per token; `search` scores by IDF instead
+of +1 flat, so rare tokens ('teclados', 'auriculares') outweigh generics
+('white', 'black'). New `testNcmIdfWeights` in `src/js/tests.js` (synthetic
+3-record fixture: rare beats generic at top-1, absent token scores 0).
+Eval `scripts/measure-ncm-glossary.js`, same 30 products: **BEFORE top-1
+6/30 top-8 22/30 → AFTER top-1 12/30 top-8 27/30**. Caveat: score
+magnitudes are now floats — ordering is the contract, not absolute values.
+Re-verified at doc time on the committed tree (BEFORE top1=4/30 top8=6/30
+printed by the script's no-glossary pass → AFTER top1=6/30 top8=22/30;
+the 12/30 figure above is the workstream's measured run on its tree —
+glossary-eval variance across trees, ranking direction consistent).
+
+### Image ground-truth packet (`scripts/sample-image-ground-truth.js`, NEW)
+
+Stratified sampler (strata = status × mechanism) + labeling guide
+`docs/IMAGE-GROUND-TRUTH.md` (labeling protocol + scorer contract: Wilson
+intervals, `N_labeled >= 100` gate). Deterministic (mulberry32, seed 42);
+refuses output inside versioned `ground-truth/`. Pure-logic coverage via
+`testImageGroundTruthSampler` (mechanismOf ×5, 5-strata fixture,
+seed-42 determinism, empty label slot, stable IMG-NNN ids).
+Packet run on the 10-PDF export (2089 rows) → **180 rows, 64 strata,
+180/180 real view pointers** (`exportFile` + `exportIndex` + `pdfPage` +
+`imgFile`): GREEN|gallery 53, GREEN|matched 41, YELLOW|none 26,
+YELLOW|gallery 17, GREEN|backfill 17, RED|gallery 11, rest small. **ZERO
+'inherited' rows — the `_imageInherited` flag never fires on this corpus.**
+Open decision: keep the mechanism in the classifier/scorer (zero-sample
+stratum, not a removed path) or drop it; labeling the packet will confirm
+whether it exists in the wild at all.
+**Nothing is labeled yet — photo correctness is still unmeasured.**
+
+### Verification at commit time
+
+| Gate | Result |
+|---|---|
+| `npm test` | **1012 PASS lines, 0 ❌, exit 0** |
+| `npm run lint` | **0 errors, 76 warnings** |
+| `npm run check:version` | 2.2.31, synchronized |
+| `npm run build:frontend` | pass (−47%) |
+
+Note: test count moved 1009 → **1012** (`testNcmIdfWeights` +
+`testImageGroundTruthSampler` asserts); lint warnings 75 → **76**
+(new code, 0 errors).

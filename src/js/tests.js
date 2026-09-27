@@ -24,7 +24,7 @@ const Tests = {
 		this.testNcmGlossaryExpansion();
 		this.testNcmGlossaryNoGlossaryUnchanged();
 		this.testNcmNormalizeDescByteExact();
-
+		this.testNcmIdfWeights();
 		this.testCalculator();
 		this.testValidations();
 		this.testDualCurrency();
@@ -168,6 +168,7 @@ const Tests = {
 		this.testFase2Slice3KzMatrixModelName();
 		this.testFase2Slice3KzHighResolution();
 		this.testFase2Slice3HaimuSwitchName();
+		this.testImageGroundTruthSampler();
 		// (NCM-GLOSSARY: invocaciones movidas al inicio de runAll; ver arriba.)
 		const passed = this.results.filter((r) => r.pass).length;
 		const total = this.results.length;
@@ -9847,7 +9848,50 @@ const Tests = {
 		this.assert(Ncm._normalizeDesc("@ Oxido c?rico") === "@ Oxido c rico", "NCM repair: '?' -> espacio byte-exacto en fixture");
 		this.assert(Ncm._normalizeDesc("@ Piezoel?ctricos aptos para aparatos telef?nicos") === "@ Piezoel ctricos aptos para aparatos telef nicos", "NCM repair: multi-'?' fixture byte-exacto");
 		this.assert(Ncm._normalizeDesc("@ Teclados") === "@ Teclados", "NCM repair: registro limpio intacto");
-	}
+	},
+
+	// NCM-RANKING (workstream ncm-ranking): scoring IDF — tokens raros pesan más.
+	testNcmIdfWeights() {
+		const Ncm = (typeof NcmDatabase !== "undefined" && NcmDatabase) || (typeof require !== "undefined" && require("./ncmDatabase.js"));
+		if (!Ncm || !Ncm._idfOf) { this.assert(false, "NCM ranking: _idfOf disponible"); return; }
+		const prevDb = Ncm._db, prevIdx = Ncm._index, prevIdf = Ncm._idf;
+		try {
+			Ncm._db = { registros: [
+				{ ncm: "8471.60.52", desc: "@ Teclados white" },
+				{ ncm: "4407.26.00", desc: "@ Madera white aserrada" },
+				{ ncm: "4407.26.00", desc: "@ Tablas white de pino" },
+			] };
+			Ncm._buildIndex();
+			this.assert(Ncm._idfOf("teclados") > Ncm._idfOf("white"), "NCM ranking: token raro ('teclados') pesa más que genérico ('white')");
+			this.assert(Ncm._idfOf("ausente") === 0, "NCM ranking: token ausente pesa 0");
+			const res = Ncm.search("teclados white", 3);
+			this.assert(res.length && res[0].ncm === "8471.60.52", "NCM ranking: discriminativo gana al genérico en top-1");
+		} finally { Ncm._db = prevDb; Ncm._index = prevIdx; Ncm._idf = prevIdf; }
+	},
+	// IMAGE-GROUND-TRUTH: pure logic of scripts/sample-image-ground-truth.js.
+	testImageGroundTruthSampler() {
+		let S = null;
+		try { S = require("../../scripts/sample-image-ground-truth.js"); } catch { this.assert(false, "sampler importable en Node"); return; }
+		const mk = (o) => Object.assign({ sku: "s", sourceFile: "a.pdf", pageNum: 1, status: "GREEN", marca: "m", modelo: "mo", cat: "MOUSE", img: "-" }, o);
+		const matched = mk({ sku: "m1", img: "data:image/png;base64,xx", imageEvidence: { association: "matched", canvasDecode: "success" } });
+		const inh = mk({ sku: "i1", img: "data:image/png;base64,yy", _imageInherited: true });
+		const bf = mk({ sku: "b1", img: "data:image/png;base64,zz", imgWarnings: ["aceptada en backfill"] });
+		const gal = mk({ sku: "g1", img: "data:image/png;base64,ww" });
+		const none = mk({ sku: "n1" });
+		this.assert(S.mechanismOf(matched) === "matched", "sampler: matched");
+		this.assert(S.mechanismOf(inh) === "inherited", "sampler: inherited");
+		this.assert(S.mechanismOf(bf) === "backfill", "sampler: backfill");
+		this.assert(S.mechanismOf(gal) === "gallery", "sampler: gallery");
+		this.assert(S.mechanismOf(none) === "none", "sampler: none");
+		const prods = [matched, inh, bf, gal, none];
+		this.assert(S.stratify(prods).size === 5, "sampler: 5 estratos en fixture");
+		const a = S.drawSample(S.stratify(prods), prods, { keepFirst: 1, target: 5, seed: 42 });
+		const b = S.drawSample(S.stratify(prods), prods, { keepFirst: 1, target: 5, seed: 42 });
+		this.assert(JSON.stringify(a) === JSON.stringify(b), "sampler: deterministico seed 42");
+		const rows = S.buildPacket(prods, [0], "export.json");
+		this.assert(rows[0].label.correctPhoto === null && rows[0].label.notes === "", "sampler: label slot vacio");
+		this.assert(/^IMG-\d+$/.test(rows[0].id), "sampler: id estable");
+	},
 };
 
 if (typeof window !== "undefined") window.Tests = Tests;
